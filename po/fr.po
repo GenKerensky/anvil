@@ -1,12 +1,12 @@
-# Forge Sample Translation
+# Anvil Sample Translation
 # William Roy <wroy@proton.me>, 2023.
 # Wedone <wedoneofficiel@outlook.fr>, 2024.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: Forge\n"
+"Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-10-06 13:15-0300\n"
+"POT-Creation-Date: 2026-05-03 08:56-0400\n"
 "PO-Revision-Date: 2023-02-28 17:16-0500\n"
 "Last-Translator: Wedone <wedoneofficiel@outlook.fr>\n"
 "Language-Team: French - Canada <wroy@proton.me>\n"
@@ -17,32 +17,32 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 "X-Generator: Gtranslator 42.0\n"
 
-#: lib/extension/indicator.js:47 lib/prefs/settings.js:55
+#: lib/extension/indicator.js:49 lib/prefs/settings.js:55
 msgid "Tiling"
 msgstr "Mise en mosaîque"
 
-#: lib/extension/indicator.js:66 lib/prefs/settings.js:24
-msgid "Forge"
-msgstr "Forge"
+#: lib/extension/indicator.js:68 lib/prefs/settings.js:24
+msgid "Anvil"
+msgstr "Anvil"
 
-#: lib/extension/indicator.js:66
+#: lib/extension/indicator.js:68
 msgid "Tiling Window Management"
 msgstr "Gestion de Fenêtres en Mosaïque"
 
-#: lib/extension/indicator.js:70
+#: lib/extension/indicator.js:72
 msgid "Gaps Hidden when Single"
 msgstr "Marges masquées lorsqu'il y a une seule fenêtre"
 
-#: lib/extension/indicator.js:78
+#: lib/extension/indicator.js:80
 #, fuzzy
 msgid "Show Focus Hint Border"
 msgstr "Indice de focus flottant"
 
-#: lib/extension/indicator.js:86
+#: lib/extension/indicator.js:88
 msgid "Move Pointer with the Focus"
 msgstr "Déplacer le pointeur avec le Focus"
 
-#: lib/extension/indicator.js:94 lib/extension/window.js:67
+#: lib/extension/indicator.js:96 lib/extension/window.js:67
 msgid "Settings"
 msgstr "Paramètres"
 
@@ -82,98 +82,107 @@ msgstr "Marges"
 msgid "Change the gap size between windows"
 msgstr ""
 
-#: lib/prefs/appearance.js:51
+#: lib/prefs/appearance.js:52
 msgid "Gap size"
 msgstr ""
 
-# I'm not sure that marges are a correct translation of gaps. There are other possibilities. 
-#: lib/prefs/appearance.js:57
+# I'm not sure that marges are a correct translation of gaps. There are other possibilities.
+#: lib/prefs/appearance.js:60
 #, fuzzy
 msgid "Gap size multiplier"
 msgstr "Taille des marges"
 
-#: lib/prefs/appearance.js:63
+#: lib/prefs/appearance.js:68
 msgid "Disable gaps for single window"
 msgstr ""
 
-#: lib/prefs/appearance.js:64
+#: lib/prefs/appearance.js:69
 msgid "Disables window gaps when only a single window is present"
 msgstr ""
 
-#: lib/prefs/appearance.js:71
+#: lib/prefs/appearance.js:98
+#, fuzzy
+msgid "Border radius"
+msgstr "Taille de la bordure"
+
+#: lib/prefs/appearance.js:99
+msgid "Set to 0 for square corners"
+msgstr ""
+
+#: lib/prefs/appearance.js:127
 msgid "Style"
 msgstr ""
 
-#: lib/prefs/appearance.js:72
+#: lib/prefs/appearance.js:128
 msgid "Change how the shell looks"
 msgstr ""
 
-#: lib/prefs/appearance.js:75
+#: lib/prefs/appearance.js:132
 #, fuzzy
 msgid "Preview hint"
 msgstr "Basculer l'indice de prévisualisation"
 
-#: lib/prefs/appearance.js:76
+#: lib/prefs/appearance.js:133
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr ""
 
-#: lib/prefs/appearance.js:82
+#: lib/prefs/appearance.js:141
 #, fuzzy
 msgid "Border around focused window"
 msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
 
-#: lib/prefs/appearance.js:83
+#: lib/prefs/appearance.js:142
 msgid "Display a colored border around the focused window"
 msgstr "Afficher une bordure colorée autour de la fenêtre focalisée"
 
-#: lib/prefs/appearance.js:88
+#: lib/prefs/appearance.js:149
 #, fuzzy
 msgid "Window split hint border"
 msgstr "Indice de focus flottant"
 
-#: lib/prefs/appearance.js:89
+#: lib/prefs/appearance.js:150
 msgid "Show split direction border on focused window"
 msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
 
-#: lib/prefs/appearance.js:94
+#: lib/prefs/appearance.js:157
 #, fuzzy
-msgid "Forge in quick settings"
+msgid "Anvil in quick settings"
 msgstr "Afficher les paramètres rapides de la mise en mosaïque"
 
-#: lib/prefs/appearance.js:95
+#: lib/prefs/appearance.js:158
 #, fuzzy
-msgid "Toggles the Forge tile in quick settings"
-msgstr "Basculer l'affichage de Forge sur les réglages rapides"
+msgid "Toggles the Anvil tile in quick settings"
+msgstr "Basculer l'affichage d'Anvil sur les réglages rapides"
 
-#: lib/prefs/appearance.js:103
+#: lib/prefs/appearance.js:168
 msgid "Color"
 msgstr "Couleur"
 
-#: lib/prefs/appearance.js:104
+#: lib/prefs/appearance.js:169
 #, fuzzy
 msgid "Changes the focused window's border and preview hint colors"
 msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
 
-#: lib/prefs/appearance.js:126
+#: lib/prefs/appearance.js:192
 #, fuzzy
 msgid "Border size"
 msgstr "Taille de la bordure"
 
-#: lib/prefs/appearance.js:198
+#: lib/prefs/appearance.js:268
 #, fuzzy
 msgid "Border color"
 msgstr "Couleur de la bordure"
 
-#: lib/prefs/floating.js:18
+#: lib/prefs/floating.js:17
 #, fuzzy
 msgid "Windows"
 msgstr "Fenêtre"
 
-#: lib/prefs/floating.js:27
+#: lib/prefs/floating.js:26
 msgid "Floating Windows"
 msgstr ""
 
-#: lib/prefs/floating.js:28
+#: lib/prefs/floating.js:27
 msgid "Windows that will not be tiled"
 msgstr ""
 
@@ -245,95 +254,95 @@ msgstr "Comportement"
 msgid "Change how the tiling behaves"
 msgstr ""
 
-#: lib/prefs/settings.js:62
+#: lib/prefs/settings.js:63
 #, fuzzy
 msgid "Focus on Hover"
 msgstr "Indice de focus flottant"
 
-#: lib/prefs/settings.js:63
+#: lib/prefs/settings.js:64
 msgid "Window focus follows the pointer"
 msgstr ""
 
-#: lib/prefs/settings.js:69
+#: lib/prefs/settings.js:72
 #, fuzzy
 msgid "Move pointer with focused window"
 msgstr "Déplacer le pointeur avec le Focus"
 
-#: lib/prefs/settings.js:70
+#: lib/prefs/settings.js:73
 #, fuzzy
 msgid "Moves the pointer when focusing or swapping via keyboard"
 msgstr ""
 "Déplacer le pointeur lors de la mise au point ou de la permutation via le "
 "clavier"
 
-#: lib/prefs/settings.js:76
+#: lib/prefs/settings.js:81
 #, fuzzy
 msgid "Quarter tiling"
 msgstr "Fractionnement automatique (Mosaïque en quart)"
 
-#: lib/prefs/settings.js:77
+#: lib/prefs/settings.js:82
 msgid "Places new windows in a clock-wise fashion"
 msgstr ""
 
-#: lib/prefs/settings.js:83
+#: lib/prefs/settings.js:90
 #, fuzzy
 msgid "Stacked tiling"
 msgstr "Mode de tuiles empilées"
 
-#: lib/prefs/settings.js:84
+#: lib/prefs/settings.js:91
 #, fuzzy
 msgid "Stacks windows on top of each other while still tiling them"
 msgstr ""
 "Mode de mosaïque en pile (empile les fenêtres les unes sur les autres tout "
 "en étant toujours en mosaïque)"
 
-#: lib/prefs/settings.js:90
+#: lib/prefs/settings.js:99
 #, fuzzy
 msgid "Tabbed tiling"
 msgstr "Mode d'affichage par onglets"
 
-#: lib/prefs/settings.js:91
+#: lib/prefs/settings.js:100
 #, fuzzy
 msgid "Groups windows as tabs"
 msgstr ""
 "Regrouper les fenêtres en ongletsMode mosaïque avec onglets (Groupe les "
 "fenêtres en mosaïque en tant qu'onglets)"
 
-#: lib/prefs/settings.js:97
+#: lib/prefs/settings.js:108
 #, fuzzy
 msgid "Auto exit tabbed tiling"
 msgstr "Mode d'affichage par onglets"
 
-#: lib/prefs/settings.js:98
+#: lib/prefs/settings.js:109
 msgid "Exit tabbed tiling mode when only a single tab remains"
 msgstr ""
 
-#: lib/prefs/settings.js:104
+#: lib/prefs/settings.js:116
 #, fuzzy
 msgid "Drag-and-drop behavior"
 msgstr "Disposition centrale par défaut du glisser-déposer"
 
-#: lib/prefs/settings.js:105
+#: lib/prefs/settings.js:117
 msgid "What to do when dragging one window on top of another"
 msgstr ""
 
-#: lib/prefs/settings.js:110
+#: lib/prefs/settings.js:122
 msgid "Swap"
 msgstr "Échange"
 
-#: lib/prefs/settings.js:111
+#: lib/prefs/settings.js:123
 msgid "Tabbed"
 msgstr "Onglets"
 
-#: lib/prefs/settings.js:112
+#: lib/prefs/settings.js:124
 msgid "Stacked"
 msgstr "Empilés"
 
-#: lib/prefs/settings.js:116
+#: lib/prefs/settings.js:130
 msgid "Always on Top mode for floating windows"
 msgstr ""
 
-#: lib/prefs/settings.js:117
+#: lib/prefs/settings.js:131
 #, fuzzy
 msgid "Makes floating windows appear above tiled windows"
 msgstr ""
@@ -341,25 +350,25 @@ msgstr ""
 "mosaïqueMode flottant toujours au-dessus (Les fenêtres flottantes toujours "
 "au-dessus des fenêtres en mosaïque)"
 
-#: lib/prefs/settings.js:125
+#: lib/prefs/settings.js:140
 msgid "Non-tiling workspaces"
 msgstr ""
 
-#: lib/prefs/settings.js:126
+#: lib/prefs/settings.js:141
 msgid ""
 "Disables tiling on specified workspaces. Starts from 0, separated by commas"
 msgstr ""
 
-#: lib/prefs/settings.js:129
+#: lib/prefs/settings.js:145
 msgid "Example: 0,1,2"
 msgstr ""
 
-#: lib/prefs/settings.js:137
+#: lib/prefs/settings.js:154
 #, fuzzy
 msgid "Logger"
 msgstr "Niveau de journalisation"
 
-#: lib/prefs/settings.js:140
+#: lib/prefs/settings.js:158
 #, fuzzy
 msgid "Log level"
 msgstr "Niveau de journalisation"
@@ -373,16 +382,16 @@ msgstr ""
 "ATTENTION : Ces paramètres, lorsqu'ils sont activés, sont bogués ou peuvent "
 "causer un plantage de l'environnement de bureau"
 
-#: lib/prefs/widgets.js:223
+#: lib/prefs/widgets.js:225
 #, fuzzy
 msgid "Clear shortcut"
 msgstr "Raccourcis pour les conteneurs"
 
-#: lib/prefs/widgets.js:240
+#: lib/prefs/widgets.js:242
 msgid "Reset to default"
 msgstr ""
 
-#: lib/prefs/widgets.js:258
+#: lib/prefs/widgets.js:260
 msgid "Remove Item"
 msgstr ""
 
@@ -487,7 +496,7 @@ msgstr ""
 #~ msgid "Show tiling quick settings"
 #~ msgstr "Afficher les paramètres rapides de la mise en mosaïque"
 
-# I'm not sure that marges are a correct translation of gaps. There are other possibilities. 
+# I'm not sure that marges are a correct translation of gaps. There are other possibilities.
 #~ msgid "Gaps Size"
 #~ msgstr "Taille des marges"
 
@@ -506,8 +515,8 @@ msgstr ""
 #~ msgid "Float Mode Always On Top"
 #~ msgstr "Mode flottant Toujours en haut"
 
-#~ msgid "Toggle Forge's high-level features"
-#~ msgstr "Caractéristiques de haut niveau de Toggle Forge"
+#~ msgid "Toggle Anvil's high-level features"
+#~ msgstr "Caractéristiques de haut niveau de Toggle Anvil"
 
 #, fuzzy
 #~ msgid "Update Shortcuts"
@@ -527,10 +536,6 @@ msgstr ""
 
 #~ msgid "Home"
 #~ msgstr "Accueil"
-
-#, fuzzy
-#~ msgid "Borders"
-#~ msgstr "Taille de la bordure"
 
 #~ msgid "Palette Mode"
 #~ msgstr "Mode Palette"
@@ -562,9 +567,9 @@ msgstr ""
 #~ msgid "Notes"
 #~ msgstr "Notes"
 
-# I'm not sure about that. It translates a bit oddly. 
-#~ msgid "Forge Panel Settings"
-#~ msgstr "Paramètres du panneau de Forge"
+# I'm not sure about that. It translates a bit oddly.
+#~ msgid "Anvil Panel Settings"
+#~ msgstr "Paramètres du panneau d'Anvil"
 
 #~ msgid "Tile Mode"
 #~ msgstr "Mode mosaïque"

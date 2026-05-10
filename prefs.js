@@ -1,5 +1,5 @@
 /*
- * This file is part of the Forge GNOME extension
+ * This file is part of the Anvil GNOME extension
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,26 +27,26 @@ import { AppearancePage } from "./lib/prefs/appearance.js";
 import { SettingsPage } from "./lib/prefs/settings.js";
 import { FloatingPage } from "./lib/prefs/floating.js";
 
-export default class ForgeExtensionPreferences extends ExtensionPreferences {
+export default class AnvilExtensionPreferences extends ExtensionPreferences {
   settings = this.getSettings();
 
-  kbdSettings = this.getSettings("org.gnome.shell.extensions.forge.keybindings");
+  kbdSettings = this.getSettings("org.gnome.shell.extensions.anvil.keybindings");
 
-  constructor(...args) {
-    super(...args);
-    const iconPath = this.dir.get_child("resources").get_child("icons").get_path();
-    const iconTheme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default());
+  constructor(args) {
+    super(args);
+    const iconPath = this.dir.get_child("resources").get_child("icons").get_path() ?? "";
+    const iconTheme = Gtk.IconTheme.get_for_display(/** @type {any} */ (Gdk.Display.get_default()));
     iconTheme.add_search_path(iconPath);
   }
 
-  fillPreferencesWindow(window) {
+  async fillPreferencesWindow(window) {
     this.window = window;
     window._settings = this.settings;
     window._kbdSettings = this.kbdSettings;
-    window.add(new SettingsPage(this));
-    window.add(new AppearancePage(this));
-    window.add(new KeyboardPage(this));
-    window.add(new FloatingPage(this));
+    window.add(new SettingsPage(/** @type {any} */ (this)));
+    window.add(new AppearancePage(/** @type {any} */ (this)));
+    window.add(new KeyboardPage(/** @type {any} */ (this)));
+    window.add(new FloatingPage(/** @type {any} */ (this)));
     window.search_enabled = true;
     window.can_navigate_back = true;
   }

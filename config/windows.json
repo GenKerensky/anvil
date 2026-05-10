@@ -1,6 +1,6 @@
 {
   "overrides": [
-    { "wmClass": "org.gnome.Shell.Extensions", "wmTitle": "Forge Settings", "mode": "float" },
+    { "wmClass": "org.gnome.Shell.Extensions", "wmTitle": "Anvil Settings", "mode": "float" },
     { "wmClass": "jetbrains-toolbox", "mode": "float" },
     { "wmClass": "jetbrains-goland", "wmTitle": "splash", "mode": "float" },
     { "wmClass": "jetbrains-webstorm", "wmTitle": "splash", "mode": "float" },

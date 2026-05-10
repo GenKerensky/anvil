@@ -1,0 +1,199 @@
+# Anvil GNOME Shell Extension — E2E Test Container
+# Parameterised by FEDORA_VERSION (default: 44)
+#
+# Build examples:
+#   podman build --build-arg FEDORA_VERSION=44 -t anvil-test-pod:fedora-44 -f Containerfile .
+#   podman build --build-arg FEDORA_VERSION=43 -t anvil-test-pod:fedora-43 -f Containerfile .
+#   podman build --build-arg FEDORA_VERSION=42 -t anvil-test-pod:fedora-42 -f Containerfile .
+#
+# Supported versions:
+#   44 → GNOME Shell 50  (primary)
+#   43 → GNOME Shell 49
+#   42 → GNOME Shell 48
+#
+# Strategy: gnome-shell --headless --wayland
+#
+#   GNOME Shell 45+ supports a fully headless Wayland mode that brings up a
+#   complete Wayland compositor with a virtual framebuffer — no Xvfb, no DRM,
+#   no real GPU required. This is what GNOME Shell's own CI uses, and it is
+#   the correct approach for GNOME 50 where an X11 *login session* (running
+#   gnome-shell on top of Xorg) is being phased out.
+#
+#   Xwayland is still present in GNOME 50 for running X11 applications inside
+#   the Wayland session, but we don't need it for extension testing.
+#
+#   The headless session requires several D-Bus services that are not present
+#   in a minimal container. These are provided by python-dbusmock stubs defined
+#   in start-session.sh, following the same pattern used by gnome-shell's CI.
+
+ARG FEDORA_VERSION=44
+FROM fedora:${FEDORA_VERSION}
+
+# ---------------------------------------------------------------------------
+# System packages
+# ---------------------------------------------------------------------------
+RUN dnf install -y --setopt=install_weak_deps=False \
+    # GNOME Shell and compositor
+    gnome-shell \
+    mutter \
+    gnome-extensions-app \
+    gnome-text-editor \
+    adwaita-icon-theme \
+    gsettings-desktop-schemas \
+    # D-Bus
+    dbus-daemon \
+    dbus-tools \
+    # GLib utilities (gsettings, glib-compile-schemas, gdbus)
+    glib2 \
+    glib2-devel \
+    # Python D-Bus mocking — stubs for AccountsService, UPower, NM, etc.
+    python3 \
+    python3-dbus \
+    python3-dbusmock \
+    python3-gobject \
+    # wtype: Wayland keyboard input simulation via zwp_virtual_keyboard_v1
+    wtype \
+    # Screenshot: grim captures a Wayland surface to a PNG file
+    grim \
+    # Scripting utilities
+    jq \
+    procps-ng \
+    util-linux \
+    which \
+    findutils \
+    # Privilege escalation and systemd init
+    sudo \
+    systemd \
+    systemd-udev \
+ && dnf clean all \
+ && rm -rf /var/cache/dnf
+
+# ---------------------------------------------------------------------------
+# Non-root user: gnomeshell (UID 1000)
+# ---------------------------------------------------------------------------
+RUN useradd \
+      --uid 1000 \
+      --gid wheel \
+      --create-home \
+      --home-dir /home/gnomeshell \
+      --shell /bin/bash \
+      gnomeshell \
+ && echo "gnomeshell ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/gnomeshell \
+ && chmod 0440 /etc/sudoers.d/gnomeshell \
+ && chown -R gnomeshell:wheel /home/gnomeshell
+
+# ---------------------------------------------------------------------------
+# systemd system unit: gnome-headless.service
+#
+# A system-level service (not user-level) because systemd-logind fails in
+# minimal containers lacking audit and other capabilities. This service:
+#   1. Creates XDG_RUNTIME_DIR (/run/user/1000) and sets its ownership
+#   2. Runs start-session.sh as the gnomeshell user
+#
+# start-session.sh starts the session D-Bus at a fixed path, launches
+# python-dbusmock stubs, and finally runs gnome-shell --headless --wayland.
+#
+# MUTTER_DEBUG_DUMMY_MODE_SPECS sets the virtual monitor resolution.
+# NO_AT_BRIDGE suppresses the AT-SPI D-Bus bridge, which is not available
+# in a minimal container.
+# ---------------------------------------------------------------------------
+RUN printf '\
+[Unit]\n\
+Description=GNOME Shell headless Wayland session\n\
+After=dbus-broker.service\n\
+After=polkit.service\n\
+Requires=dbus-broker.service\n\
+\n\
+[Service]\n\
+Type=simple\n\
+User=gnomeshell\n\
+Environment=XDG_RUNTIME_DIR=/run/user/1000\n\
+Environment=XDG_SESSION_TYPE=wayland\n\
+Environment=XDG_SESSION_CLASS=user\n\
+Environment=GNOME_SHELL_SESSION_MODE=user\n\
+Environment=MUTTER_DEBUG_DUMMY_MODE_SPECS=1920x1080\n\
+Environment=NO_AT_BRIDGE=1\n\
+Environment=GJS_DEBUG_OUTPUT=stderr\n\
+ExecStartPre=!/bin/mkdir -p /run/user/1000\n\
+ExecStartPre=!/bin/chown gnomeshell:wheel /run/user/1000\n\
+ExecStartPre=!/bin/chmod 0700 /run/user/1000\n\
+ExecStart=/usr/local/bin/start-session.sh\n\
+Restart=on-failure\n\
+RestartSec=3\n\
+\n\
+[Install]\n\
+WantedBy=graphical.target\n\
+' > /etc/systemd/system/gnome-headless.service \
+ && systemctl enable gnome-headless.service
+
+# ---------------------------------------------------------------------------
+# start-session.sh
+#
+# Starts the session D-Bus at a fixed address (XDG_RUNTIME_DIR/bus), launches
+# D-Bus mock stubs for services gnome-shell expects, then starts
+# gnome-shell --headless --wayland.
+#
+# The mocked services mirror those used by gnome-shell's own GitLab CI:
+#   https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/tests/
+#
+# We use a fixed bus address (not dbus-run-session) so that the test harness
+# running via podman exec + set-env.sh can reach the same session bus.
+# ---------------------------------------------------------------------------
+RUN printf '#!/usr/bin/env bash\n\
+set -euo pipefail\n\
+\n\
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"\n\
+export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"\n\
+\n\
+mkdir -p "${XDG_RUNTIME_DIR}"\n\
+chmod 0700 "${XDG_RUNTIME_DIR}"\n\
+\n\
+# Start a session D-Bus daemon at the fixed address\n\
+dbus-daemon --session --address="${DBUS_SESSION_BUS_ADDRESS}" --fork\n\
+\n\
+# Mock the D-Bus services that gnome-shell requires at startup.\n\
+# Without these, gnome-shell will crash or emit fatal errors on boot.\n\
+python3 -m dbusmock --system \\\n\
+    org.freedesktop.Accounts \\\n\
+    /org/freedesktop/Accounts \\\n\
+    org.freedesktop.Accounts &\n\
+\n\
+python3 -m dbusmock \\\n\
+    org.freedesktop.UPower \\\n\
+    /org/freedesktop/UPower \\\n\
+    org.freedesktop.UPower &\n\
+\n\
+python3 -m dbusmock \\\n\
+    org.freedesktop.NetworkManager \\\n\
+    /org/freedesktop/NetworkManager \\\n\
+    org.freedesktop.NetworkManager &\n\
+\n\
+python3 -m dbusmock \\\n\
+    net.hadess.PowerProfiles \\\n\
+    /net/hadess/PowerProfiles \\\n\
+    net.hadess.PowerProfiles &\n\
+\n\
+python3 -m dbusmock \\\n\
+    org.gnome.SessionManager \\\n\
+    /org/gnome/SessionManager \\\n\
+    org.gnome.SessionManager &\n\
+\n\
+# Give mocks a moment to register their bus names\n\
+sleep 1\n\
+\n\
+exec gnome-shell --headless --wayland\n\
+' > /usr/local/bin/start-session.sh \
+ && chmod 0755 /usr/local/bin/start-session.sh
+
+# ---------------------------------------------------------------------------
+# Helper scripts (sourced from the test/e2e build context)
+# ---------------------------------------------------------------------------
+COPY set-env.sh       /usr/local/bin/set-env.sh
+COPY wait-user-bus.sh /usr/local/bin/wait-user-bus.sh
+RUN chmod 0755 /usr/local/bin/set-env.sh /usr/local/bin/wait-user-bus.sh
+
+# ---------------------------------------------------------------------------
+# Boot via systemd so the user session (and user D-Bus socket) starts cleanly
+# ---------------------------------------------------------------------------
+STOPSIGNAL SIGRTMIN+3
+CMD ["/usr/sbin/init"]

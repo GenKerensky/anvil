@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <schemalist>
-    <schema id="org.gnome.shell.extensions.forge" path="/org/gnome/shell/extensions/forge/">
+    <schema id="org.gnome.shell.extensions.anvil" path="/org/gnome/shell/extensions/anvil/">
         <!-- Main Settings -->
         <key type="b" name="focus-border-toggle">
             <default>true</default>
@@ -65,7 +65,7 @@
 
         <key type="b" name="quick-settings-enabled">
             <default>true</default>
-            <summary>Forge quick settings toggle</summary>
+            <summary>Anvil quick settings toggle</summary>
         </key>
 
         <key type="s" name="workspace-skip-tile">
@@ -153,8 +153,18 @@
             <summary>Timestamp to trigger window overrides reload</summary>
         </key>
 
+        <!-- Testing -->
+        <key type="b" name="test-mode">
+            <default>false</default>
+            <summary>Test mode</summary>
+            <description>
+                When true, disables animations and exposes internal state for automated
+                testing. Must never be enabled in normal use.
+            </description>
+        </key>
+
     </schema>
-    <schema id="org.gnome.shell.extensions.forge.keybindings" path="/org/gnome/shell/extensions/forge/keybindings/">
+    <schema id="org.gnome.shell.extensions.anvil.keybindings" path="/org/gnome/shell/extensions/anvil/keybindings/">
         <!-- Keybinding Settings -->
         <key type="as" name="focus-border-toggle">
             <default><![CDATA[['<Super>x']]]></default>

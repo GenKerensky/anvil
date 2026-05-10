@@ -1,8 +1,6 @@
-# Forge needs a NEW MAINTAINER
+# Anvil
 
-Forge is a GNOME Shell extension that provides tiling/window management **_AND_** is looking for a new owner or maintainer:
-- https://github.com/orgs/forge-ext/discussions/276
-- https://github.com/forge-ext/forge/issues/336
+> **Anvil** is a fork of [Forge](https://github.com/forge-ext/forge) by [Jose Maranan](https://github.com/jmmaranan), licensed under GPL v3. The original project and all its contributors are gratefully credited — see the Credits section below.
 
 ## Features
 
@@ -28,14 +26,17 @@ Forge is a GNOME Shell extension that provides tiling/window management **_AND_*
 
 ## Installation
 
-- Build it yourself via `make install` or `make dev`.
-- Download from [GNOME extensions website](https://extensions.gnome.org/extension/4481/forge/).
-- [AUR Package](https://aur.archlinux.org/packages/gnome-shell-extension-forge) - thanks to [@Radeox](https://github.com/Radeox)
-- [Fedora Package](https://packages.fedoraproject.org/pkgs/gnome-shell-extension-forge/gnome-shell-extension-forge/) - thanks to [@carlwgeorge](https://github.com/carlwgeorge)
+Direct installation of Anvil requires building from source for now. The upstream Forge
+packages listed below are for the original Forge extension and are provided for reference:
+
+- Build Anvil yourself via `make install` or `make dev`.
+- Upstream Forge: [GNOME extensions website](https://extensions.gnome.org/extension/4481/forge/) *(Forge, not Anvil)*
+- Upstream Forge: [AUR Package](https://aur.archlinux.org/packages/gnome-shell-extension-forge) — thanks to [@Radeox](https://github.com/Radeox) *(Forge, not Anvil)*
+- Upstream Forge: [Fedora Package](https://packages.fedoraproject.org/pkgs/gnome-shell-extension-forge/gnome-shell-extension-forge/) — thanks to [@carlwgeorge](https://github.com/carlwgeorge) *(Forge, not Anvil)*
 
 ![image](https://user-images.githubusercontent.com/348125/146386593-8f53ea8b-2cf3-4d44-a613-bbcaf89f9d4a.png)
 
-## Forge Keybinding Defaults
+## Anvil Keybinding Defaults
 
 See the acceptable key combinations on the [wiki](https://github.com/forge-ext/forge/wiki/Keyboard-Shortcuts)
 
@@ -85,14 +86,14 @@ See the acceptable key combinations on the [wiki](https://github.com/forge-ext/f
 For any shortcut conflicts, the user has to manually configure those for now from the
 `GNOME Control Center > Keyboard > Customize Shortcuts`. https://github.com/forge-ext/forge/issues/37
 
-## Forge Override Paths
+## Anvil Override Paths
 
-- Window Overrides: `$HOME/.config/forge/config/windows.json`
-- Stylesheet Overrides: `$HOME/.config/forge/stylesheet/forge/stylesheet.css`
+- Window Overrides: `$HOME/.config/anvil/config/windows.json`
+- Stylesheet Overrides: `$HOME/.config/anvil/stylesheet/anvil/stylesheet.css`
 
 ## GNOME Defaults
 
-GNOME Shell has built in support for workspace management and seems to work well - so Forge will not touch those.
+GNOME Shell has built in support for workspace management and seems to work well - so Anvil will not touch those.
 
 User is encouraged to bind the following:
 - Switching/moving windows to different workspaces
@@ -102,6 +103,107 @@ User is encouraged to bind the following:
 
 - The `main` branch contains gnome-4x code.
 - The `legacy` and `gnome-3-36` are the same and is now the source for gnome-3x.
+
+## Testing
+
+Anvil has two levels of automated tests: **unit tests** (fast, no GNOME runtime needed)
+and **E2E tests** (full GNOME Shell session in a container).
+
+### Unit Tests
+
+Unit tests cover pure logic — utility functions, the tiling tree data structure, color
+conversion, and the logger. They run entirely in Node.js via [vitest](https://vitest.dev)
+with hand-written mocks for all GJS/GNOME APIs.
+
+**Prerequisites:** Node.js 16+, `npm install`
+
+```bash
+# Run unit tests once
+npm run test:unit
+
+# Run unit tests in watch mode (re-runs on file save)
+npm run test:watch
+
+# Run lint + unit tests together
+npm test
+```
+
+### E2E Tests
+
+E2E tests run a real GNOME Shell session inside a [Podman](https://podman.io) container
+and drive it via D-Bus, `wtype`, and `gsettings`. They test the full extension lifecycle,
+tiling tree construction, settings propagation, and the preferences dialog.
+
+The session runs `gnome-shell --headless --wayland` — the correct headless mode for
+GNOME 50, which is phasing out X11 login sessions. This brings up a complete Wayland
+compositor with a virtual framebuffer; no Xvfb, no DRM device, and no real GPU are
+required. Several D-Bus system services that GNOME Shell expects are provided by
+[python-dbusmock](https://github.com/martinpitt/python-dbusmock) stubs, matching the
+approach used by GNOME Shell's own GitLab CI.
+
+**Prerequisites:**
+- [Podman](https://podman.io/docs/installation) installed
+- `glib2-devel` installed (`sudo dnf install glib2-devel`, for `make dist`)
+
+**Supported GNOME Shell versions:**
+
+| Fedora | GNOME Shell | Status |
+|--------|-------------|--------|
+| 44     | 50          | ✅ Primary |
+| 43     | 49          | ✅ Supported |
+| 42     | 48          | ✅ Supported |
+
+**Step 1: Build the container image** (one-time, per Fedora version)
+
+```bash
+# Build for Fedora 44 (GNOME 50) — the primary target
+./test/e2e/build-container.sh 44
+
+# Or build for all supported versions
+make test-e2e-build-all
+```
+
+**Step 2: Run the tests**
+
+```bash
+# Run against Fedora 44 (default)
+make test-e2e
+
+# Run against a specific Fedora version
+make test-e2e FEDORA_VERSION=43
+
+# Run against all supported versions
+make test-e2e-all
+```
+
+**Debugging a failed test:**
+
+On failure, the test runner saves a screenshot and the full GNOME Shell journal log to
+`test/e2e/output/`. Use `-k` to keep the container running for manual inspection:
+
+```bash
+./test/e2e/run-tests.sh -v 44 -k
+# Container is left running — connect to it for debugging:
+podman exec -it --user gnomeshell <container-id> set-env.sh bash
+```
+
+**Running locally without a container:**
+
+Use the existing nested Wayland session workflow for rapid development:
+
+```bash
+# Terminal 1: start a nested GNOME Shell with Anvil installed
+make test
+
+# Terminal 2: open a test window inside the nested session
+make test-open CMD=gnome-text-editor
+
+# Terminal 3: query extension state via D-Bus
+WAYLAND_DISPLAY=wayland-anvil gdbus call --session \
+  --dest org.gnome.Shell --object-path /org/gnome/Shell \
+  --method org.gnome.Shell.Eval \
+  "imports.ui.main.extensionManager.lookup('anvil@genkerensky.com')?.getTestState()"
+```
 
 ## Local Development Setup
 
@@ -132,7 +234,7 @@ npm run format
 ## Contributing
 
 - Please be nice, friendly and welcoming on discussions/tickets.
-- See existing [Issues](https://github.com/forge-ext/forge/issues), or create a new Issue with the "Bug report" format if it doesn't exist.
+- See existing [Issues](https://github.com/forge-ext/forge/issues) on the upstream Forge repository, or open a new issue there if it doesn't exist.
 
 ## Credits
 

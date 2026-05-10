@@ -1,4 +1,4 @@
-# Forge Tests
+# Anvil Tests
 
 ## Configurations and Preferences
 
@@ -19,7 +19,7 @@ On opening Development Mode Preferences window, _includes_ all of Production Mod
 
 On navigating `Home` parent item,
 
-- [ ] - Should show a _work in progress_ panel showing Forge version information depending if it was built using Production or Development mode.
+- [ ] - Should show a _work in progress_ panel showing Anvil version information depending if it was built using Production or Development mode.
 
 On navigating `Appearance` parent item,
 

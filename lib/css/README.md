@@ -1,10 +1,10 @@
-# CSS module in Forge
+# CSS module in Anvil
 
 API to work with CSS code and files and update the extension's stylesheet.css
 
 ## CSS Parser from ReworkCSS
 Credits: https://github.com/reworkcss/css
-Modified to work in GNOME-Shell by Forge
+Modified to work in GNOME-Shell by Anvil (forked from Forge)
 
 ### Usage
 

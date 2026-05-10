@@ -1,10 +1,18 @@
 {
-  "name": "forge",
-  "version": "22.51.0",
-  "description": "Forge - Tiling Extension for GNOME",
+  "name": "anvil",
+  "version": "1.0.0",
+  "description": "Anvil - Tiling Extension for GNOME",
+  "type": "module",
   "main": "extension.js",
   "scripts": {
-    "test": "prettier --list-different \"./**/*.{js,jsx,ts,tsx,json}\"",
+    "test": "npm run lint && vitest run",
+    "test:unit": "vitest run",
+    "test:e2e": "make test-e2e",
+    "test:e2e:all": "make test-e2e-all",
+    "test:e2e:build": "make test-e2e-build-all",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . && prettier --check \"./**/*.{js,jsx,ts,tsx,json}\"",
     "prepare": "husky install",
     "format": "prettier --write \"./**/*.{js,jsx,ts,tsx,json}\""
   },
@@ -14,7 +22,7 @@
   },
   "keywords": [
     "gnome",
-    "forge",
+    "anvil",
     "tiling",
     "javascript",
     "gnome-shell"
@@ -29,20 +37,29 @@
   },
   "homepage": "https://github.com/forge-ext/forge#readme",
   "devDependencies": {
-    "@girs/adw-1": "^1.3.3-3.2.0",
-    "@girs/clutter-12": "^12.0.0-3.2.0",
-    "@girs/gdk-4.0": "^4.0.0-3.2.0",
-    "@girs/gio-2.0": "^2.76.1-3.2.0",
-    "@girs/gjs": "^3.2.0",
-    "@girs/gobject-2.0": "^2.76.1-3.2.0",
-    "@girs/gtk-4.0": "^4.10.4-3.2.0",
-    "@girs/meta-12": "^12.0.0-3.2.0",
-    "@girs/st-12": "^12.0.0-3.2.0",
+    "@eslint/js": "^10.0.1",
+    "@girs/adw-1": "^1.10.0-4.0.0-rc.15",
+    "@girs/clutter-18": "^18.0.0-4.0.0-rc.15",
+    "@girs/gdk-4.0": "^4.0.0-4.0.0-rc.15",
+    "@girs/gio-2.0": "^2.88.0-4.0.0-rc.15",
+    "@girs/gjs": "^4.0.0-rc.15",
+    "@girs/glib-2.0": "^2.88.0-4.0.0-rc.15",
+    "@girs/gnome-shell": "^50.0.0",
+    "@girs/gobject-2.0": "^2.88.0-4.0.0-rc.15",
+    "@girs/gtk-4.0": "^4.23.0-4.0.0-rc.15",
+    "@girs/meta-18": "^18.0.0-4.0.0-rc.15",
+    "@girs/st-18": "^18.0.0-4.0.0-rc.15",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
     "husky": "^8.0.1",
     "lint-staged": "^13.0.3",
-    "prettier": "^2.7.1"
+    "prettier": "^2.7.1",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.2",
+    "vitest": "^4.1.5"
   },
   "lint-staged": {
+    "*.{js,ts,tsx}": "eslint --fix",
     "**/*": "prettier --write --ignore-unknown"
   }
 }
