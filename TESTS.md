@@ -1,5 +1,16 @@
 # Anvil Tests
 
+> **Testing approach:** E2E tests use three strategies:
+> 1. **Bash + D-Bus/gsettings** (47 assertions in `test/e2e/tests.sh`) — extension lifecycle,
+>    settings read/write, Shell.Eval state queries.
+> 2. **Behave BDD + Dogtail/AT-SPI** (46 steps in `test/e2e/features/`) — preferences dialog
+>    structure, switch state verification, page tab navigation. Test results produce a
+>    self-contained HTML report with AT-SPI tree snapshots on failure.
+> 3. **Unit tests** (vitest, ~182 tests) — pure logic, tree operations, utilities.
+>
+> See `test/e2e/features/preferences.feature` and `test/e2e/features/atspi_tree.feature`
+> for the current BDD scenario definitions.
+
 ## Configurations and Preferences
 
 ### Preferences #39
@@ -11,8 +22,12 @@
 
 On opening Production Mode Preferences window:
 
-- [ ] - Should show `Home, Appearance, Workspace, Keyboard, Experimental,` on the parent-level settings list.
-  - ❌ **Not testable in headless container** — requires GTK widget tree inspection (no AT-SPI bridge in minimal container).
+- [x] - Should show `Tiling, Appearance, Keyboard, Windows` on the sidebar page tabs.
+  - ✅ Verified via Behave/Dogtail: `preferences.feature` — 4 page tabs found via AT-SPI `findChildren(roleName="page tab")`.
+- [x] - Switch widget `.checked` state matches gsettings for 7 mapped switches.
+  - ✅ Verified via Behave/Dogtail: `preferences.feature` — `Scenario Outline: Switch "<name>" checked state matches gsetting`, toggles via gsettings and re-verifies `.checked`.
+- [x] - Sidebar page tab navigation works via AT-SPI click.
+  - ✅ Verified via Behave: `preferences.feature` — clicks all 4 page tabs via `doActionNamed("click")`, navigates back to Tiling.
 - [ ] - Should show `Appearance` right-arrow indicator, since Appearance have child-level settings options.
   - ❌ **Not testable** — visual indicator requires pixel-level rendering verification.
 - [ ] - Should show `Keyboard` right-arrow indicator, since Keyboard have child-level settings options.
@@ -21,17 +36,17 @@ On opening Production Mode Preferences window:
 On opening Development Mode Preferences window, _includes_ all of Production Mode checks plus below:
 
 - [ ] - Should show `Development, About,` on the parent-level settings list.
-  - ❌ **Not testable** — requires widget tree inspection.
+  - ❌ **Not testable** — Development/About pages only appear in non-production builds; current tests run in production mode.
 
 On navigating `Home` parent item,
 
 - [ ] - Should show a _work in progress_ panel showing Anvil version information depending if it was built using Production or Development mode.
-  - ❌ **Not testable** — requires widget tree inspection.
+  - ❌ **Not testable** — requires widget tree inspection; Home page may not be visible in AdwNavigationSplitView.
 
 On navigating `Appearance` parent item,
 
 - [ ] - Should transition to sub-list which includes: `Windows,`. The initial sub-item's panel box should show immediately.
-  - ❌ **Not testable** — requires GTK widget tree inspection.
+  - ❌ **Not testable** — Appearance uses expander rows, not sub-list navigation.
 - [ ] - Should show the `back button` on the header bar of the Preferences Window.
   - ❌ **Not testable** — visual/structural inspection required.
 - [ ] - Should update the header bar `title` of the Preferences Window and appends `- Windows`.
@@ -98,7 +113,7 @@ Settings-level verification for tiling mode behavior:
 - [ ] - Float toggle via `<Super>c` keybinding.
   - ❌ **Not testable** — keyboard simulation not available in headless mode.
 - [ ] - Visual verification of floating window layer position.
-  - ❌ **Not testable** — requires pixel-level rendering.
+  - ❌ **Not testable** — requires pixel-level rendering comparison against reference images.
 
 ## Layout Mode
 

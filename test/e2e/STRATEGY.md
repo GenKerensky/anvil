@@ -4,9 +4,10 @@
 > Xvfb-based approach with xdotool keyboard injection and ImageMagick pixel
 > capture) was removed in GNOME 50. `gnome-shell --headless --wayland` is the
 > only compositor mode that works in a container without a real GPU. All E2E
-> tests must therefore use D-Bus APIs, gsettings, and `Shell.Eval` — keyboard
-> keybinding and pixel-level visual tests are not feasible. See `TESTS.md`
-> for the current test status.
+> tests must therefore use D-Bus APIs, gsettings, `Shell.Eval`, and
+> **Dogtail/AT-SPI** for GTK widget tree inspection and interaction.
+> Keyboard keybinding and pixel-level visual tests are not feasible.
+> See `TESTS.md` for the current test status.
 
 ## Overview
 
@@ -252,15 +253,18 @@ screenshot diffing alone. The recommended approach combines both.
 ### Test Pyramid
 
 ```
-                    ┌──────────────────────┐
-                    │       E2E / CI       │  gnome-shell-pod + xdotool + Eval + screenshots
-                    │      (~10 tests)     │  "tiling a window puts it in the tree"
-                    │                      │  "layout changes after keybinding"
-                    └──────────┬───────────┘
+                    ┌──────────────────────────────────┐
+                    │       E2E / CI (container)       │  gnome-shell --headless --wayland
+                    │      (~60 pass / ~5 tests)       │  + D-Bus + gsettings + Dogtail/AT-SPI
+                    │                                  │  "extension enables without errors"
+                    │                                  │  "prefs dialog shows 4 page tabs"
+                    │                                  │  "switch UI state matches gsettings"
+                    └──────────┬───────────────────────┘
                                │
               ┌────────────────┴────────────────┐
-              │    Integration (local headless)  │  dbus-run-session + gnome-shell --nested
-              │         (~30 tests)              │  "window manager enables/disables cleanly"
+              │    Integration (local headless)  │  gnome-shell --headless --wayland
+              │         (~30 tests)              │  (local variant of E2E, same mechanism)
+              │                                  │  "window manager enables/disables cleanly"
               │                                  │  "gsettings changes propagate"
               └────────────────┬────────────────┘
                                │
@@ -283,7 +287,9 @@ screenshot diffing alone. The recommended approach combines both.
 | **Multi-monitor layout** | `MUTTER_DEBUG_DUMMY_MODE_SPECS=3840x1080` → `Eval` | Two MONITOR nodes in tree |
 | **Workspace isolation** | Create workspace → open windows → `Eval` | Each workspace has independent subtree |
 | **Gap settings** | `gsettings set gap-size 10` → visual diff | Window gaps match setting value |
-| **Preferences dialog** | `OpenExtensionPrefs` → AT-SPI2 / screenshot | Prefs window opens and shows correct tabs |
+| **Preferences dialog structure** | `OpenExtensionPrefs` → Dogtail find page tabs | Prefs window shows Tiling, Appearance, Keyboard, Windows tabs |
+| **Preferences switch state** | Dogtail `.checked` vs gsettings value | Switch UI state matches gsettings |
+| **Page tab navigation** | Dogtail `.doActionNamed("click")` on page tab | Each sidebar tab navigates without error |
 
 ---
 

@@ -21,6 +21,4 @@ export WAYLAND_DISPLAY="wayland-0"
 export HOME="/home/gnomeshell"
 export USER="gnomeshell"
 export LOGNAME="gnomeshell"
-export NO_AT_BRIDGE="1"
-
 exec "$@"

@@ -53,15 +53,11 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     python3-dbus \
     python3-dbusmock \
     python3-gobject \
-    # Keyboard simulation via wtype (zwp_virtual_keyboard_v1)
-    wtype \
-    # Screenshot capture via grim (wlr-screencopy protocol)
-    grim \
-    # Xvfb + xdotool + ImageMagick are installed for future use but are not
-    # currently usable — GNOME 50 removed the --nested flag needed for them.
-    xorg-x11-server-Xvfb \
-    xdotool \
-    ImageMagick \
+    # AT-SPI accessibility toolkit (for Dogtail UI testing)
+    at-spi2-core \
+    at-spi2-atk \
+    python3-dogtail \
+    python3-pip \
     # Scripting utilities
     jq \
     procps-ng \
@@ -72,8 +68,11 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     sudo \
     systemd \
     systemd-udev \
- && dnf clean all \
- && rm -rf /var/cache/dnf
+  && dnf clean all \
+  && rm -rf /var/cache/dnf
+
+# BDD test framework for structured Dogtail/AT-SPI testing
+RUN pip3 install behave-html-pretty-formatter
 
 # ---------------------------------------------------------------------------
 # Non-root user: gnomeshell (UID 1000)
@@ -118,7 +117,7 @@ Environment=XDG_SESSION_TYPE=wayland\n\
 Environment=XDG_SESSION_CLASS=user\n\
 Environment=GNOME_SHELL_SESSION_MODE=user\n\
 Environment=MUTTER_DEBUG_DUMMY_MODE_SPECS=1920x1080\n\
-Environment=NO_AT_BRIDGE=1\n\
+# Accessibility bridge enabled for Dogtail/AT-SPI-based UI testing\n\
 Environment=GJS_DEBUG_OUTPUT=stderr\n\
 ExecStartPre=!/bin/mkdir -p /run/user/1000\n\
 ExecStartPre=!/bin/chown gnomeshell:wheel /run/user/1000\n\
@@ -150,9 +149,15 @@ RUN chmod 0755 /usr/local/bin/start-session.sh
 # ---------------------------------------------------------------------------
 # Helper scripts (sourced from the test/e2e build context)
 # ---------------------------------------------------------------------------
-COPY set-env.sh       /usr/local/bin/set-env.sh
-COPY wait-user-bus.sh /usr/local/bin/wait-user-bus.sh
-RUN chmod 0755 /usr/local/bin/set-env.sh /usr/local/bin/wait-user-bus.sh
+COPY set-env.sh        /usr/local/bin/set-env.sh
+COPY wait-user-bus.sh  /usr/local/bin/wait-user-bus.sh
+COPY tests-dogtail.py  /usr/local/bin/tests-dogtail.py
+RUN chmod 0755 /usr/local/bin/set-env.sh /usr/local/bin/wait-user-bus.sh /usr/local/bin/tests-dogtail.py
+
+# Behave BDD test framework — feature files and step definitions
+COPY behave.ini            /usr/local/share/anvil-tests/behave.ini
+COPY features/             /usr/local/share/anvil-tests/features/
+RUN chmod -R 0755 /usr/local/share/anvil-tests
 
 # ---------------------------------------------------------------------------
 # Boot via systemd so the user session (and user D-Bus socket) starts cleanly

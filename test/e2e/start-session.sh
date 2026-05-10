@@ -54,4 +54,14 @@ python3 -m dbusmock \
 # Give mocks a moment to register their bus names
 sleep 1
 
+# Enable the accessibility toolkit so GTK/GNOME Shell export AT-SPI trees
+# for Dogtail-based UI testing.
+gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
+
+# Start the AT-SPI bus launcher so the accessibility registry is available.
+# Without this, the gnome-shell a11y bridge will not initialize and Dogtail
+# will see an empty tree.  --a11y=1 forces accessibility enablement.
+/usr/libexec/at-spi-bus-launcher --launch-immediately --a11y=1 2>/dev/null &
+sleep 2
+
 exec gnome-shell --headless --wayland

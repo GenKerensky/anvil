@@ -9,3 +9,4 @@ po/anvil.pot
 .vscode
 node_modules
 lib/prefs/metadata.js
+test/e2e/output

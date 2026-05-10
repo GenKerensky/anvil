@@ -352,6 +352,48 @@ test_focus_pointer() {
 }
 
 # ---------------------------------------------------------------------------
+# 11. UI Widget Tree (Dogtail / AT-SPI)
+#
+# Uses the accessibility bus to inspect and interact with the extension
+# preferences window. Requires:
+#   - at-spi2-core, at-spi2-atk, python3-dogtail installed
+#   - NO_AT_BRIDGE not set
+#   - toolkit-accessibility gsetting enabled
+# ---------------------------------------------------------------------------
+
+test_dogtail_ui() {
+  run_test_section "UI Widget Tree (BDD / Behave)"
+
+  local OUTPUT
+  local EXIT_CODE=0
+  local REPORT_NAME="behave-report-$(date +%Y%m%d-%H%M%S).html"
+
+  OUTPUT=$(do_in_pod bash -c "cd /usr/local/share/anvil-tests && behave --no-skipped -f html-pretty -o /tmp/${REPORT_NAME} -f pretty 2>&1") || EXIT_CODE=$?
+
+  echo "${OUTPUT}"
+
+  # Copy the HTML report out of the container
+  mkdir -p "${OUTPUT_DIR}"
+  do_in_pod cat "/tmp/${REPORT_NAME}" > "${OUTPUT_DIR}/${REPORT_NAME}" 2>/dev/null \
+    && echo "HTML report: ${OUTPUT_DIR}/${REPORT_NAME}" \
+    || echo "Warning: Could not copy HTML report"
+
+  # Parse behave output for step-level pass/fail counts
+  local PY_PASS PY_FAIL
+  PY_PASS=$(echo "${OUTPUT}" | grep -oP '[0-9]+(?= step[s]? passed)' | tail -1 || echo "0")
+  PY_FAIL=$(echo "${OUTPUT}" | grep -oP '[0-9]+(?= step[s]? failed)' | tail -1 || echo "0")
+
+  PASS_COUNT=$((PASS_COUNT + PY_PASS))
+  FAIL_COUNT=$((FAIL_COUNT + PY_FAIL))
+
+  if [[ "${EXIT_CODE}" -ne 0 ]] && [[ "${PY_FAIL}" -eq 0 ]]; then
+    # Behave failed before any steps ran (e.g. import error)
+    FAIL_COUNT=$((FAIL_COUNT + 1))
+    FAILED_TESTS+=("test_dogtail_ui (behave crashed)")
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Entry point — called by run-tests.sh
 # ---------------------------------------------------------------------------
 
@@ -365,4 +407,5 @@ run_all_tests() {
   test_floating_mode              || true
   test_window_effects             || true
   test_focus_pointer              || true
+  test_dogtail_ui                 || true
 }

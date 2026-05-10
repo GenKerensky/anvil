@@ -131,15 +131,29 @@ npm test
 ### E2E Tests
 
 E2E tests run a real GNOME Shell session inside a [Podman](https://podman.io) container
-and drive it via D-Bus, `wtype`, and `gsettings`. They test the full extension lifecycle,
-tiling tree construction, settings propagation, and the preferences dialog.
+and validate the extension through three mechanisms:
+
+1. **D-Bus API calls** — extension lifecycle, enabling/disabling, error checking
+2. **GSettings read/write** — settings propagation, layout mode toggles, window effects
+3. **Dogtail/AT-SPI widget inspection** — GTK preferences dialog structure, switch state
+   verification, page tab navigation (all via the accessibility bus, no display needed)
 
 The session runs `gnome-shell --headless --wayland` — the correct headless mode for
-GNOME 50, which is phasing out X11 login sessions. This brings up a complete Wayland
-compositor with a virtual framebuffer; no Xvfb, no DRM device, and no real GPU are
-required. Several D-Bus system services that GNOME Shell expects are provided by
+GNOME 50, which removed the `--nested` flag. This brings up a complete Wayland compositor
+with a virtual framebuffer; no Xvfb, no DRM device, and no real GPU are required.
+D-Bus system services are provided by
 [python-dbusmock](https://github.com/martinpitt/python-dbusmock) stubs, matching the
 approach used by GNOME Shell's own GitLab CI.
+
+UI tests use **Behave** (BDD framework) to organize Dogtail/AT-SPI interactions into
+readable Gherkin feature files. Test results are published as a self-contained HTML report
+with AT-SPI tree snapshots embedded on failure for debugging.
+
+**What is NOT testable headless:**
+- Keyboard keybindings (`zwp_virtual_keyboard_v1` not implemented by headless compositor)
+- Pixel-level visual rendering (no GPU framebuffer)
+- Mouse drag-and-drop (no pointer device)
+- GtkSwitch clicks via AT-SPI (no pointer device; state verified via `.checked` property)
 
 **Prerequisites:**
 - [Podman](https://podman.io/docs/installation) installed
@@ -178,8 +192,12 @@ make test-e2e-all
 
 **Debugging a failed test:**
 
-On failure, the test runner saves a screenshot and the full GNOME Shell journal log to
-`test/e2e/output/`. Use `-k` to keep the container running for manual inspection:
+On failure, the test runner saves:
+- A self-contained **HTML report** to `test/e2e/output/behave-report-*.html` with full
+  scenario breakdown, step status, and embedded AT-SPI tree snapshots
+- The full GNOME Shell **journal log** to `test/e2e/output/journal.log`
+
+Use `-k` to keep the container running for manual inspection:
 
 ```bash
 ./test/e2e/run-tests.sh -v 44 -k
@@ -187,22 +205,22 @@ On failure, the test runner saves a screenshot and the full GNOME Shell journal 
 podman exec -it --user gnomeshell <container-id> set-env.sh bash
 ```
 
-**Running locally without a container:**
+**Test structure:**
 
-Use the existing nested Wayland session workflow for rapid development:
-
-```bash
-# Terminal 1: start a nested GNOME Shell with Anvil installed
-make test
-
-# Terminal 2: open a test window inside the nested session
-make test-open CMD=gnome-text-editor
-
-# Terminal 3: query extension state via D-Bus
-WAYLAND_DISPLAY=wayland-anvil gdbus call --session \
-  --dest org.gnome.Shell --object-path /org/gnome/Shell \
-  --method org.gnome.Shell.Eval \
-  "imports.ui.main.extensionManager.lookup('anvil@genkerensky.com')?.getTestState()"
+```
+test/e2e/
+├── features/                    # Behave BDD feature files
+│   ├── environment.py           # Hooks: AT-SPI tree dump on failure
+│   ├── atspi_tree.feature       # AT-SPI accessibility verification
+│   ├── preferences.feature      # Page tabs, switch state, tab navigation
+│   └── steps/
+│       ├── helpers.py           # Shared: gsettings, prefs, AT-SPI dump utilities
+│       ├── atspi_steps.py       # Step definitions for AT-SPI tree
+│       └── preferences_steps.py # Step definitions for preferences
+├── tests.sh                     # 47 bash assertions via D-Bus/gsettings
+├── run-tests.sh                 # Test runner (container lifecycle, orchestration)
+├── start-session.sh             # Session D-Bus + dbusmock + gnome-shell --headless
+└── Containerfile                # Fedora-based image with AT-SPI + Dogtail + behave
 ```
 
 ## Local Development Setup
