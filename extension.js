@@ -57,6 +57,7 @@ export default class AnvilExtension extends Extension {
     // Enable unsafe mode for E2E tests — allows org.gnome.Shell.Eval D-Bus calls
     if (this.settings.get_boolean("test-mode")) {
       global.context.unsafe_mode = true;
+      global.__anvil_test_state = this;
     }
 
     this.configMgr = new ConfigManager(/** @type {any} */ (this));
@@ -75,6 +76,10 @@ export default class AnvilExtension extends Extension {
 
   disable() {
     Logger.info("disable");
+
+    if (global.__anvil_test_state === this) {
+      global.__anvil_test_state = null;
+    }
 
     // See session mode unlock-dialog explanation on _onSessionModeChanged()
     if (this._sessionId) {
@@ -137,18 +142,24 @@ export default class AnvilExtension extends Extension {
 
     const serializeNode = (node) => {
       if (!node) return null;
-      return {
+      const data = {
         type: node._type,
         layout: node.layout ?? null,
         mode: node.mode ?? null,
         childCount: node._nodes?.length ?? 0,
         children: (node._nodes ?? []).map(serializeNode),
       };
+      if (node._type === "WINDOW" && node.nodeValue) {
+        data.wmClass = node.nodeValue.wm_class ?? null;
+      }
+      return data;
     };
 
     return JSON.stringify({
       treeExists: !!wm._tree,
       tilingEnabled: this.settings.get_boolean("tiling-mode-enabled"),
+      stackedEnabled: this.settings.get_boolean("stacked-tiling-mode-enabled"),
+      tabbedEnabled: this.settings.get_boolean("tabbed-tiling-mode-enabled"),
       tree: serializeNode(wm._tree),
     });
   }

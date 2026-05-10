@@ -29,6 +29,7 @@ metadata:
 	printf '  ]\n' >> lib/prefs/metadata.js
 	printf ').reduce((acc, x) => ({ ...acc, [x.email]: acc[x.email] ?? x.name }), {}))\n' >> lib/prefs/metadata.js
 	printf '.map(([email, name]) => name + " <" + email + ">")\n' >> lib/prefs/metadata.js
+	npx prettier --write lib/prefs/metadata.js
 
 build: clean metadata.json schemas compilemsgs metadata
 	rm -rf temp

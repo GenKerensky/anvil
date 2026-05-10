@@ -89,12 +89,23 @@ send_keystroke() {
 }
 
 # Send a modifier+key combination via wtype.
-# Usage: send_key_combo super h   →  Super+H
+# MOD can be a single modifier or comma-separated: "shift,super"
+# Usage: send_key_combo super h     →  Super+H
+#        send_key_combo shift,super s  →  Shift+Super+S
 #        send_key_combo alt F4
 send_key_combo() {
   local MOD="${1}"
   local KEY="${2}"
-  do_in_pod wtype -M "${MOD}" -k "${KEY}" -m "${MOD}"
+  local CMD="wtype"
+  local IFS=","
+  for m in ${MOD}; do
+    CMD="${CMD} -M ${m}"
+  done
+  CMD="${CMD} -k ${KEY}"
+  for m in ${MOD}; do
+    CMD="${CMD} -m ${m}"
+  done
+  do_in_pod bash -c "${CMD}"
   sleep 0.3
 }
 
@@ -125,6 +136,15 @@ eval_js() {
   # sed: remove the outer parens, boolean, comma, and surrounding quotes.
   echo "${RAW}" | sed "s/^(true, '\\(.*\\)')$/\\1/" \
                 | sed "s/^(false, '\\(.*\\)')$/\\1/"
+}
+
+# Get extension errors via D-Bus, returning "()" on success or error details.
+get_extension_errors() {
+  do_in_pod gdbus call --session \
+    --dest org.gnome.Shell \
+    --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Extensions.GetExtensionErrors \
+    "'${UUID}'" 2>/dev/null || echo "(@as [],)"
 }
 
 # Capture the current Wayland framebuffer using grim and save it as a PNG.

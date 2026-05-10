@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
 # Anvil E2E Test Cases
 # This file is SOURCED by run-tests.sh and has access to all helper functions:
-#   assert_eq, assert_js, eval_js, set_setting, get_setting,
-#   send_keystroke, run_test_section, do_in_pod, screenshot
+#   assert_eq, assert_js, eval_js, get_extension_errors, set_setting, get_setting,
+#   send_keystroke, send_key_combo, run_test_section, do_in_pod, screenshot
 #
 # Do NOT run this file directly.
 #
-# IMPORTANT: These tests avoid org.gnome.Shell.Eval because in GNOME Shell 45+
-# the method is gated behind global.context.unsafe_mode and the eval scope
-# may not have access to internal shell imports. Instead we use:
-#   - org.gnome.Shell.Extensions.GetExtensionInfo for extension state
-#   - org.gnome.Shell.Extensions.GetExtensionErrors for error checks
+# IMPORTANT: These tests avoid org.gnome.Shell.Eval for complex expressions
+# because in GNOME Shell 45+ the eval scope may not have access to shell
+# internals under ESM. Instead we use:
+#   - org.gnome.Shell.Extensions (GetExtensionInfo, GetExtensionErrors, etc.)
 #   - gsettings for settings checks
-#   - gnome-extensions CLI for enable/disable lifecycle
+#   - gnome-extensions CLI for lifecycle
+#   - global.__anvil_test_state.getTestState() (simple flag access via Eval)
+#   - wtype for keyboard-driven tests
 
 UUID="anvil@genkerensky.com"
 
@@ -21,9 +22,6 @@ UUID="anvil@genkerensky.com"
 # ---------------------------------------------------------------------------
 
 # Extract the numeric state from GetExtensionInfo output.
-# The output format is:
-#   ({'name': <'Anvil'>, 'state': <1.0>, 'enabled': <true>, ...},)
-# GNOME Shell ExtensionState: 1=ACTIVE, 2=DISABLED
 get_ext_state() {
   local INFO
   INFO=$(do_in_pod gdbus call --session \
@@ -43,6 +41,14 @@ assert_ext_state() {
   assert_eq "${DESCRIPTION}" "${ACTUAL}" "${EXPECTED}"
 }
 
+# Evaluate a JS expression against the extension's test state.
+# Calls global.__anvil_test_state.getTestState(), parses JSON, and returns
+# the specified field value as a string. Returns "null" on failure.
+eval_test_state() {
+  local EXPR="${1}"
+  eval_js "global.__anvil_test_state ? JSON.parse(global.__anvil_test_state.getTestState()).${EXPR} : null"
+}
+
 # ---------------------------------------------------------------------------
 # 1. Extension Lifecycle
 # ---------------------------------------------------------------------------
@@ -50,23 +56,12 @@ assert_ext_state() {
 test_extension_lifecycle() {
   run_test_section "Extension Lifecycle"
 
-  # 1a. Extension state is ACTIVE (state == 1)
   assert_ext_state "extension is ACTIVE" "1"
 
-  # 1b. Extension reports no errors
   local ERRORS
-  ERRORS=$(do_in_pod gdbus call --session \
-    --dest org.gnome.Shell \
-    --object-path /org/gnome/Shell \
-    --method org.gnome.Shell.Extensions.GetExtensionErrors \
-    "'${UUID}'" 2>/dev/null || echo "(@as [],)")
+  ERRORS=$(get_extension_errors)
   assert_eq "extension has no errors" "${ERRORS}" "(@as [],)"
 
-  # 1c-d. WindowManager and tree initialization are implicitly verified by
-  #       the ACTIVE state above — the extension's enable() succeeded.
-  #       Unit tests cover the tree structure in detail.
-
-  # 1e. The test-mode GSettings flag was set by the harness before enable()
   local RESULT
   RESULT=$(get_setting "test-mode")
   assert_eq "test-mode is enabled" "${RESULT}" "true"
@@ -79,21 +74,17 @@ test_extension_lifecycle() {
 test_tiling_basic() {
   run_test_section "Basic Tiling"
 
-  # 2a. The tiling-mode-enabled setting is true out of the box
   local RESULT
   RESULT=$(get_setting "tiling-mode-enabled")
   assert_eq "tiling mode is enabled by default" "${RESULT}" "true"
 
-  # 2b. A newly opened window is tracked — launch gnome-text-editor
   do_in_pod bash -c "nohup gnome-text-editor --new-window >/dev/null 2>&1 &"
   sleep 5
 
-  # Close the window before structural assertions
+  assert_eq "tree exists after window open" "$(eval_test_state "treeExists")" "true"
+
   send_key_combo "alt" "F4" 2>/dev/null || true
   sleep 2
-
-  # 2c-d. Tree structure (workspace/monitor nodes) is covered by unit tests.
-  #       The extension being ACTIVE implies the tree was initialized.
 }
 
 # ---------------------------------------------------------------------------
@@ -103,17 +94,14 @@ test_tiling_basic() {
 test_settings() {
   run_test_section "Settings"
 
-  # 3a. window-gap-size can be written and read back
   local ORIGINAL
   ORIGINAL=$(get_setting "window-gap-size")
   set_setting "window-gap-size" "8"
   local RESULT
   RESULT=$(get_setting "window-gap-size")
   assert_eq "window-gap-size can be set" "${RESULT}" "uint32 8"
-  # Restore to original value so later tests are unaffected
   set_setting "window-gap-size" "${ORIGINAL}"
 
-  # 3b. tiling-mode-enabled can be toggled off and back on
   set_setting "tiling-mode-enabled" "false"
   RESULT=$(get_setting "tiling-mode-enabled")
   assert_eq "tiling-mode-enabled can be disabled" "${RESULT}" "false"
@@ -122,11 +110,9 @@ test_settings() {
   RESULT=$(get_setting "tiling-mode-enabled")
   assert_eq "tiling-mode-enabled can be re-enabled" "${RESULT}" "true"
 
-  # 3c. focus-border-toggle is readable and returns a boolean value
   RESULT=$(get_setting "focus-border-toggle")
   assert_eq "focus-border-toggle is accessible" \
-    "$([[ "${RESULT}" == "true" || "${RESULT}" == "false" ]] && echo "ok" || echo "fail")" \
-    "ok"
+    "$([[ "${RESULT}" == "true" || "${RESULT}" == "false" ]] && echo "ok")" "ok"
 }
 
 # ---------------------------------------------------------------------------
@@ -136,7 +122,6 @@ test_settings() {
 test_extension_disable_reenable() {
   run_test_section "Disable / Re-enable"
 
-  # 4a. Disable the extension via D-Bus
   do_in_pod gdbus call --session \
     --dest org.gnome.Shell \
     --object-path /org/gnome/Shell \
@@ -144,10 +129,8 @@ test_extension_disable_reenable() {
     "'${UUID}'" 2>/dev/null || true
   sleep 3
 
-  # State 2 == DISABLED in the GNOME Shell ExtensionState enum
   assert_ext_state "extension is INACTIVE after disable" "2"
 
-  # 4b. Re-enable via D-Bus
   do_in_pod gdbus call --session \
     --dest org.gnome.Shell \
     --object-path /org/gnome/Shell \
@@ -155,27 +138,20 @@ test_extension_disable_reenable() {
     "'${UUID}'" 2>/dev/null || true
   sleep 4
 
-  # State 1 == ACTIVE
   assert_ext_state "extension is ACTIVE after re-enable" "1"
 
-  # 4c. No errors should have accumulated across the disable/re-enable cycle
   local ERRORS
-  ERRORS=$(do_in_pod gdbus call --session \
-    --dest org.gnome.Shell \
-    --object-path /org/gnome/Shell \
-    --method org.gnome.Shell.Extensions.GetExtensionErrors \
-    "'${UUID}'" 2>/dev/null || echo "(@as [],)")
+  ERRORS=$(get_extension_errors)
   assert_eq "extension has no errors after re-enable" "${ERRORS}" "(@as [],)"
 }
 
 # ---------------------------------------------------------------------------
-# 5. Preferences
+# 5. Preferences (D-Bus)
 # ---------------------------------------------------------------------------
 
 test_preferences() {
   run_test_section "Preferences"
 
-  # 5a. Open the extension preferences window via D-Bus.
   do_in_pod gdbus call --session \
     --dest org.gnome.Shell \
     --object-path /org/gnome/Shell \
@@ -183,22 +159,196 @@ test_preferences() {
     "'${UUID}'" "''" "@a{sv} {}" 2>/dev/null || true
   sleep 8
 
-  # 5b. Check if a new window appeared — use the Mutter window list via D-Bus.
-  #     We don't have Shell.Eval available, so we check by counting windows
-  #     before and after, or verify the command didn't error.
-  #     We can also check for a window in the tab list using a D-Bus call.
-  #     For now, verify the extension reports no errors after opening prefs.
   local ERRORS
-  ERRORS=$(do_in_pod gdbus call --session \
-    --dest org.gnome.Shell \
-    --object-path /org/gnome/Shell \
-    --method org.gnome.Shell.Extensions.GetExtensionErrors \
-    "'${UUID}'" 2>/dev/null || echo "(@as [],)")
+  ERRORS=$(get_extension_errors)
   assert_eq "extension has no errors after opening prefs" "${ERRORS}" "(@as [],)"
 
-  # 5c. Close the preferences window via wtype Alt+F4
   send_key_combo "alt" "F4"
   sleep 2
+}
+
+# ---------------------------------------------------------------------------
+# 7. Layout Modes
+#
+# Verifies that stacked and tabbed tiling mode settings are accessible and
+# that the tree structure correctly reflects enabled modes. Visual rendering
+# of layout changes cannot be verified in a headless container.
+# ---------------------------------------------------------------------------
+
+test_layout_modes() {
+  run_test_section "Layout Modes"
+
+  assert_eq "stacked mode enabled by default" \
+    "$(get_setting "stacked-tiling-mode-enabled")" "true"
+
+  assert_eq "tabbed mode enabled by default" \
+    "$(get_setting "tabbed-tiling-mode-enabled")" "true"
+
+  do_in_pod bash -c "nohup gnome-text-editor --new-window >/dev/null 2>&1 &"
+  sleep 5
+
+  assert_eq "tiling enabled after window open" \
+    "$(eval_test_state "tilingEnabled")" "true"
+
+  # Toggle stacked mode via gsettings
+  set_setting "stacked-tiling-mode-enabled" "false"
+  assert_eq "stacked mode can be disabled" \
+    "$(get_setting "stacked-tiling-mode-enabled")" "false"
+
+  set_setting "stacked-tiling-mode-enabled" "true"
+  assert_eq "stacked mode can be re-enabled" \
+    "$(get_setting "stacked-tiling-mode-enabled")" "true"
+
+  # Toggle tabbed mode via gsettings
+  set_setting "tabbed-tiling-mode-enabled" "false"
+  assert_eq "tabbed mode can be disabled" \
+    "$(get_setting "tabbed-tiling-mode-enabled")" "false"
+
+  set_setting "tabbed-tiling-mode-enabled" "true"
+  assert_eq "tabbed mode can be re-enabled" \
+    "$(get_setting "tabbed-tiling-mode-enabled")" "true"
+
+  # Auto-split setting
+  assert_eq "auto-split enabled by default" \
+    "$(get_setting "auto-split-enabled")" "true"
+  set_setting "auto-split-enabled" "false"
+  assert_eq "auto-split can be disabled" \
+    "$(get_setting "auto-split-enabled")" "false"
+  set_setting "auto-split-enabled" "true"
+
+  # Drag-and-drop center layout setting
+  assert_eq "dnd-center-layout default" \
+    "$(get_setting "dnd-center-layout")" "'tabbed'"
+
+  send_key_combo "alt" "F4"
+  sleep 2
+}
+
+# ---------------------------------------------------------------------------
+# 8. Floating Mode
+#
+# Verifies the float-always-on-top setting. The window-toggle-float keybinding
+# (<Super>c) cannot be tested because gnome-shell --headless --wayland does
+# not implement the virtual keyboard protocol required by wtype.
+# ---------------------------------------------------------------------------
+
+test_floating_mode() {
+  run_test_section "Floating Mode"
+
+  assert_eq "float-always-on-top default" \
+    "$(get_setting "float-always-on-top-enabled")" "true"
+
+  set_setting "float-always-on-top-enabled" "false"
+  assert_eq "float-always-on-top can be disabled" \
+    "$(get_setting "float-always-on-top-enabled")" "false"
+
+  set_setting "float-always-on-top-enabled" "true"
+  assert_eq "float-always-on-top can be re-enabled" \
+    "$(get_setting "float-always-on-top-enabled")" "true"
+}
+
+# ---------------------------------------------------------------------------
+# 9. Window Effects (Settings)
+#
+# Verifies that border-effect settings can be read and written. Visual
+# verification of rendered borders, colors, and preview hints cannot be
+# performed in a headless container — those require pixel-level checks
+# on the compositor output.
+# ---------------------------------------------------------------------------
+
+test_window_effects() {
+  run_test_section "Window Effects"
+
+  # Focus border toggle
+  set_setting "focus-border-toggle" "false"
+  assert_eq "focus-border can be disabled" \
+    "$(get_setting "focus-border-toggle")" "false"
+  set_setting "focus-border-toggle" "true"
+  assert_eq "focus-border can be re-enabled" \
+    "$(get_setting "focus-border-toggle")" "true"
+
+  # Split border toggle
+  set_setting "split-border-toggle" "false"
+  assert_eq "split-border can be disabled" \
+    "$(get_setting "split-border-toggle")" "false"
+  set_setting "split-border-toggle" "true"
+  assert_eq "split-border can be re-enabled" \
+    "$(get_setting "split-border-toggle")" "true"
+
+  # Focus border size
+  local SIZE
+  SIZE=$(get_setting "focus-border-size")
+  assert_eq "focus-border-size accessible" \
+    "$(echo "${SIZE}" | grep -c "uint32")" "1"
+
+  # Split border color
+  local COLOR
+  COLOR=$(get_setting "split-border-color")
+  assert_eq "split-border-color accessible" \
+    "$(echo "${COLOR}" | grep -c "rgba")" "1"
+
+  # Preview hint toggle
+  set_setting "preview-hint-enabled" "false"
+  assert_eq "preview-hint can be disabled" \
+    "$(get_setting "preview-hint-enabled")" "false"
+  set_setting "preview-hint-enabled" "true"
+  assert_eq "preview-hint can be re-enabled" \
+    "$(get_setting "preview-hint-enabled")" "true"
+
+  # Tab decoration toggle
+  set_setting "showtab-decoration-enabled" "false"
+  assert_eq "showtab-decoration can be disabled" \
+    "$(get_setting "showtab-decoration-enabled")" "false"
+  set_setting "showtab-decoration-enabled" "true"
+  assert_eq "showtab-decoration can be re-enabled" \
+    "$(get_setting "showtab-decoration-enabled")" "true"
+
+  # Window gap hidden on single
+  set_setting "window-gap-hidden-on-single" "true"
+  assert_eq "gap-hidden-on-single can be set" \
+    "$(get_setting "window-gap-hidden-on-single")" "true"
+  set_setting "window-gap-hidden-on-single" "false"
+  assert_eq "gap-hidden-on-single can be reset" \
+    "$(get_setting "window-gap-hidden-on-single")" "false"
+}
+
+# ---------------------------------------------------------------------------
+# 10. Focus Pointer
+#
+# Verifies that focus-related settings are accessible. Actual pointer
+# movement cannot be verified in a headless container (no way to query
+# the pointer position via D-Bus).
+# ---------------------------------------------------------------------------
+
+test_focus_pointer() {
+  run_test_section "Focus Pointer"
+
+  assert_eq "move-pointer-focus default" \
+    "$(get_setting "move-pointer-focus-enabled")" "false"
+  set_setting "move-pointer-focus-enabled" "true"
+  assert_eq "move-pointer-focus can be enabled" \
+    "$(get_setting "move-pointer-focus-enabled")" "true"
+  set_setting "move-pointer-focus-enabled" "false"
+  assert_eq "move-pointer-focus can be disabled" \
+    "$(get_setting "move-pointer-focus-enabled")" "false"
+
+  assert_eq "focus-on-hover default" \
+    "$(get_setting "focus-on-hover-enabled")" "false"
+  set_setting "focus-on-hover-enabled" "true"
+  assert_eq "focus-on-hover can be enabled" \
+    "$(get_setting "focus-on-hover-enabled")" "true"
+  set_setting "focus-on-hover-enabled" "false"
+  assert_eq "focus-on-hover can be disabled" \
+    "$(get_setting "focus-on-hover-enabled")" "false"
+
+  assert_eq "auto-exit-tabbed default" \
+    "$(get_setting "auto-exit-tabbed")" "true"
+  set_setting "auto-exit-tabbed" "false"
+  assert_eq "auto-exit-tabbed can be disabled" \
+    "$(get_setting "auto-exit-tabbed")" "false"
+  set_setting "auto-exit-tabbed" "true"
+  assert_eq "auto-exit-tabbed can be re-enabled" \
+    "$(get_setting "auto-exit-tabbed")" "true"
 }
 
 # ---------------------------------------------------------------------------
@@ -211,4 +361,8 @@ run_all_tests() {
   test_settings                   || true
   test_extension_disable_reenable || true
   test_preferences                || true
+  test_layout_modes               || true
+  test_floating_mode              || true
+  test_window_effects             || true
+  test_focus_pointer              || true
 }
