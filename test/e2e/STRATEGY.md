@@ -1,5 +1,13 @@
 # Anvil E2E & Integration Testing Strategy
 
+> **GNOME 50 / mutter 50.1 update:** The `--nested` flag (which enabled the
+> Xvfb-based approach with xdotool keyboard injection and ImageMagick pixel
+> capture) was removed in GNOME 50. `gnome-shell --headless --wayland` is the
+> only compositor mode that works in a container without a real GPU. All E2E
+> tests must therefore use D-Bus APIs, gsettings, and `Shell.Eval` — keyboard
+> keybinding and pixel-level visual tests are not feasible. See `TESTS.md`
+> for the current test status.
+
 ## Overview
 
 There is no turnkey framework for automated GNOME Shell extension testing. The community
