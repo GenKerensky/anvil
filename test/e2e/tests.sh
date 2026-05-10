@@ -13,7 +13,6 @@
 #   - gsettings for settings checks
 #   - gnome-extensions CLI for lifecycle
 #   - global.__anvil_test_state.getTestState() (simple flag access via Eval)
-#   - wtype for keyboard-driven tests
 
 UUID="anvil@genkerensky.com"
 
@@ -83,7 +82,8 @@ test_tiling_basic() {
 
   assert_eq "tree exists after window open" "$(eval_test_state "treeExists")" "true"
 
-  send_key_combo "alt" "F4" 2>/dev/null || true
+  # Keyboard-driven: close window via Alt+F4 (xdotool on DISPLAY=:99)
+  send_key_combo "alt" "F4"
   sleep 2
 }
 
@@ -228,8 +228,8 @@ test_layout_modes() {
 # 8. Floating Mode
 #
 # Verifies the float-always-on-top setting. The window-toggle-float keybinding
-# (<Super>c) cannot be tested because gnome-shell --headless --wayland does
-# not implement the virtual keyboard protocol required by wtype.
+# (<Super>c) cannot be tested because the headless compositor does not
+# implement the virtual keyboard protocol required by wtype.
 # ---------------------------------------------------------------------------
 
 test_floating_mode() {

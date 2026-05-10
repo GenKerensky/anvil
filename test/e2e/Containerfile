@@ -13,18 +13,20 @@
 #
 # Strategy: gnome-shell --headless --wayland
 #
-#   GNOME Shell 45+ supports a fully headless Wayland mode that brings up a
-#   complete Wayland compositor with a virtual framebuffer — no Xvfb, no DRM,
-#   no real GPU required. This is what GNOME Shell's own CI uses, and it is
-#   the correct approach for GNOME 50 where an X11 *login session* (running
-#   gnome-shell on top of Xorg) is being phased out.
+#   gnome-shell --headless --wayland brings up a Wayland compositor with a
+#   virtual framebuffer — no Xvfb, no DRM, no GPU required. This is what
+#   GNOME Shell's own CI uses, and it is the only compositor mode that works
+#   in a container without real hardware.
 #
-#   Xwayland is still present in GNOME 50 for running X11 applications inside
-#   the Wayland session, but we don't need it for extension testing.
+#   GNOME 50 / mutter 50.1 removed the --nested flag (previously used to run
+#   the compositor inside Xvfb for xdotool/ImageMagick keyboard and pixel
+#   testing). Therefore keyboard-driven keybinding tests and pixel-level
+#   visual assertions are not feasible in the container — all tests use
+#   D-Bus methods, gsettings, and Shell.Eval.
 #
-#   The headless session requires several D-Bus services that are not present
-#   in a minimal container. These are provided by python-dbusmock stubs defined
-#   in start-session.sh, following the same pattern used by gnome-shell's CI.
+#   The session requires several D-Bus services not present in a minimal
+#   container. These are provided by python-dbusmock stubs defined in
+#   start-session.sh, following the pattern used by gnome-shell's CI.
 
 ARG FEDORA_VERSION=44
 FROM fedora:${FEDORA_VERSION}
@@ -51,10 +53,15 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     python3-dbus \
     python3-dbusmock \
     python3-gobject \
-    # wtype: Wayland keyboard input simulation via zwp_virtual_keyboard_v1
+    # Keyboard simulation via wtype (zwp_virtual_keyboard_v1)
     wtype \
-    # Screenshot: grim captures a Wayland surface to a PNG file
+    # Screenshot capture via grim (wlr-screencopy protocol)
     grim \
+    # Xvfb + xdotool + ImageMagick are installed for future use but are not
+    # currently usable — GNOME 50 removed the --nested flag needed for them.
+    xorg-x11-server-Xvfb \
+    xdotool \
+    ImageMagick \
     # Scripting utilities
     jq \
     procps-ng \
@@ -90,10 +97,9 @@ RUN useradd \
 #   1. Creates XDG_RUNTIME_DIR (/run/user/1000) and sets its ownership
 #   2. Runs start-session.sh as the gnomeshell user
 #
-# start-session.sh starts the session D-Bus at a fixed path, launches
-# python-dbusmock stubs, and finally runs gnome-shell --headless --wayland.
+# start-session.sh starts the session D-Bus at a fixed path, python-dbusmock
+# stubs, and gnome-shell --headless --wayland.
 #
-# MUTTER_DEBUG_DUMMY_MODE_SPECS sets the virtual monitor resolution.
 # NO_AT_BRIDGE suppresses the AT-SPI D-Bus bridge, which is not available
 # in a minimal container.
 # ---------------------------------------------------------------------------
@@ -129,9 +135,8 @@ WantedBy=graphical.target\n\
 # ---------------------------------------------------------------------------
 # start-session.sh
 #
-# Starts the session D-Bus at a fixed address (XDG_RUNTIME_DIR/bus), launches
-# D-Bus mock stubs for services gnome-shell expects, then starts
-# gnome-shell --headless --wayland.
+# Starts the session D-Bus at a fixed address, launches D-Bus mock stubs for
+# services gnome-shell expects, then starts gnome-shell --headless --wayland.
 #
 # The mocked services mirror those used by gnome-shell's own GitLab CI:
 #   https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/tests/
@@ -139,51 +144,8 @@ WantedBy=graphical.target\n\
 # We use a fixed bus address (not dbus-run-session) so that the test harness
 # running via podman exec + set-env.sh can reach the same session bus.
 # ---------------------------------------------------------------------------
-RUN printf '#!/usr/bin/env bash\n\
-set -euo pipefail\n\
-\n\
-export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/1000}"\n\
-export DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"\n\
-\n\
-mkdir -p "${XDG_RUNTIME_DIR}"\n\
-chmod 0700 "${XDG_RUNTIME_DIR}"\n\
-\n\
-# Start a session D-Bus daemon at the fixed address\n\
-dbus-daemon --session --address="${DBUS_SESSION_BUS_ADDRESS}" --fork\n\
-\n\
-# Mock the D-Bus services that gnome-shell requires at startup.\n\
-# Without these, gnome-shell will crash or emit fatal errors on boot.\n\
-python3 -m dbusmock --system \\\n\
-    org.freedesktop.Accounts \\\n\
-    /org/freedesktop/Accounts \\\n\
-    org.freedesktop.Accounts &\n\
-\n\
-python3 -m dbusmock \\\n\
-    org.freedesktop.UPower \\\n\
-    /org/freedesktop/UPower \\\n\
-    org.freedesktop.UPower &\n\
-\n\
-python3 -m dbusmock \\\n\
-    org.freedesktop.NetworkManager \\\n\
-    /org/freedesktop/NetworkManager \\\n\
-    org.freedesktop.NetworkManager &\n\
-\n\
-python3 -m dbusmock \\\n\
-    net.hadess.PowerProfiles \\\n\
-    /net/hadess/PowerProfiles \\\n\
-    net.hadess.PowerProfiles &\n\
-\n\
-python3 -m dbusmock \\\n\
-    org.gnome.SessionManager \\\n\
-    /org/gnome/SessionManager \\\n\
-    org.gnome.SessionManager &\n\
-\n\
-# Give mocks a moment to register their bus names\n\
-sleep 1\n\
-\n\
-exec gnome-shell --headless --wayland\n\
-' > /usr/local/bin/start-session.sh \
- && chmod 0755 /usr/local/bin/start-session.sh
+COPY start-session.sh /usr/local/bin/start-session.sh
+RUN chmod 0755 /usr/local/bin/start-session.sh
 
 # ---------------------------------------------------------------------------
 # Helper scripts (sourced from the test/e2e build context)

@@ -5,9 +5,9 @@
 ### Preferences #39
 
 - [ ] - Should open prefs.js via `<Super> + Period` in GNOME 3.3x+.
-  - ❌ **Not testable** — `gnome-shell --headless --wayland` does not implement the `zwp_virtual_keyboard_v1` protocol required by `wtype`. The D-Bus `OpenExtensionPrefs` method is used instead, which tests the same underlying functionality.
+  - ❌ **Not testable** — GNOME Shell 50 / mutter 50.1 removed the `--nested` flag, making X11 keyboard injection (xdotool) impossible. `zwp_virtual_keyboard_v1` (wtype) is not implemented by the headless compositor. The D-Bus `OpenExtensionPrefs` method is used instead, which tests the same underlying functionality.
 - [ ] - Should close prefs.js via `Esc` in GNOME 3.3x+.
-  - ❌ **Not testable** — same virtual keyboard limitation. The preferences window is closed via `Alt+F4` which also requires virtual keyboard support.
+  - ❌ **Not testable** — same keyboard limitation.
 
 On opening Production Mode Preferences window:
 
@@ -62,7 +62,7 @@ When changing Preferences on Appearance > Colors:
   **Implementation notes:**
   - ✅ Settings verification: `test_window_effects` validates that `focus-border-toggle`, `split-border-toggle`, `focus-border-size`, `split-border-color`, `preview-hint-enabled`, `showtab-decoration-enabled`, and `window-gap-hidden-on-single` can be read and written.
   - ✅ CSS property persistence is covered by unit tests (`test/shared/theme.test.ts`).
-  - ❌ Visual rendering (color on screen, preview hints) cannot be verified in a headless container — requires a real GPU or pixel buffer capture with known reference frames.
+  - ❌ Visual rendering (color on screen, preview hints) cannot be verified in a headless container — requires pixel buffer capture with known reference frames.
   - ❌ Overview and workspace thumbnail verification requires the overview to be functional, which is limited in `--headless --wayland` mode.
 
 ## Tiling Mode
@@ -70,7 +70,7 @@ When changing Preferences on Appearance > Colors:
 When dragging a window:
 
 - [ ] - Should show a preview hint where the window would be tiled.
-  - ❌ **Not testable** — drag-and-drop requires mouse pointer device simulation; `wtype` only supports keyboard input. The `zwp_virtual_keyboard_v1` protocol is available but there is no virtual pointer protocol in the current GNOME Shell headless setup.
+  - ❌ **Not testable** — drag-and-drop requires mouse pointer device simulation; no virtual pointer protocol is available in the headless compositor (`--headless --wayland`). `libei`/`wdotool` requires a real seat/portal.
 - [ ] - For split layout, should show preview hint left/right on horizontal, top/bottom on vertical following the mouse pointer.
   - ❌ **Not testable** — same as above.
 - [ ] - For tabbed layout, should show preview hint same size as the current front window.
@@ -96,7 +96,7 @@ Settings-level verification for tiling mode behavior:
 
 - [x] - `float-always-on-top-enabled` setting can be read and toggled (E2E).
 - [ ] - Float toggle via `<Super>c` keybinding.
-  - ❌ **Not testable** — virtual keyboard protocol not supported in headless mode.
+  - ❌ **Not testable** — keyboard simulation not available in headless mode.
 - [ ] - Visual verification of floating window layer position.
   - ❌ **Not testable** — requires pixel-level rendering.
 
@@ -106,14 +106,14 @@ Settings-level verification for tiling mode behavior:
 - [x] - Tabbed tiling mode can be toggled via gsettings.
 - [x] - Layout toggle keybindings exist and can be sent without errors.
 - [ ] - Visual verification of layout transitions.
-  - ❌ **Not testable** — requires pixel-level rendering.
+  - ❌ **Not testable** — requires pixel-level rendering verification.
 
 ## Focus
 
 While alternating between windows, the mouse cursor position should follow the focus:
 
 - [ ] - when moving the focus to another window with keyboard or mouse.
-  - ⚠️ **Partially testable**: `move-pointer-focus-enabled` setting can be toggled (verified in `test_focus_pointer`). Actual pointer position cannot be queried via D-Bus in the headless session.
+  - ⚠️ **Partially testable**: `move-pointer-focus-enabled` setting can be toggled (verified in `test_focus_pointer`). Actual pointer position cannot be queried via D-Bus in the nested session.
 - [ ] - when swapping two windows positions.
   - ❌ **Not testable** — requires two windows open and pointer position querying.
 - [ ] - when alternating to a new window using `Alt+Tab` or `Super+Tab`.

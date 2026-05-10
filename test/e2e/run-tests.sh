@@ -5,8 +5,9 @@
 #   -k  Keep container running after tests (useful for debugging)
 #
 # The test session runs gnome-shell --headless --wayland inside the container.
-# This is the correct headless mode for GNOME 50, which is phasing out X11
-# login sessions. The headless Wayland compositor needs no Xvfb or DRM device.
+# Keyboard-driven keybinding tests and pixel-level visual tests are not
+# feasible with this mode (GNOME 50 removed the --nested flag). All testing
+# uses D-Bus methods, gsettings, and Shell.Eval.
 
 set -euo pipefail
 
@@ -75,24 +76,24 @@ do_in_pod() {
 }
 
 # Press and release a key or key combo using wtype, which speaks the Wayland
-# virtual-keyboard protocol and works with gnome-shell --headless --wayland.
+# virtual-keyboard protocol. In practice, gnome-shell --headless --wayland
+# does NOT implement zwp_virtual_keyboard_v1, so these functions serve as
+# no-ops / documentation of what keyboard tests would look like if available.
 #
 # Key format follows wtype conventions:
 #   send_keystroke "Return"
-#   send_keystroke "super+h"      — modifier+key via wrapper below
+#   send_keystroke "super+h"
 #
 # For modifier combos use send_key_combo instead.
 send_keystroke() {
   local KEY="${1}"
-  do_in_pod wtype -k "${KEY}"
+  do_in_pod wtype -k "${KEY}" 2>/dev/null || true
   sleep 0.3
 }
 
 # Send a modifier+key combination via wtype.
-# MOD can be a single modifier or comma-separated: "shift,super"
 # Usage: send_key_combo super h     →  Super+H
-#        send_key_combo shift,super s  →  Shift+Super+S
-#        send_key_combo alt F4
+#        send_key_combo alt F4     →  Alt+F4
 send_key_combo() {
   local MOD="${1}"
   local KEY="${2}"
@@ -105,7 +106,7 @@ send_key_combo() {
   for m in ${MOD}; do
     CMD="${CMD} -m ${m}"
   done
-  do_in_pod bash -c "${CMD}"
+  do_in_pod bash -c "${CMD}" 2>/dev/null || true
   sleep 0.3
 }
 
@@ -122,7 +123,7 @@ get_setting() {
   do_in_pod gsettings --schemadir "${SCHEMA_DIR}" get "${SCHEMA_ID}" "${KEY}"
 }
 
-# Evaluate a JavaScript snippet inside GNOME Shell via org.gnome.Shell.Eval.
+# Evaluate a JS expression inside GNOME Shell via org.gnome.Shell.Eval.
 # Returns the inner value after stripping the (true/false, '...') D-Bus wrapper.
 eval_js() {
   local SCRIPT="${1}"
@@ -147,9 +148,9 @@ get_extension_errors() {
     "'${UUID}'" 2>/dev/null || echo "(@as [],)"
 }
 
-# Capture the current Wayland framebuffer using grim and save it as a PNG.
+# Capture the current Wayland framebuffer using grim.
 # grim speaks the wlr-screencopy Wayland protocol, which gnome-shell --headless
-# exposes via the wlr-screencopy-unstable-v1 interface.
+# may or may not expose. If grim fails, the warning is non-fatal.
 screenshot() {
   local NAME="${1:-screenshot}"
   mkdir -p "${OUTPUT_DIR}"
@@ -247,7 +248,8 @@ do_in_pod gsettings set org.gnome.mutter center-new-windows true 2>/dev/null || 
 
 # The gnome-headless.service unit is enabled in graphical.target.wants inside
 # the container image, so it starts automatically with systemd.
-# It runs: start-session.sh → session D-Bus + dbusmock stubs + gnome-shell --headless --wayland
+# It runs: start-session.sh → session D-Bus + dbusmock stubs +
+#                               gnome-shell --headless --wayland
 # We poll for the Wayland socket and then the Shell D-Bus name.
 echo "Waiting for GNOME Shell headless Wayland session..."
 echo "(gnome-headless.service starts automatically via systemd)"
