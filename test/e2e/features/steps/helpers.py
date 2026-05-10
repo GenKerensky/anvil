@@ -74,13 +74,35 @@ SWITCH_TO_KEY = {
     "Disable gaps for single window": "window-gap-hidden-on-single",
 }
 
+SWITCH_TO_TAB = {
+    "Focus on Hover": "Tiling",
+    "Move pointer with focused window": "Tiling",
+    "Quarter tiling": "Tiling",
+    "Stacked tiling": "Tiling",
+    "Tabbed tiling": "Tiling",
+    "Auto exit tabbed tiling": "Tiling",
+    "Preview hint": "Appearance",
+    "Border around focused window": "Appearance",
+    "Window split hint border": "Appearance",
+    "Anvil in quick settings": "Appearance",
+    "Always on Top mode for floating windows": "Windows",
+    "Disable gaps for single window": "Windows",
+}
+
 
 def get_switch_node(prefs_window, name):
     from dogtail.predicate import GenericPredicate
-    switches = prefs_window.findChildren(GenericPredicate(roleName="switch"))
-    for sw in switches:
-        if sw.name == name:
-            return sw
+    for role in ("switch", "toggle button", "check box"):
+        switches = prefs_window.findChildren(GenericPredicate(roleName=role))
+        for sw in switches:
+            if sw.name == name:
+                return sw
+    children = prefs_window.findChildren(
+        GenericPredicate(name=name, showing=True)
+    )
+    for child in children:
+        if hasattr(child, "checked"):
+            return child
     return None
 
 
@@ -94,6 +116,16 @@ def get_page_tabs(prefs_window):
             seen.add(t.name)
             tabs.append(t)
     return tabs
+
+
+def navigate_to_tab(prefs_window, tab_name):
+    tabs = get_page_tabs(prefs_window)
+    for t in tabs:
+        if t.name == tab_name:
+            t.doActionNamed("click")
+            time.sleep(1)
+            return
+    raise AssertionError(f"Page tab '{tab_name}' not found")
 
 
 def dump_atspi_tree(node=None, max_depth=8):

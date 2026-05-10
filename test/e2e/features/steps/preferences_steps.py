@@ -3,9 +3,11 @@ from steps.helpers import (
     find_prefs_window,
     get_page_tabs,
     get_switch_node,
+    navigate_to_tab,
     gsetting_get,
     gsetting_toggle,
     SWITCH_TO_KEY,
+    SWITCH_TO_TAB,
 )
 
 
@@ -37,6 +39,9 @@ def step_prefs_shows_page_tab(context, name):
 @then('switch "{sw_name}" checked state matches gsetting "{key}"')
 def step_switch_matches_gsetting(context, sw_name, key):
     ensure_prefs(context)
+    tab = SWITCH_TO_TAB.get(sw_name)
+    if tab:
+        navigate_to_tab(context.prefs_window, tab)
     sw = get_switch_node(context.prefs_window, sw_name)
     assert sw is not None, (
         f"Switch '{sw_name}' not found in preferences window"
@@ -51,6 +56,9 @@ def step_switch_matches_gsetting(context, sw_name, key):
 @then('after toggling gsetting "{key}", switch "{sw_name}" state updates')
 def step_toggle_gsetting_and_verify(context, key, sw_name):
     ensure_prefs(context)
+    tab = SWITCH_TO_TAB.get(sw_name)
+    if tab:
+        navigate_to_tab(context.prefs_window, tab)
     sw = get_switch_node(context.prefs_window, sw_name)
     assert sw is not None, (
         f"Switch '{sw_name}' not found for toggle verification"

@@ -5,7 +5,7 @@
   "type": "module",
   "main": "extension.js",
   "scripts": {
-    "test": "npm run lint && vitest run",
+    "test": "npm run typecheck && npm run lint && npm run test:unit && npm run test:e2e:build && npm run test:e2e:all",
     "test:unit": "vitest run",
     "test:e2e": "make test-e2e",
     "test:e2e:all": "make test-e2e-all",

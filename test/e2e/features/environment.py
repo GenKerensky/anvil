@@ -30,6 +30,6 @@ def embed_atspi_tree(context, caption):
         from steps.helpers import dump_atspi_tree
         tree = dump_atspi_tree()
         if tree and tree != "(empty tree)":
-            context.embed("text/plain", tree, caption)
+            context.attach("text/plain", tree, caption)
     except Exception as e:
-        context.embed("text/plain", f"Could not dump AT-SPI tree: {e}", caption)
+        context.attach("text/plain", f"Could not dump AT-SPI tree: {e}", caption)
