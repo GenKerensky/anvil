@@ -31,7 +31,7 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
-UUID="anvil@genkerensky.com"
+UUID="anvil@GenKerensky.github.com"
 IMAGE="anvil-test-pod:fedora-${FEDORA_VERSION}"
 SCHEMA_ID="org.gnome.shell.extensions.anvil"
 SCHEMA_DIR="/home/gnomeshell/.local/share/gnome-shell/extensions/${UUID}/schemas"

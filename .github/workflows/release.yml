@@ -1,0 +1,86 @@
+name: release
+permissions:
+  contents: write
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Override git ref"
+        type: string
+        default: ""
+        required: false
+      version:
+        description: "Version name (e.g. 1.0.0)"
+        type: string
+        default: ""
+        required: false
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    uses: ./.github/workflows/testing.yml
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gettext make zip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: latest
+
+      - run: npm ci
+
+      - name: Set version name
+        if: ${{ inputs.version != '' || github.event_name == 'release' }}
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+            VERSION="${VERSION#v}"
+          fi
+          echo "VERSION_NAME=${VERSION}" >> "${GITHUB_ENV}"
+
+      - name: Inject version-name into metadata.json
+        if: ${{ env.VERSION_NAME != '' }}
+        run: |
+          jq --arg v "${{ env.VERSION_NAME }}" '. + {"version-name": $v}' metadata.json > metadata.json.tmp
+          mv metadata.json.tmp metadata.json
+
+      - name: Build extension package
+        run: make dist
+
+      - name: Attach zip to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: anvil@GenKerensky.github.com.zip
+          generate_release_notes: true
+
+      # TODO: Publish to GNOME Extensions website
+      # Requires the extension to pass GNOME Extensions review first.
+      # After review approval, uncomment and configure a secret token.
+      #
+      # - name: Publish to extensions.gnome.org
+      #   env:
+      #     GNOME_EXTENSIONS_TOKEN: ${{ secrets.GNOME_EXTENSIONS_TOKEN }}
+      #   run: |
+      #     curl -X POST "https://extensions.gnome.org/upload/" \
+      #       -H "Authorization: Bearer ${GNOME_EXTENSIONS_TOKEN}" \
+      #       -F "file=@anvil@GenKerensky.github.com.zip" \
+      #       -F "uuid=anvil@GenKerensky.github.com"

@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-03 08:56-0400\n"
+"POT-Creation-Date: 2026-05-10 14:29-0400\n"
 "PO-Revision-Date: 2021-12-29 19:04+0100\n"
 "Last-Translator: Heimen Stoffels <vistausss@fastmail.com>\n"
 "Language-Team: \n"
@@ -14,180 +14,180 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Generator: Poedit 3.0\n"
 
-#: lib/extension/indicator.js:49 lib/prefs/settings.js:55
+#: lib/extension/indicator.ts:44 lib/prefs/settings.ts:55
 msgid "Tiling"
 msgstr ""
 
-#: lib/extension/indicator.js:68 lib/prefs/settings.js:24
+#: lib/extension/indicator.ts:63 lib/prefs/settings.ts:24
 msgid "Anvil"
 msgstr ""
 
-#: lib/extension/indicator.js:68
+#: lib/extension/indicator.ts:63
 msgid "Tiling Window Management"
 msgstr ""
 
-#: lib/extension/indicator.js:72
+#: lib/extension/indicator.ts:67
 msgid "Gaps Hidden when Single"
 msgstr "Ruimtes verbergen bij één geopend venster"
 
-#: lib/extension/indicator.js:80
+#: lib/extension/indicator.ts:75
 #, fuzzy
 msgid "Show Focus Hint Border"
 msgstr "Focushint bij zwevende vensters"
 
-#: lib/extension/indicator.js:88
+#: lib/extension/indicator.ts:83
 msgid "Move Pointer with the Focus"
 msgstr ""
 
-#: lib/extension/indicator.js:96 lib/extension/window.js:67
+#: lib/extension/indicator.ts:91 lib/extension/window.ts:69
 msgid "Settings"
 msgstr "Voorkeuren"
 
-#: lib/prefs/appearance.js:29
+#: lib/prefs/appearance.ts:29
 #, fuzzy
 msgid "Tiled window"
 msgstr "Tabbladen"
 
-#: lib/prefs/appearance.js:31
+#: lib/prefs/appearance.ts:31
 #, fuzzy
 msgid "Tabbed window"
 msgstr "Tabbladen"
 
-#: lib/prefs/appearance.js:33
+#: lib/prefs/appearance.ts:33
 #, fuzzy
 msgid "Stacked window"
 msgstr "Gestapeld"
 
-#: lib/prefs/appearance.js:35
+#: lib/prefs/appearance.ts:35
 msgid "Floating window"
 msgstr ""
 
-#: lib/prefs/appearance.js:37
+#: lib/prefs/appearance.ts:37
 #, fuzzy
 msgid "Split direction hint"
 msgstr "Hint bij veranderen van richting"
 
-#: lib/prefs/appearance.js:42
+#: lib/prefs/appearance.ts:42
 msgid "Appearance"
 msgstr "Vormgeving"
 
-#: lib/prefs/appearance.js:47
+#: lib/prefs/appearance.ts:47
 msgid "Gaps"
 msgstr "Ruimtes"
 
-#: lib/prefs/appearance.js:48
+#: lib/prefs/appearance.ts:48
 msgid "Change the gap size between windows"
 msgstr ""
 
-#: lib/prefs/appearance.js:52
+#: lib/prefs/appearance.ts:51
 msgid "Gap size"
 msgstr ""
 
-#: lib/prefs/appearance.js:60
+#: lib/prefs/appearance.ts:57
 #, fuzzy
 msgid "Gap size multiplier"
 msgstr "Ruimte tussen vensters"
 
-#: lib/prefs/appearance.js:68
+#: lib/prefs/appearance.ts:63
 msgid "Disable gaps for single window"
 msgstr ""
 
-#: lib/prefs/appearance.js:69
+#: lib/prefs/appearance.ts:64
 msgid "Disables window gaps when only a single window is present"
 msgstr ""
 
-#: lib/prefs/appearance.js:98
+#: lib/prefs/appearance.ts:91
 #, fuzzy
 msgid "Border radius"
 msgstr "Randbreedte"
 
-#: lib/prefs/appearance.js:99
+#: lib/prefs/appearance.ts:92
 msgid "Set to 0 for square corners"
 msgstr ""
 
-#: lib/prefs/appearance.js:127
+#: lib/prefs/appearance.ts:117
 msgid "Style"
 msgstr ""
 
-#: lib/prefs/appearance.js:128
+#: lib/prefs/appearance.ts:118
 msgid "Change how the shell looks"
 msgstr ""
 
-#: lib/prefs/appearance.js:132
+#: lib/prefs/appearance.ts:121
 msgid "Preview hint"
 msgstr ""
 
-#: lib/prefs/appearance.js:133
+#: lib/prefs/appearance.ts:122
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr ""
 
-#: lib/prefs/appearance.js:141
+#: lib/prefs/appearance.ts:128
 msgid "Border around focused window"
 msgstr ""
 
-#: lib/prefs/appearance.js:142
+#: lib/prefs/appearance.ts:129
 msgid "Display a colored border around the focused window"
 msgstr ""
 
-#: lib/prefs/appearance.js:149
+#: lib/prefs/appearance.ts:134
 #, fuzzy
 msgid "Window split hint border"
 msgstr "Focushint bij zwevende vensters"
 
-#: lib/prefs/appearance.js:150
+#: lib/prefs/appearance.ts:135
 msgid "Show split direction border on focused window"
 msgstr ""
 
-#: lib/prefs/appearance.js:157
+#: lib/prefs/appearance.ts:140
 #, fuzzy
 msgid "Anvil in quick settings"
 msgstr "Anvil-paneelvoorkeuren"
 
-#: lib/prefs/appearance.js:158
+#: lib/prefs/appearance.ts:141
 msgid "Toggles the Anvil tile in quick settings"
 msgstr ""
 
-#: lib/prefs/appearance.js:168
+#: lib/prefs/appearance.ts:150
 msgid "Color"
 msgstr "Kleur"
 
-#: lib/prefs/appearance.js:169
+#: lib/prefs/appearance.ts:151
 msgid "Changes the focused window's border and preview hint colors"
 msgstr ""
 
-#: lib/prefs/appearance.js:192
+#: lib/prefs/appearance.ts:170
 #, fuzzy
 msgid "Border size"
 msgstr "Randbreedte"
 
-#: lib/prefs/appearance.js:268
+#: lib/prefs/appearance.ts:237
 #, fuzzy
 msgid "Border color"
 msgstr "Randkleur"
 
-#: lib/prefs/floating.js:17
+#: lib/prefs/floating.ts:18
 #, fuzzy
 msgid "Windows"
 msgstr "Venster"
 
-#: lib/prefs/floating.js:26
+#: lib/prefs/floating.ts:27
 msgid "Floating Windows"
 msgstr ""
 
-#: lib/prefs/floating.js:27
+#: lib/prefs/floating.ts:28
 msgid "Windows that will not be tiled"
 msgstr ""
 
-#: lib/prefs/keyboard.js:19
+#: lib/prefs/keyboard.ts:19
 msgid "Keyboard"
 msgstr "Sneltoets"
 
-#: lib/prefs/keyboard.js:22
+#: lib/prefs/keyboard.ts:22
 #, fuzzy
 msgid "Drag-and-drop modifier key"
 msgstr "Opties omtrent actietoets voor tegelen middels slepen-en-neerzetten"
 
-#: lib/prefs/keyboard.js:24
+#: lib/prefs/keyboard.ts:24
 #, fuzzy
 msgid ""
 "Change the modifier key for tiling windows via drag-and-drop. Select 'None' "
@@ -196,163 +196,163 @@ msgstr ""
 "Wijzig de actietoets voor het <b>tegelen</b> van vensters middels slepen-en-"
 "neerzetten"
 
-#: lib/prefs/keyboard.js:28
+#: lib/prefs/keyboard.ts:28
 #, fuzzy
 msgid "Modifier key"
 msgstr "Actietoetsen"
 
-#: lib/prefs/keyboard.js:32
+#: lib/prefs/keyboard.ts:32
 msgid "Super"
 msgstr "Super"
 
-#: lib/prefs/keyboard.js:33
+#: lib/prefs/keyboard.ts:33
 msgid "Ctrl"
 msgstr "Ctrl"
 
-#: lib/prefs/keyboard.js:34
+#: lib/prefs/keyboard.ts:34
 msgid "Alt"
 msgstr "Alt"
 
-#: lib/prefs/keyboard.js:35
+#: lib/prefs/keyboard.ts:35
 msgid "None"
 msgstr "Geen"
 
-#: lib/prefs/keyboard.js:41
+#: lib/prefs/keyboard.ts:41
 #, fuzzy
 msgid "Shortcuts"
 msgstr "Sneltoets"
 
-#: lib/prefs/keyboard.js:43
+#: lib/prefs/keyboard.ts:43
 msgid ""
 "Change the tiling shortcuts. To clear a shortcut clear the input field. To "
 "apply a shortcut press enter. <a href=\"https://github.com/forge-ext/forge/"
 "wiki/Keyboard-Shortcuts\">Syntax examples</a>"
 msgstr ""
 
-#: lib/prefs/settings.js:34
+#: lib/prefs/settings.ts:34
 msgid "translator-credits"
 msgstr ""
 
-#: lib/prefs/settings.js:42
+#: lib/prefs/settings.ts:42
 msgid "About"
 msgstr "Over"
 
-#: lib/prefs/settings.js:57
+#: lib/prefs/settings.ts:57
 msgid "Behavior"
 msgstr ""
 
-#: lib/prefs/settings.js:58
+#: lib/prefs/settings.ts:58
 msgid "Change how the tiling behaves"
 msgstr ""
 
-#: lib/prefs/settings.js:63
+#: lib/prefs/settings.ts:62
 #, fuzzy
 msgid "Focus on Hover"
 msgstr "Focushint bij zwevende vensters"
 
-#: lib/prefs/settings.js:64
+#: lib/prefs/settings.ts:63
 msgid "Window focus follows the pointer"
 msgstr ""
 
-#: lib/prefs/settings.js:72
+#: lib/prefs/settings.ts:69
 msgid "Move pointer with focused window"
 msgstr ""
 
-#: lib/prefs/settings.js:73
+#: lib/prefs/settings.ts:70
 msgid "Moves the pointer when focusing or swapping via keyboard"
 msgstr ""
 
-#: lib/prefs/settings.js:81
+#: lib/prefs/settings.ts:76
 #, fuzzy
 msgid "Quarter tiling"
 msgstr "Tabbladen"
 
-#: lib/prefs/settings.js:82
+#: lib/prefs/settings.ts:77
 msgid "Places new windows in a clock-wise fashion"
 msgstr ""
 
-#: lib/prefs/settings.js:90
+#: lib/prefs/settings.ts:83
 #, fuzzy
 msgid "Stacked tiling"
 msgstr "Gestapeld"
 
-#: lib/prefs/settings.js:91
+#: lib/prefs/settings.ts:84
 #, fuzzy
 msgid "Stacks windows on top of each other while still tiling them"
 msgstr "Gestapelde tegelmodus (stapel vensters in de tegelmodus)"
 
-#: lib/prefs/settings.js:99
+#: lib/prefs/settings.ts:90
 #, fuzzy
 msgid "Tabbed tiling"
 msgstr "Tabbladen"
 
-#: lib/prefs/settings.js:100
+#: lib/prefs/settings.ts:91
 #, fuzzy
 msgid "Groups windows as tabs"
 msgstr "Tabblad-tegelmodus (groepeer getegelde vensters als tabbladen)"
 
-#: lib/prefs/settings.js:108
+#: lib/prefs/settings.ts:97
 #, fuzzy
 msgid "Auto exit tabbed tiling"
 msgstr "Tabbladen"
 
-#: lib/prefs/settings.js:109
+#: lib/prefs/settings.ts:98
 msgid "Exit tabbed tiling mode when only a single tab remains"
 msgstr ""
 
-#: lib/prefs/settings.js:116
+#: lib/prefs/settings.ts:103
 #, fuzzy
 msgid "Drag-and-drop behavior"
 msgstr "Standaardindeling: gecentreerd slepen-en-neerzetten"
 
-#: lib/prefs/settings.js:117
+#: lib/prefs/settings.ts:104
 msgid "What to do when dragging one window on top of another"
 msgstr ""
 
-#: lib/prefs/settings.js:122
+#: lib/prefs/settings.ts:109
 msgid "Swap"
 msgstr ""
 
-#: lib/prefs/settings.js:123
+#: lib/prefs/settings.ts:110
 msgid "Tabbed"
 msgstr "Tabbladen"
 
-#: lib/prefs/settings.js:124
+#: lib/prefs/settings.ts:111
 msgid "Stacked"
 msgstr "Gestapeld"
 
-#: lib/prefs/settings.js:130
+#: lib/prefs/settings.ts:115
 msgid "Always on Top mode for floating windows"
 msgstr ""
 
-#: lib/prefs/settings.js:131
+#: lib/prefs/settings.ts:116
 msgid "Makes floating windows appear above tiled windows"
 msgstr ""
 
-#: lib/prefs/settings.js:140
+#: lib/prefs/settings.ts:124
 msgid "Non-tiling workspaces"
 msgstr ""
 
-#: lib/prefs/settings.js:141
+#: lib/prefs/settings.ts:125
 msgid ""
 "Disables tiling on specified workspaces. Starts from 0, separated by commas"
 msgstr ""
 
-#: lib/prefs/settings.js:145
+#: lib/prefs/settings.ts:128
 msgid "Example: 0,1,2"
 msgstr ""
 
-#: lib/prefs/settings.js:154
+#: lib/prefs/settings.ts:136
 #, fuzzy
 msgid "Logger"
 msgstr "Logniveau"
 
-#: lib/prefs/settings.js:158
+#: lib/prefs/settings.ts:139
 #, fuzzy
 msgid "Log level"
 msgstr "Logniveau"
 
-#: lib/prefs/widgets.js:44
+#: lib/prefs/widgets.ts:64
 #, fuzzy
 msgid ""
 "<b>CAUTION</b>: Enabling this setting can lead to bugs or cause the shell to "
@@ -361,16 +361,16 @@ msgstr ""
 "<b>LET OP</b>: deze voorkeuren kunnen instabiliteit veroorzaken of zelfs de "
 "shell laten crashen!"
 
-#: lib/prefs/widgets.js:225
+#: lib/prefs/widgets.ts:251
 #, fuzzy
 msgid "Clear shortcut"
 msgstr "Containersneltoetsen"
 
-#: lib/prefs/widgets.js:242
+#: lib/prefs/widgets.ts:275
 msgid "Reset to default"
 msgstr ""
 
-#: lib/prefs/widgets.js:260
+#: lib/prefs/widgets.ts:300
 msgid "Remove Item"
 msgstr ""
 

@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "description": "Anvil - Tiling Extension for GNOME",
   "type": "module",
-  "main": "extension.js",
+  "main": "dist/extension.js",
   "scripts": {
+    "build": "tsc",
     "test": "npm run typecheck && npm run lint && npm run test:unit && npm run test:e2e:build && npm run test:e2e:all",
     "test:unit": "vitest run",
     "test:e2e": "make test-e2e",
@@ -18,7 +19,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/forge-ext/forge.git"
+    "url": "git+https://github.com/GenKerensky/anvil.git"
   },
   "keywords": [
     "gnome",
@@ -33,9 +34,9 @@
   ],
   "license": "GPL-3.0-or-later",
   "bugs": {
-    "url": "https://github.com/forge-ext/forge/issues"
+    "url": "https://github.com/GenKerensky/anvil/issues"
   },
-  "homepage": "https://github.com/forge-ext/forge#readme",
+  "homepage": "https://github.com/GenKerensky/anvil#readme",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@girs/adw-1": "^1.10.0-4.0.0-rc.15",
@@ -49,6 +50,7 @@
     "@girs/gtk-4.0": "^4.23.0-4.0.0-rc.15",
     "@girs/meta-18": "^18.0.0-4.0.0-rc.15",
     "@girs/st-18": "^18.0.0-4.0.0-rc.15",
+    "@vitest/eslint-plugin": "^1.6.17",
     "eslint": "^10.3.0",
     "eslint-config-prettier": "^10.1.8",
     "husky": "^8.0.1",

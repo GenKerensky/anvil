@@ -1,67 +1,73 @@
-# This workflow will install Node/NPM dependencies, run tests and lint source code
-
-# For more information see:
-#@ https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-nodejs
-
 name: testing
 permissions:
   contents: read
-  pull-requests: write
+
 on:
   push:
     branches: ["main"]
     paths-ignore:
-      - .git*
-      - .husky/**
-      - "*.md"
+      - "**.md"
+      - ".github/ISSUE_TEMPLATE/**"
   pull_request:
     branches: ["main"]
-    types: [opened, reopened, synchronize, ready_for_review]
     paths-ignore:
-      - .git*
-      - .husky/**
-      - "*.md"
-  # workflow_dispatch:
-  #   inputs:
-  #     ref:
-  #       description: 'Override git ref'
-  #       type: string
-  #       default: ''
-  #       required: false
+      - "**.md"
+      - ".github/ISSUE_TEMPLATE/**"
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  linting:
-    strategy:
-      fail-fast: true
-      matrix:
-        os: ["ubuntu-latest"]
-        node_version: ["23.x", "latest"]
-
-    runs-on: "${{ matrix.os }}"
+  fast:
+    runs-on: ubuntu-latest
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          ref: ${{ inputs.ref }}
+          node-version: latest
+      - run: npm ci
+      - run: npm run typecheck && npm run lint && npm run test:unit
 
-      - name: Install linux tools
+  e2e:
+    needs: fast
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora: [42, 43, 44]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gettext make zip
-      
-      - name: Set up Node.js ${{ matrix.node_version }}
-        uses: actions/setup-node@v4
+          sudo apt-get install -y --no-install-recommends gettext make zip podman
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node_version }}
+          node-version: latest
 
-      - name: Install Node.js project dependencies
-        run: npm ci --verbose
+      - run: npm ci
 
-      - name: Build Node.js project
-        run: npm run build --if-present --verbose
+      - name: Cache Podman image layers
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/containers/storage
+          key: podman-fedora-${{ matrix.fedora }}-${{ hashFiles('test/e2e/Containerfile') }}
+          restore-keys: |
+            podman-fedora-${{ matrix.fedora }}-
 
-      - name: Test Node.js project
-        run: npm test --verbose
+      - name: Build E2E container image
+        run: bash test/e2e/build-container.sh ${{ matrix.fedora }}
 
-      - name: Test Packaging
-        run: make dist
+      - name: Run E2E tests
+        run: make test-e2e FEDORA_VERSION=${{ matrix.fedora }}
+
+      - name: Upload behave HTML report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: behave-report-fedora-${{ matrix.fedora }}
+          path: test/e2e/output/behave-report-*.html

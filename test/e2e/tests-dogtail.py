@@ -22,7 +22,7 @@ import subprocess
 
 os.environ["DOGTAIL_PONYTALL_WARN"] = "0"
 
-UUID = "anvil@genkerensky.com"
+UUID = "anvil@GenKerensky.github.com"
 SCHEMA_ID = "org.gnome.shell.extensions.anvil"
 SCHEMA_DIR = f"/home/gnomeshell/.local/share/gnome-shell/extensions/{UUID}/schemas"
 

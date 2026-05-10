@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-03 08:56-0400\n"
+"POT-Creation-Date: 2026-05-10 14:29-0400\n"
 "PO-Revision-Date: 2021-09-18 16:25-0400\n"
 "Last-Translator: Juarez Rudsatz <juarezr@gmail.com>\n"
 "Language-Team: \n"
@@ -12,184 +12,184 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: lib/extension/indicator.js:49 lib/prefs/settings.js:55
+#: lib/extension/indicator.ts:44 lib/prefs/settings.ts:55
 msgid "Tiling"
 msgstr "Emparelhamento"
 
-#: lib/extension/indicator.js:68 lib/prefs/settings.js:24
+#: lib/extension/indicator.ts:63 lib/prefs/settings.ts:24
 msgid "Anvil"
 msgstr "Anvil"
 
-#: lib/extension/indicator.js:68
+#: lib/extension/indicator.ts:63
 msgid "Tiling Window Management"
 msgstr "Gerenciamento de Janelas Emparelhadas"
 
-#: lib/extension/indicator.js:72
+#: lib/extension/indicator.ts:67
 msgid "Gaps Hidden when Single"
 msgstr "Espaçamento Omitido quando Sozinho"
 
-#: lib/extension/indicator.js:80
+#: lib/extension/indicator.ts:75
 #, fuzzy
 msgid "Show Focus Hint Border"
 msgstr "Sinalizador de Foco Flutuante"
 
-#: lib/extension/indicator.js:88
+#: lib/extension/indicator.ts:83
 msgid "Move Pointer with the Focus"
 msgstr "Mover o Ponteiro com o Foco"
 
-#: lib/extension/indicator.js:96 lib/extension/window.js:67
+#: lib/extension/indicator.ts:91 lib/extension/window.ts:69
 msgid "Settings"
 msgstr "Configurações"
 
-#: lib/prefs/appearance.js:29
+#: lib/prefs/appearance.ts:29
 #, fuzzy
 msgid "Tiled window"
 msgstr "Modo em Blocos"
 
-#: lib/prefs/appearance.js:31
+#: lib/prefs/appearance.ts:31
 #, fuzzy
 msgid "Tabbed window"
 msgstr "Modo em Abas"
 
-#: lib/prefs/appearance.js:33
+#: lib/prefs/appearance.ts:33
 #, fuzzy
 msgid "Stacked window"
 msgstr "Modo empilhado"
 
-#: lib/prefs/appearance.js:35
+#: lib/prefs/appearance.ts:35
 msgid "Floating window"
 msgstr "Janela flutuante"
 
-#: lib/prefs/appearance.js:37
+#: lib/prefs/appearance.ts:37
 #, fuzzy
 msgid "Split direction hint"
 msgstr "Sinalizador de Separação de Direção"
 
-#: lib/prefs/appearance.js:42
+#: lib/prefs/appearance.ts:42
 msgid "Appearance"
 msgstr "Aparência"
 
-#: lib/prefs/appearance.js:47
+#: lib/prefs/appearance.ts:47
 msgid "Gaps"
 msgstr "Espaçamento"
 
-#: lib/prefs/appearance.js:48
+#: lib/prefs/appearance.ts:48
 msgid "Change the gap size between windows"
 msgstr "Mudar o espaçamento entre janelas"
 
-#: lib/prefs/appearance.js:52
+#: lib/prefs/appearance.ts:51
 msgid "Gap size"
 msgstr "Tamanho do espaço"
 
-#: lib/prefs/appearance.js:60
+#: lib/prefs/appearance.ts:57
 #, fuzzy
 msgid "Gap size multiplier"
 msgstr "Multiplicador do Espaçamento"
 
-#: lib/prefs/appearance.js:68
+#: lib/prefs/appearance.ts:63
 msgid "Disable gaps for single window"
 msgstr "Desabilitar espaço com janela única"
 
-#: lib/prefs/appearance.js:69
+#: lib/prefs/appearance.ts:64
 msgid "Disables window gaps when only a single window is present"
 msgstr "Desabilitar espaçamento quando há uma única janela presente"
 
-#: lib/prefs/appearance.js:98
+#: lib/prefs/appearance.ts:91
 #, fuzzy
 msgid "Border radius"
 msgstr "Tamanho de Borda"
 
-#: lib/prefs/appearance.js:99
+#: lib/prefs/appearance.ts:92
 msgid "Set to 0 for square corners"
 msgstr ""
 
-#: lib/prefs/appearance.js:127
+#: lib/prefs/appearance.ts:117
 msgid "Style"
 msgstr "Estilo"
 
-#: lib/prefs/appearance.js:128
+#: lib/prefs/appearance.ts:118
 msgid "Change how the shell looks"
 msgstr "Mudar como a aparência do shell"
 
-#: lib/prefs/appearance.js:132
+#: lib/prefs/appearance.ts:121
 #, fuzzy
 msgid "Preview hint"
 msgstr "Habilitar Dicas"
 
-#: lib/prefs/appearance.js:133
+#: lib/prefs/appearance.ts:122
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr "Mostrar em que bloco a janela será disposta"
 
-#: lib/prefs/appearance.js:141
+#: lib/prefs/appearance.ts:128
 #, fuzzy
 msgid "Border around focused window"
 msgstr "Exibir a borda de divisão na janela com foco"
 
-#: lib/prefs/appearance.js:142
+#: lib/prefs/appearance.ts:129
 msgid "Display a colored border around the focused window"
 msgstr "Exibir uma borda colorida ao redor da janela com foco"
 
-#: lib/prefs/appearance.js:149
+#: lib/prefs/appearance.ts:134
 #, fuzzy
 msgid "Window split hint border"
 msgstr "Sinalizador de Foco Flutuante"
 
-#: lib/prefs/appearance.js:150
+#: lib/prefs/appearance.ts:135
 msgid "Show split direction border on focused window"
 msgstr "Exibir a borda de divisão na janela com foco"
 
-#: lib/prefs/appearance.js:157
+#: lib/prefs/appearance.ts:140
 #, fuzzy
 msgid "Anvil in quick settings"
 msgstr "Exibir configurações rápidas"
 
-#: lib/prefs/appearance.js:158
+#: lib/prefs/appearance.ts:141
 #, fuzzy
 msgid "Toggles the Anvil tile in quick settings"
 msgstr "Habilitar a exibição do Anvil nas configurações rápidas"
 
-#: lib/prefs/appearance.js:168
+#: lib/prefs/appearance.ts:150
 msgid "Color"
 msgstr "Cor"
 
-#: lib/prefs/appearance.js:169
+#: lib/prefs/appearance.ts:151
 #, fuzzy
 msgid "Changes the focused window's border and preview hint colors"
 msgstr "Exibir a borda de divisão na janela com foco"
 
-#: lib/prefs/appearance.js:192
+#: lib/prefs/appearance.ts:170
 #, fuzzy
 msgid "Border size"
 msgstr "Tamanho de Borda"
 
-#: lib/prefs/appearance.js:268
+#: lib/prefs/appearance.ts:237
 #, fuzzy
 msgid "Border color"
 msgstr "Cor da Borda"
 
-#: lib/prefs/floating.js:17
+#: lib/prefs/floating.ts:18
 #, fuzzy
 msgid "Windows"
 msgstr "Janelas"
 
-#: lib/prefs/floating.js:26
+#: lib/prefs/floating.ts:27
 msgid "Floating Windows"
 msgstr "Janelas Flutuantes"
 
-#: lib/prefs/floating.js:27
+#: lib/prefs/floating.ts:28
 msgid "Windows that will not be tiled"
 msgstr "Janelas que não serão rearranjadas"
 
-#: lib/prefs/keyboard.js:19
+#: lib/prefs/keyboard.ts:19
 msgid "Keyboard"
 msgstr "Teclado"
 
-#: lib/prefs/keyboard.js:22
+#: lib/prefs/keyboard.ts:22
 #, fuzzy
 msgid "Drag-and-drop modifier key"
 msgstr "Opções de Teclas Modificadoras de Arrastar/Soltar"
 
-#: lib/prefs/keyboard.js:24
+#: lib/prefs/keyboard.ts:24
 #, fuzzy
 msgid ""
 "Change the modifier key for tiling windows via drag-and-drop. Select 'None' "
@@ -198,171 +198,171 @@ msgstr ""
 "Altere o modificador para janelas <b>emparelhadas</b> através do mouse e "
 "arrastar/soltar"
 
-#: lib/prefs/keyboard.js:28
+#: lib/prefs/keyboard.ts:28
 #, fuzzy
 msgid "Modifier key"
 msgstr "Teclas Modificadoras"
 
-#: lib/prefs/keyboard.js:32
+#: lib/prefs/keyboard.ts:32
 msgid "Super"
 msgstr "Super"
 
-#: lib/prefs/keyboard.js:33
+#: lib/prefs/keyboard.ts:33
 msgid "Ctrl"
 msgstr "Ctrl"
 
-#: lib/prefs/keyboard.js:34
+#: lib/prefs/keyboard.ts:34
 msgid "Alt"
 msgstr "Alt"
 
-#: lib/prefs/keyboard.js:35
+#: lib/prefs/keyboard.ts:35
 msgid "None"
 msgstr "Nenhum"
 
-#: lib/prefs/keyboard.js:41
+#: lib/prefs/keyboard.ts:41
 #, fuzzy
 msgid "Shortcuts"
 msgstr "Atalho"
 
-#: lib/prefs/keyboard.js:43
+#: lib/prefs/keyboard.ts:43
 msgid ""
 "Change the tiling shortcuts. To clear a shortcut clear the input field. To "
 "apply a shortcut press enter. <a href=\"https://github.com/forge-ext/forge/"
 "wiki/Keyboard-Shortcuts\">Syntax examples</a>"
 msgstr ""
 
-#: lib/prefs/settings.js:34
+#: lib/prefs/settings.ts:34
 msgid "translator-credits"
 msgstr ""
 
-#: lib/prefs/settings.js:42
+#: lib/prefs/settings.ts:42
 msgid "About"
 msgstr "Sobre"
 
-#: lib/prefs/settings.js:57
+#: lib/prefs/settings.ts:57
 #, fuzzy
 msgid "Behavior"
 msgstr "Comportamento"
 
-#: lib/prefs/settings.js:58
+#: lib/prefs/settings.ts:58
 msgid "Change how the tiling behaves"
 msgstr ""
 
-#: lib/prefs/settings.js:63
+#: lib/prefs/settings.ts:62
 #, fuzzy
 msgid "Focus on Hover"
 msgstr "Sinalizador de Foco Flutuante"
 
-#: lib/prefs/settings.js:64
+#: lib/prefs/settings.ts:63
 msgid "Window focus follows the pointer"
 msgstr ""
 
-#: lib/prefs/settings.js:72
+#: lib/prefs/settings.ts:69
 #, fuzzy
 msgid "Move pointer with focused window"
 msgstr "Mover o Ponteiro para Janela com Foco"
 
-#: lib/prefs/settings.js:73
+#: lib/prefs/settings.ts:70
 #, fuzzy
 msgid "Moves the pointer when focusing or swapping via keyboard"
 msgstr "Mover o Ponteiro ao focar ou transpor janelas via teclado"
 
-#: lib/prefs/settings.js:81
+#: lib/prefs/settings.ts:76
 #, fuzzy
 msgid "Quarter tiling"
 msgstr "Divisão Automática (Metade)"
 
-#: lib/prefs/settings.js:82
+#: lib/prefs/settings.ts:77
 msgid "Places new windows in a clock-wise fashion"
 msgstr "Rearranja janelas novas em modo horário"
 
-#: lib/prefs/settings.js:90
+#: lib/prefs/settings.ts:83
 #, fuzzy
 msgid "Stacked tiling"
 msgstr "Modo empilhado"
 
-#: lib/prefs/settings.js:91
+#: lib/prefs/settings.ts:84
 #, fuzzy
 msgid "Stacks windows on top of each other while still tiling them"
 msgstr ""
 "Modo de Emparelhamento Empilhado (Empilhar janelas um em cima da outra mesmo "
 "ainda sendo emparelhadas)"
 
-#: lib/prefs/settings.js:99
+#: lib/prefs/settings.ts:90
 #, fuzzy
 msgid "Tabbed tiling"
 msgstr "Modo em Abas"
 
-#: lib/prefs/settings.js:100
+#: lib/prefs/settings.ts:91
 #, fuzzy
 msgid "Groups windows as tabs"
 msgstr "Modo de Emparelhamento em Abas (Agrupar janelas emparelhadas em abas)"
 
-#: lib/prefs/settings.js:108
+#: lib/prefs/settings.ts:97
 #, fuzzy
 msgid "Auto exit tabbed tiling"
 msgstr "Modo em Abas"
 
-#: lib/prefs/settings.js:109
+#: lib/prefs/settings.ts:98
 msgid "Exit tabbed tiling mode when only a single tab remains"
 msgstr "Sair do modo de abas quando restar apenas uma janela"
 
-#: lib/prefs/settings.js:116
+#: lib/prefs/settings.ts:103
 #, fuzzy
 msgid "Drag-and-drop behavior"
 msgstr "Arranjo de Arrastar/Soltar Padrão"
 
-#: lib/prefs/settings.js:117
+#: lib/prefs/settings.ts:104
 msgid "What to do when dragging one window on top of another"
 msgstr ""
 
-#: lib/prefs/settings.js:122
+#: lib/prefs/settings.ts:109
 msgid "Swap"
 msgstr "Trocar"
 
-#: lib/prefs/settings.js:123
+#: lib/prefs/settings.ts:110
 msgid "Tabbed"
 msgstr "Em Abas"
 
-#: lib/prefs/settings.js:124
+#: lib/prefs/settings.ts:111
 msgid "Stacked"
 msgstr "Empilhado"
 
-#: lib/prefs/settings.js:130
+#: lib/prefs/settings.ts:115
 msgid "Always on Top mode for floating windows"
 msgstr "Modo sempre no topo para janelas flutuantes"
 
-#: lib/prefs/settings.js:131
+#: lib/prefs/settings.ts:116
 #, fuzzy
 msgid "Makes floating windows appear above tiled windows"
 msgstr ""
 "Modo Flutuante Sempre no Topo (Janelas flutuantes sempre acima das janelas "
 "emparelhadas)"
 
-#: lib/prefs/settings.js:140
+#: lib/prefs/settings.ts:124
 msgid "Non-tiling workspaces"
 msgstr ""
 
-#: lib/prefs/settings.js:141
+#: lib/prefs/settings.ts:125
 msgid ""
 "Disables tiling on specified workspaces. Starts from 0, separated by commas"
 msgstr ""
 
-#: lib/prefs/settings.js:145
+#: lib/prefs/settings.ts:128
 msgid "Example: 0,1,2"
 msgstr "Exemplo: 0,1,2"
 
-#: lib/prefs/settings.js:154
+#: lib/prefs/settings.ts:136
 #, fuzzy
 msgid "Logger"
 msgstr "Nivel de Log"
 
-#: lib/prefs/settings.js:158
+#: lib/prefs/settings.ts:139
 #, fuzzy
 msgid "Log level"
 msgstr "Nivel de Log"
 
-#: lib/prefs/widgets.js:44
+#: lib/prefs/widgets.ts:64
 #, fuzzy
 msgid ""
 "<b>CAUTION</b>: Enabling this setting can lead to bugs or cause the shell to "
@@ -371,16 +371,16 @@ msgstr ""
 "CUIDADO: Estas configurações, quando ativadas, são problemáticas ou podem "
 "causar a queda da interface"
 
-#: lib/prefs/widgets.js:225
+#: lib/prefs/widgets.ts:251
 #, fuzzy
 msgid "Clear shortcut"
 msgstr "Atalhos de Container"
 
-#: lib/prefs/widgets.js:242
+#: lib/prefs/widgets.ts:275
 msgid "Reset to default"
 msgstr ""
 
-#: lib/prefs/widgets.js:260
+#: lib/prefs/widgets.ts:300
 msgid "Remove Item"
 msgstr "Remover Item"
 

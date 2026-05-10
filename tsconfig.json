@@ -1,15 +1,12 @@
 {
-  "include": ["lib/**/*", "extension.js", "prefs.js", "test/**/*", "gjs-ambient.d.ts"],
-  "exclude": ["lib/prefs/metadata.js", "node_modules"],
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2022"],
-    "target": "ES2022",
-    "noEmit": true,
+    "outDir": "./dist",
+    "sourceMap": false,
     "skipLibCheck": true,
+    "target": "ES2022",
+    "lib": ["ES2022"],
     "noImplicitAny": false,
     "noImplicitThis": false,
     "types": ["vitest/globals"],
@@ -22,7 +19,12 @@
       "gi://GObject": ["./node_modules/@girs/gobject-2.0"],
       "gi://Gtk": ["./node_modules/@girs/gtk-4.0"],
       "gi://Meta": ["./node_modules/@girs/meta-18"],
-      "gi://St": ["./node_modules/@girs/st-18"]
+      "gi://Shell": ["./test/types/gi-shell.d.ts"],
+      "gi://St": ["./node_modules/@girs/st-18"],
+      "resource:///org/gnome/Shell/Extensions/js/misc/config.js": ["./test/types/prefs-config.d.ts"]
     }
-  }
+  },
+  "include": ["ambient.d.ts", "test/types/gi-shell.d.ts", "test/types/prefs-config.d.ts"],
+  "files": ["extension.ts", "prefs.ts"],
+  "exclude": ["node_modules", "dist"]
 }

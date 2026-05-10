@@ -14,7 +14,7 @@
 #   - gnome-extensions CLI for lifecycle
 #   - global.__anvil_test_state.getTestState() (simple flag access via Eval)
 
-UUID="anvil@genkerensky.com"
+UUID="anvil@GenKerensky.github.com"
 
 # ---------------------------------------------------------------------------
 # Helpers
