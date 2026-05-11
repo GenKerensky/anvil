@@ -1,5 +1,6 @@
 {
   "name": "Anvil",
+  "version": "0.1.0",
   "description": "Tiling and window manager for GNOME",
   "gettext-domain": "anvil",
   "uuid": "anvil@GenKerensky.github.com",

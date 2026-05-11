@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-10 14:29-0400\n"
+"POT-Creation-Date: 2026-05-11 01:11-0400\n"
 "PO-Revision-Date: 2025-08-22 12:00+0300\n"
 "Last-Translator: Mucahit Sahin <mucahitsahin786@gmail.com>\n"
 "Language-Team: Turkish\n"
@@ -15,169 +15,169 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 
-#: lib/extension/indicator.ts:44 lib/prefs/settings.ts:55
+#: lib/extension/indicator.ts:46 lib/prefs/settings.ts:70
 msgid "Tiling"
 msgstr "Döşeme"
 
-#: lib/extension/indicator.ts:63 lib/prefs/settings.ts:24
+#: lib/extension/indicator.ts:65 lib/prefs/settings.ts:28
 msgid "Anvil"
 msgstr "Anvil"
 
-#: lib/extension/indicator.ts:63
+#: lib/extension/indicator.ts:65
 msgid "Tiling Window Management"
 msgstr "Döşeme Pencere Yönetimi"
 
-#: lib/extension/indicator.ts:67
+#: lib/extension/indicator.ts:69
 msgid "Gaps Hidden when Single"
 msgstr "Tek Pencerede Boşluklar Gizli"
 
-#: lib/extension/indicator.ts:75
+#: lib/extension/indicator.ts:77
 msgid "Show Focus Hint Border"
 msgstr "Odak İpucu Kenarlığını Göster"
 
-#: lib/extension/indicator.ts:83
+#: lib/extension/indicator.ts:85
 msgid "Move Pointer with the Focus"
 msgstr "İmleci Odakla Birlikte Taşı"
 
-#: lib/extension/indicator.ts:91 lib/extension/window.ts:69
+#: lib/extension/indicator.ts:93 lib/extension/window.ts:125
 msgid "Settings"
 msgstr "Ayarlar"
 
-#: lib/prefs/appearance.ts:29
+#: lib/prefs/appearance.ts:31
 msgid "Tiled window"
 msgstr "Döşenmiş pencere"
 
-#: lib/prefs/appearance.ts:31
+#: lib/prefs/appearance.ts:33
 msgid "Tabbed window"
 msgstr "Sekmeli pencere"
 
-#: lib/prefs/appearance.ts:33
+#: lib/prefs/appearance.ts:35
 msgid "Stacked window"
 msgstr "Yığılmış pencere"
 
-#: lib/prefs/appearance.ts:35
+#: lib/prefs/appearance.ts:37
 msgid "Floating window"
 msgstr "Yüzen pencere"
 
-#: lib/prefs/appearance.ts:37
+#: lib/prefs/appearance.ts:39
 msgid "Split direction hint"
 msgstr "Bölme yönü ipucu"
 
-#: lib/prefs/appearance.ts:42
+#: lib/prefs/appearance.ts:44
 msgid "Appearance"
 msgstr "Görünüm"
 
-#: lib/prefs/appearance.ts:47
+#: lib/prefs/appearance.ts:49
 msgid "Gaps"
 msgstr "Boşluklar"
 
-#: lib/prefs/appearance.ts:48
+#: lib/prefs/appearance.ts:50
 msgid "Change the gap size between windows"
 msgstr "Pencereler arasındaki boşluk boyutunu değiştir"
 
-#: lib/prefs/appearance.ts:51
+#: lib/prefs/appearance.ts:53
 msgid "Gap size"
 msgstr "Boşluk boyutu"
 
-#: lib/prefs/appearance.ts:57
+#: lib/prefs/appearance.ts:59
 msgid "Gap size multiplier"
 msgstr "Boşluk boyutu çarpanı"
 
-#: lib/prefs/appearance.ts:63
+#: lib/prefs/appearance.ts:65
 msgid "Disable gaps for single window"
 msgstr "Tek pencere için boşlukları devre dışı bırak"
 
-#: lib/prefs/appearance.ts:64
+#: lib/prefs/appearance.ts:66
 msgid "Disables window gaps when only a single window is present"
 msgstr "Sadece tek pencere olduğunda pencere boşluklarını devre dışı bırakır"
 
-#: lib/prefs/appearance.ts:91
+#: lib/prefs/appearance.ts:93
 #, fuzzy
 msgid "Border radius"
 msgstr "Kenarlık boyutu"
 
-#: lib/prefs/appearance.ts:92
+#: lib/prefs/appearance.ts:94
 msgid "Set to 0 for square corners"
 msgstr ""
 
-#: lib/prefs/appearance.ts:117
+#: lib/prefs/appearance.ts:119
 msgid "Style"
 msgstr "Stil"
 
-#: lib/prefs/appearance.ts:118
+#: lib/prefs/appearance.ts:120
 msgid "Change how the shell looks"
 msgstr "Kabuğun nasıl göründüğünü değiştir"
 
-#: lib/prefs/appearance.ts:121
+#: lib/prefs/appearance.ts:123
 msgid "Preview hint"
 msgstr "Önizleme ipucu"
 
-#: lib/prefs/appearance.ts:122
+#: lib/prefs/appearance.ts:124
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr "Pencereyi bıraktığınızda nerede döşeneceğini gösterir"
 
-#: lib/prefs/appearance.ts:128
+#: lib/prefs/appearance.ts:130
 msgid "Border around focused window"
 msgstr "Odaklanmış pencere etrafında kenarlık"
 
-#: lib/prefs/appearance.ts:129
+#: lib/prefs/appearance.ts:131
 msgid "Display a colored border around the focused window"
 msgstr "Odaklanmış pencere etrafında renkli kenarlık göster"
 
-#: lib/prefs/appearance.ts:134
+#: lib/prefs/appearance.ts:136
 msgid "Window split hint border"
 msgstr "Pencere bölme ipucu kenarlığı"
 
-#: lib/prefs/appearance.ts:135
+#: lib/prefs/appearance.ts:137
 msgid "Show split direction border on focused window"
 msgstr "Odaklanmış pencerede bölme yönü kenarlığını göster"
 
-#: lib/prefs/appearance.ts:140
+#: lib/prefs/appearance.ts:142
 msgid "Anvil in quick settings"
 msgstr "Hızlı ayarlarda Anvil"
 
-#: lib/prefs/appearance.ts:141
+#: lib/prefs/appearance.ts:143
 msgid "Toggles the Anvil tile in quick settings"
 msgstr "Hızlı ayarlarda Anvil döşemesini açar/kapatır"
 
-#: lib/prefs/appearance.ts:150
+#: lib/prefs/appearance.ts:152
 msgid "Color"
 msgstr "Renk"
 
-#: lib/prefs/appearance.ts:151
+#: lib/prefs/appearance.ts:153
 msgid "Changes the focused window's border and preview hint colors"
 msgstr "Odaklanmış pencerenin kenarlık ve önizleme ipucu renklerini değiştirir"
 
-#: lib/prefs/appearance.ts:170
+#: lib/prefs/appearance.ts:172
 msgid "Border size"
 msgstr "Kenarlık boyutu"
 
-#: lib/prefs/appearance.ts:237
+#: lib/prefs/appearance.ts:243
 msgid "Border color"
 msgstr "Kenarlık rengi"
 
-#: lib/prefs/floating.ts:18
+#: lib/prefs/floating.ts:31
 msgid "Windows"
 msgstr ""
 
-#: lib/prefs/floating.ts:27
+#: lib/prefs/floating.ts:40
 #, fuzzy
 msgid "Floating Windows"
 msgstr "Yüzen pencere"
 
-#: lib/prefs/floating.ts:28
+#: lib/prefs/floating.ts:41
 msgid "Windows that will not be tiled"
 msgstr ""
 
-#: lib/prefs/keyboard.ts:19
+#: lib/prefs/keyboard.ts:20
 msgid "Keyboard"
 msgstr "Klavye"
 
-#: lib/prefs/keyboard.ts:22
+#: lib/prefs/keyboard.ts:23
 msgid "Drag-and-drop modifier key"
 msgstr "Sürükle-bırak değiştirici tuşu"
 
-#: lib/prefs/keyboard.ts:24
+#: lib/prefs/keyboard.ts:25
 msgid ""
 "Change the modifier key for tiling windows via drag-and-drop. Select 'None' "
 "to always tile"
@@ -185,31 +185,31 @@ msgstr ""
 "Sürükle-bırak ile pencere döşeme için değiştirici tuşu değiştirir. Her zaman "
 "döşemek için 'Hiçbiri'ni seçin"
 
-#: lib/prefs/keyboard.ts:28
+#: lib/prefs/keyboard.ts:29
 msgid "Modifier key"
 msgstr "Değiştirici tuş"
 
-#: lib/prefs/keyboard.ts:32
+#: lib/prefs/keyboard.ts:33
 msgid "Super"
 msgstr "Super"
 
-#: lib/prefs/keyboard.ts:33
+#: lib/prefs/keyboard.ts:34
 msgid "Ctrl"
 msgstr "Ctrl"
 
-#: lib/prefs/keyboard.ts:34
+#: lib/prefs/keyboard.ts:35
 msgid "Alt"
 msgstr "Alt"
 
-#: lib/prefs/keyboard.ts:35
+#: lib/prefs/keyboard.ts:36
 msgid "None"
 msgstr "Hiçbiri"
 
-#: lib/prefs/keyboard.ts:41
+#: lib/prefs/keyboard.ts:42
 msgid "Shortcuts"
 msgstr "Kısayollar"
 
-#: lib/prefs/keyboard.ts:43
+#: lib/prefs/keyboard.ts:44
 msgid ""
 "Change the tiling shortcuts. To clear a shortcut clear the input field. To "
 "apply a shortcut press enter. <a href=\"https://github.com/forge-ext/forge/"
@@ -220,118 +220,118 @@ msgstr ""
 "href=\"https://github.com/forge-ext/forge/wiki/Keyboard-"
 "Shortcuts\">Sözdizimi örnekleri</a>"
 
-#: lib/prefs/settings.ts:34
+#: lib/prefs/settings.ts:38
 msgid "translator-credits"
 msgstr "Çevirmen kredileri"
 
-#: lib/prefs/settings.ts:42
+#: lib/prefs/settings.ts:49
 msgid "About"
 msgstr "Hakkında"
 
-#: lib/prefs/settings.ts:57
+#: lib/prefs/settings.ts:72
 msgid "Behavior"
 msgstr "Davranış"
 
-#: lib/prefs/settings.ts:58
+#: lib/prefs/settings.ts:73
 msgid "Change how the tiling behaves"
 msgstr "Döşemenin nasıl davrandığını değiştir"
 
-#: lib/prefs/settings.ts:62
+#: lib/prefs/settings.ts:77
 msgid "Focus on Hover"
 msgstr "Üzerine Gelince Odaklan"
 
-#: lib/prefs/settings.ts:63
+#: lib/prefs/settings.ts:78
 msgid "Window focus follows the pointer"
 msgstr "Pencere odağı imleci takip eder"
 
-#: lib/prefs/settings.ts:69
+#: lib/prefs/settings.ts:84
 msgid "Move pointer with focused window"
 msgstr "İmleci odaklanmış pencereyle taşı"
 
-#: lib/prefs/settings.ts:70
+#: lib/prefs/settings.ts:85
 msgid "Moves the pointer when focusing or swapping via keyboard"
 msgstr "Klavye ile odaklanma veya takas yaparken imleci taşır"
 
-#: lib/prefs/settings.ts:76
+#: lib/prefs/settings.ts:91
 msgid "Quarter tiling"
 msgstr "Çeyrek döşeme"
 
-#: lib/prefs/settings.ts:77
+#: lib/prefs/settings.ts:92
 msgid "Places new windows in a clock-wise fashion"
 msgstr "Yeni pencereleri saat yönünde yerleştirir"
 
-#: lib/prefs/settings.ts:83
+#: lib/prefs/settings.ts:98
 msgid "Stacked tiling"
 msgstr "Yığılmış döşeme"
 
-#: lib/prefs/settings.ts:84
+#: lib/prefs/settings.ts:99
 msgid "Stacks windows on top of each other while still tiling them"
 msgstr "Pencereleri döşerken birbirinin üzerine yığar"
 
-#: lib/prefs/settings.ts:90
+#: lib/prefs/settings.ts:105
 msgid "Tabbed tiling"
 msgstr "Sekmeli döşeme"
 
-#: lib/prefs/settings.ts:91
+#: lib/prefs/settings.ts:106
 msgid "Groups windows as tabs"
 msgstr "Pencereleri sekme olarak gruplar"
 
-#: lib/prefs/settings.ts:97
+#: lib/prefs/settings.ts:112
 msgid "Auto exit tabbed tiling"
 msgstr "Sekmeli döşemeden otomatik çık"
 
-#: lib/prefs/settings.ts:98
+#: lib/prefs/settings.ts:113
 msgid "Exit tabbed tiling mode when only a single tab remains"
 msgstr "Sadece tek sekme kaldığında sekmeli döşeme modundan çık"
 
-#: lib/prefs/settings.ts:103
+#: lib/prefs/settings.ts:118
 msgid "Drag-and-drop behavior"
 msgstr "Sürükle-bırak davranışı"
 
-#: lib/prefs/settings.ts:104
+#: lib/prefs/settings.ts:119
 msgid "What to do when dragging one window on top of another"
 msgstr "Bir pencereyi diğerinin üzerine sürüklerken ne yapılacağı"
 
-#: lib/prefs/settings.ts:109
+#: lib/prefs/settings.ts:124
 msgid "Swap"
 msgstr "Takas"
 
-#: lib/prefs/settings.ts:110
+#: lib/prefs/settings.ts:125
 msgid "Tabbed"
 msgstr "Sekmeli"
 
-#: lib/prefs/settings.ts:111
+#: lib/prefs/settings.ts:126
 msgid "Stacked"
 msgstr "Yığılmış"
 
-#: lib/prefs/settings.ts:115
+#: lib/prefs/settings.ts:130
 msgid "Always on Top mode for floating windows"
 msgstr "Yüzen pencereler için Her Zaman Üstte modu"
 
-#: lib/prefs/settings.ts:116
+#: lib/prefs/settings.ts:131
 msgid "Makes floating windows appear above tiled windows"
 msgstr "Yüzen pencerelerin döşenmiş pencerelerin üzerinde görünmesini sağlar"
 
-#: lib/prefs/settings.ts:124
+#: lib/prefs/settings.ts:139
 msgid "Non-tiling workspaces"
 msgstr "Döşeme yapılmayan çalışma alanları"
 
-#: lib/prefs/settings.ts:125
+#: lib/prefs/settings.ts:140
 msgid ""
 "Disables tiling on specified workspaces. Starts from 0, separated by commas"
 msgstr ""
 "Belirtilen çalışma alanlarında döşemeyi devre dışı bırakır. 0'dan başlar, "
 "virgülle ayrılır"
 
-#: lib/prefs/settings.ts:128
+#: lib/prefs/settings.ts:143
 msgid "Example: 0,1,2"
 msgstr "Örnek: 0,1,2"
 
-#: lib/prefs/settings.ts:136
+#: lib/prefs/settings.ts:151
 msgid "Logger"
 msgstr "Günlükçü"
 
-#: lib/prefs/settings.ts:139
+#: lib/prefs/settings.ts:154
 msgid "Log level"
 msgstr "Günlük seviyesi"
 
@@ -343,15 +343,15 @@ msgstr ""
 "<b>DİKKAT</b>: Bu ayarı etkinleştirmek hatalara yol açabilir veya kabuğun "
 "çökmesine neden olabilir"
 
-#: lib/prefs/widgets.ts:251
+#: lib/prefs/widgets.ts:253
 msgid "Clear shortcut"
 msgstr "Kısayolu temizle"
 
-#: lib/prefs/widgets.ts:275
+#: lib/prefs/widgets.ts:277
 msgid "Reset to default"
 msgstr "Varsayılana sıfırla"
 
-#: lib/prefs/widgets.ts:300
+#: lib/prefs/widgets.ts:302
 msgid "Remove Item"
 msgstr ""
 
