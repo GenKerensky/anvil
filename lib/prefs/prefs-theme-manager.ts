@@ -1,3 +1,4 @@
+import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 
 import { ThemeManagerBase } from "../shared/theme.js";
@@ -7,7 +8,7 @@ export class PrefsThemeManager extends ThemeManagerBase {
     GObject.registerClass(this);
   }
 
-  settings!: any;
+  declare settings: Gio.Settings;
 
   reloadStylesheet() {
     this.settings.set_string("css-updated", Date.now().toString());

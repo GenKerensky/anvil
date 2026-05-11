@@ -21,6 +21,7 @@
 
 // Gnome imports
 import Meta from "gi://Meta";
+import Clutter from "gi://Clutter";
 import St from "gi://St";
 
 // Gnome-shell imports
@@ -38,7 +39,7 @@ const [major] = PACKAGE_VERSION.split(".").map((s) => Number(s));
  *
  */
 export function createEnum<T extends string>(anArray: T[]): { [K in T]: K } {
-  const enumObj: any = {};
+  const enumObj = {} as { [K in T]: K };
   for (const val of anArray) {
     enumObj[val] = val;
   }
@@ -159,13 +160,13 @@ export function resolveHeight(
   return val;
 }
 
-export function orientationFromDirection(direction) {
+export function orientationFromDirection(direction: Meta.MotionDirection) {
   return direction === Meta.MotionDirection.LEFT || direction === Meta.MotionDirection.RIGHT
     ? ORIENTATION_TYPES.HORIZONTAL
     : ORIENTATION_TYPES.VERTICAL;
 }
 
-export function orientationFromLayout(layout) {
+export function orientationFromLayout(layout: string) {
   switch (layout) {
     case LAYOUT_TYPES.HSPLIT:
     case LAYOUT_TYPES.TABBED:
@@ -178,13 +179,13 @@ export function orientationFromLayout(layout) {
   }
 }
 
-export function positionFromDirection(direction) {
+export function positionFromDirection(direction: Meta.MotionDirection) {
   return direction === Meta.MotionDirection.LEFT || direction === Meta.MotionDirection.UP
     ? POSITION.BEFORE
     : POSITION.AFTER;
 }
 
-export function resolveDirection(directionString) {
+export function resolveDirection(directionString: string) {
   if (directionString) {
     directionString = directionString.toUpperCase();
 
@@ -208,7 +209,7 @@ export function resolveDirection(directionString) {
   return null;
 }
 
-export function directionFrom(position, orientation) {
+export function directionFrom(position: string, orientation: string) {
   if (position === POSITION.AFTER) {
     if (orientation === ORIENTATION_TYPES.HORIZONTAL) {
       return Meta.DisplayDirection.RIGHT;
@@ -224,7 +225,10 @@ export function directionFrom(position, orientation) {
   }
 }
 
-export function rectContainsPoint(rect, pointP) {
+export function rectContainsPoint(
+  rect: { x: number; y: number; width: number; height: number },
+  pointP: [number, number]
+) {
   if (!(rect && pointP)) return false;
   return (
     rect.x <= pointP[0] &&
@@ -234,7 +238,7 @@ export function rectContainsPoint(rect, pointP) {
   );
 }
 
-export function orientationFromGrab(grabOp) {
+export function orientationFromGrab(grabOp: Meta.GrabOp) {
   if (
     grabOp === Meta.GrabOp.RESIZING_N ||
     grabOp === Meta.GrabOp.RESIZING_S ||
@@ -253,7 +257,7 @@ export function orientationFromGrab(grabOp) {
   return ORIENTATION_TYPES.NONE;
 }
 
-export function positionFromGrabOp(grabOp) {
+export function positionFromGrabOp(grabOp: Meta.GrabOp) {
   if (
     grabOp === Meta.GrabOp.RESIZING_W ||
     grabOp === Meta.GrabOp.RESIZING_N ||
@@ -272,7 +276,7 @@ export function positionFromGrabOp(grabOp) {
   return POSITION.UNKNOWN;
 }
 
-export function allowResizeGrabOp(grabOp) {
+export function allowResizeGrabOp(grabOp: Meta.GrabOp) {
   grabOp &= ~1024; // ignore META_GRAB_OP_WINDOW_FLAG_UNCONSTRAINED
   return (
     grabOp === Meta.GrabOp.RESIZING_N ||
@@ -291,7 +295,7 @@ export function allowResizeGrabOp(grabOp) {
   );
 }
 
-export function grabMode(grabOp) {
+export function grabMode(grabOp: Meta.GrabOp) {
   grabOp &= ~1024; // ignore META_GRAB_OP_WINDOW_FLAG_UNCONSTRAINED
   if (
     grabOp === Meta.GrabOp.RESIZING_N ||
@@ -319,7 +323,7 @@ export function grabMode(grabOp) {
   return GRAB_TYPES.UNKNOWN;
 }
 
-export function decomposeGrabOp(grabOp) {
+export function decomposeGrabOp(grabOp: Meta.GrabOp) {
   grabOp &= ~1024; // ignore META_GRAB_OP_WINDOW_FLAG_UNCONSTRAINED
   switch (grabOp) {
     case Meta.GrabOp.RESIZING_NE:
@@ -335,7 +339,7 @@ export function decomposeGrabOp(grabOp) {
   }
 }
 
-export function directionFromGrab(grabOp) {
+export function directionFromGrab(grabOp: Meta.GrabOp) {
   if (grabOp === Meta.GrabOp.RESIZING_E || grabOp === Meta.GrabOp.KEYBOARD_RESIZING_E) {
     return Meta.MotionDirection.RIGHT;
   } else if (grabOp === Meta.GrabOp.RESIZING_W || grabOp === Meta.GrabOp.KEYBOARD_RESIZING_W) {
@@ -347,7 +351,10 @@ export function directionFromGrab(grabOp) {
   }
 }
 
-export function removeGapOnRect(rectWithGap, gap) {
+export function removeGapOnRect(
+  rectWithGap: { x: number; y: number; width: number; height: number },
+  gap: number
+) {
   rectWithGap.x = rectWithGap.x -= gap;
   rectWithGap.y = rectWithGap.y -= gap;
   rectWithGap.width = rectWithGap.width += gap * 2;
@@ -356,7 +363,7 @@ export function removeGapOnRect(rectWithGap, gap) {
 }
 
 // Credits: PopShell
-export function findWindowWith(title) {
+export function findWindowWith(title: string) {
   const display = global.display;
   const type = Meta.TabList.NORMAL_ALL;
   const workspaceMgr = display.get_workspace_manager();
@@ -379,7 +386,7 @@ export function findWindowWith(title) {
   return undefined;
 }
 
-export function oppositeDirectionOf(direction) {
+export function oppositeDirectionOf(direction: Meta.MotionDirection) {
   if (direction === Meta.MotionDirection.LEFT) {
     return Meta.MotionDirection.RIGHT;
   } else if (direction === Meta.MotionDirection.RIGHT) {
@@ -391,7 +398,7 @@ export function oppositeDirectionOf(direction) {
   }
 }
 
-export function monitorIndex(monitorValue) {
+export function monitorIndex(monitorValue: string) {
   if (!monitorValue) return -1;
   const wsIndex = monitorValue.indexOf("ws");
   let indexVal = monitorValue.slice(0, wsIndex);
@@ -400,7 +407,9 @@ export function monitorIndex(monitorValue) {
 }
 
 export function _disableDecorations() {
-  const decos = global.window_group.get_children().filter((a) => (a as any).type != null);
+  const decos = global.window_group
+    .get_children()
+    .filter((a: Clutter.Actor & { type?: unknown }) => a.type != null);
   decos.forEach((d) => {
     global.window_group.remove_child(d);
     d.destroy();
@@ -411,10 +420,10 @@ export function dpi() {
   return St.ThemeContext.get_for_stage(global.stage).scale_factor;
 }
 
-export function isGnome(majorVersion) {
+export function isGnome(majorVersion: number) {
   return major == majorVersion;
 }
 
-export function isGnomeGTE(majorVersion) {
+export function isGnomeGTE(majorVersion: number) {
   return major >= majorVersion;
 }

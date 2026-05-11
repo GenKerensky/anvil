@@ -1,5 +1,6 @@
 // Gnome imports
 import Adw from "gi://Adw";
+import Gio from "gi://Gio";
 import Gtk from "gi://Gtk";
 import GObject from "gi://GObject";
 
@@ -16,7 +17,10 @@ import { PACKAGE_VERSION } from "resource:///org/gnome/Shell/Extensions/js/misc/
 
 import { developers } from "./metadata.js";
 
-function showAboutWindow(parent, { version, description: comments }) {
+function showAboutWindow(
+  parent: Adw.PreferencesWindow,
+  { version, description: comments }: { version?: string; description: string }
+) {
   version = version ?? "development";
   const abt = new Adw.AboutWindow({
     ...(parent && { transient_for: parent }),
@@ -36,7 +40,10 @@ function showAboutWindow(parent, { version, description: comments }) {
   abt.present();
 }
 
-function makeAboutButton(parent, metadata) {
+function makeAboutButton(
+  parent: Adw.PreferencesWindow,
+  metadata: { version?: string; description: string }
+) {
   const button = new Gtk.Button({
     icon_name: "help-about-symbolic",
     tooltip_text: _("About"),
@@ -51,7 +58,15 @@ export class SettingsPage extends PreferencesPage {
     GObject.registerClass(this);
   }
 
-  constructor({ settings, window, metadata }) {
+  constructor({
+    settings,
+    window,
+    metadata,
+  }: {
+    settings: Gio.Settings;
+    window: Adw.PreferencesWindow;
+    metadata: { version?: string; description: string };
+  }) {
     super({ title: _("Tiling"), icon_name: "view-grid-symbolic" });
     this.add_group({
       title: _("Behavior"),

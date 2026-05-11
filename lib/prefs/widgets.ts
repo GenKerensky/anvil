@@ -82,7 +82,7 @@ export class ColorRow extends Adw.ActionRow {
     GObject.registerClass(this);
   }
 
-  colorButton!: any;
+  colorButton!: Gtk.ColorButton;
 
   constructor({ title, init, onChange, subtitle = "" }: ColorRowOptions) {
     super({ title, subtitle });
@@ -160,7 +160,7 @@ export class DropDownRow extends Adw.ActionRow {
     GObject.registerClass(this);
   }
 
-  settings!: any;
+  settings!: Gio.Settings;
 
   /** Name of the gsetting key to bind to */
   bind: string;
@@ -181,7 +181,7 @@ export class DropDownRow extends Adw.ActionRow {
     this.settings = settings;
     this.items = items;
     this.bind = bind;
-    this.type = type ?? this.settings.get_value(bind)?.get_type() ?? "?";
+    this.type = type ?? this.settings.get_value(bind)?.get_type_string() ?? "?";
     this.#build();
     if (this.dropdown) this.add_suffix(this.dropdown);
     this.add_suffix(new ResetButton({ settings, bind, onReset: () => this.reset() }));
@@ -210,7 +210,7 @@ export class DropDownRow extends Adw.ActionRow {
     this.#set(this.bind, id);
   }
 
-  static #settingsTypes = {
+  static #settingsTypes: Record<string, string> = {
     b: "boolean",
     y: "byte",
     n: "int16",
@@ -226,13 +226,15 @@ export class DropDownRow extends Adw.ActionRow {
 
   #get(x: string = this.bind) {
     const methodName = `get_${DropDownRow.#settingsTypes[this.type] ?? "value"}`;
-    return this.settings[methodName]?.(x);
+    return (this.settings as unknown as Record<string, (x: string) => unknown>)[methodName]?.(x);
   }
 
   #set(x: string, y: unknown) {
     const methodName = `set_${DropDownRow.#settingsTypes[this.type] ?? "value"}`;
     Logger.log(`${methodName}(${x}, ${y})`);
-    return this.settings[methodName]?.(x, y);
+    return (this.settings as unknown as Record<string, (x: string, y: unknown) => unknown>)[
+      methodName
+    ]?.(x, y);
   }
 }
 
@@ -379,7 +381,7 @@ export class RadioRow extends Adw.ActionRow {
     const labels = Object.fromEntries(Object.entries(options).map(([k, v]) => [v, k]));
     const { orientation, spacing, valign } = RadioRow;
     const hbox = new Gtk.Box({ orientation, spacing, valign });
-    let group;
+    let group: Gtk.ToggleButton | undefined;
     for (const [key, label] of Object.entries(options)) {
       const toggle = new Gtk.ToggleButton({ label, ...(group && { group }) });
       group ||= toggle;

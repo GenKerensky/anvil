@@ -116,6 +116,8 @@ If either fails, fix the errors before proceeding. The only acceptable warnings 
 - `@typescript-eslint/no-explicit-any` (tracked in `TODO.md` for strict-mode cleanup)
 - `eslint-disable` directive mismatches on files being converted from `@ts-nocheck`
 
+**When editing existing source files**, always preserve the original author's comments (copyright headers, section markers like `// Gnome imports`, JSDoc descriptions, `@deprecated` annotations, TODO notes, and inline explanations) as long as they remain relevant and accurate after the change. Only remove comments that are factually wrong, superseded by the edit, or were placeholders already addressed.
+
 For `.ts` test file changes, `npm run test:unit` must also pass.
 
 For E2E test changes (`test/e2e/`), `npm run test:e2e` must pass against at least Fedora 44 (default).
@@ -139,7 +141,7 @@ Source in `lib/extension/*.ts` → tests in `test/extension/*.test.ts`.
 ## Key Conventions
 
 - **Language**: TypeScript (not JavaScript). `tsc` compiles to JavaScript in `dist/`. The tsconfig uses `module: NodeNext, moduleResolution: NodeNext, target: ES2022`.
-- **TypeScript strict mode**: Not yet enabled (`noImplicitAny: false, noImplicitThis: false`). Seven files use `@ts-nocheck` due to GObject property patterns (`window.ts`, `tree.ts`, `keybindings.ts`, `indicator.ts`, `theme.ts`, `floating.ts`, `extension-theme-manager.ts`). A follow-up pass will remove these and enable strict mode (see `TODO.md`).
+- **TypeScript strict mode**: Enabled (`strict: true`, `noImplicitAny: true`, `noImplicitThis: true`). One file uses `@ts-nocheck` (`lib/css/index.ts` — third-party CSS parser). All other source files are fully typed. See `TODO.md` for remaining `any` usage patterns.
 - **GJS imports**: Source uses `gi://Gio`, `resource:///org/gnome/shell/...` paths. Unit tests remap these to `test/__mocks__/` via vitest aliases. Type declarations come from `@girs/*` packages and `ambient.d.ts`.
 - **Test globals**: `log`, `logError`, `print`, `global` are mocked in `test/setup.js`.
 - **ESLint**: Flat config (`eslint.config.js`) using `typescript-eslint` recommended rules. Test files have `vitest/no-focused-tests: error`. Third-party `lib/css/index.ts` has relaxed rules.

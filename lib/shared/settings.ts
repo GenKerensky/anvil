@@ -26,6 +26,17 @@ import { Logger } from "./logger.js";
 // Dev or Prod mode, see Makefile:debug
 export const production = true;
 
+export interface WindowOverride {
+  wmClass: string;
+  wmTitle?: string;
+  wmId?: string;
+  mode: string;
+}
+
+export interface WindowConfig {
+  overrides: WindowOverride[];
+}
+
 export class ConfigManager extends GObject.Object {
   static {
     GObject.registerClass(this);
@@ -35,9 +46,9 @@ export class ConfigManager extends GObject.Object {
 
   #confDir = GLib.get_user_config_dir();
 
-  constructor({ dir }) {
+  constructor({ dir }: { dir: Gio.File }) {
     super();
-    this.extensionPath = dir.get_path();
+    this.extensionPath = dir.get_path()!;
   }
 
   get confDir() {
@@ -97,7 +108,7 @@ export class ConfigManager extends GObject.Object {
     return this.loadFile(profileSettingPath, settingFile, defaultSettingFile);
   }
 
-  loadFile(path, file, defaultFile) {
+  loadFile(path: string, file: string, defaultFile: Gio.File | null) {
     const customSetting = GLib.build_filenamev([path, file]);
     Logger.trace(`custom-setting-file: ${customSetting}`);
 
@@ -109,7 +120,7 @@ export class ConfigManager extends GObject.Object {
       if (!profileCustomSettingDir.query_exists(null)) {
         if (profileCustomSettingDir.make_directory_with_parents(null)) {
           const createdStream = customSettingFile.create(Gio.FileCreateFlags.NONE, null);
-          const defaultContents = this.loadFileContents(defaultFile);
+          const defaultContents = defaultFile ? this.loadFileContents(defaultFile) : null;
           Logger.trace(defaultContents);
           createdStream.write_all(defaultContents ?? "", null);
         }
@@ -119,7 +130,7 @@ export class ConfigManager extends GObject.Object {
     return null;
   }
 
-  loadFileContents(configFile) {
+  loadFileContents(configFile: Gio.File) {
     const [success, contents] = configFile.load_contents(null);
     if (success) {
       const stringContents = new TextDecoder().decode(contents as Uint8Array);
@@ -127,7 +138,7 @@ export class ConfigManager extends GObject.Object {
     }
   }
 
-  get windowProps() {
+  get windowProps(): WindowConfig | null {
     let windowConfigFile = this.windowConfigFile;
     let windowProps = null;
     // if (!windowConfigFile || !production) {
@@ -146,7 +157,7 @@ export class ConfigManager extends GObject.Object {
     return windowProps;
   }
 
-  set windowProps(props) {
+  set windowProps(props: WindowConfig | null) {
     let windowConfigFile = this.windowConfigFile;
     // if (!windowConfigFile || !production) {
     if (!windowConfigFile) {

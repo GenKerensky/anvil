@@ -1,6 +1,5 @@
-// @ts-nocheck
 import GObject from "gi://GObject";
-
+import Gio from "gi://Gio";
 import St from "gi://St";
 
 import { ThemeManagerBase } from "../shared/theme.js";
@@ -11,6 +10,9 @@ export class ExtensionThemeManager extends ThemeManagerBase {
   static {
     GObject.registerClass(this);
   }
+
+  metadata!: { uuid: string };
+  stylesheet!: Gio.File | null;
 
   constructor(extension: import("../../extension.js").default) {
     super(extension);
@@ -24,13 +26,13 @@ export class ExtensionThemeManager extends ThemeManagerBase {
     const theme = St.ThemeContext.get_for_stage(global.stage).get_theme();
 
     try {
-      theme.unload_stylesheet(defaultStylesheetFile);
-      theme.unload_stylesheet(stylesheetFile);
+      if (defaultStylesheetFile) theme.unload_stylesheet(defaultStylesheetFile);
+      if (stylesheetFile) theme.unload_stylesheet(stylesheetFile);
       if (production) {
-        theme.load_stylesheet(stylesheetFile);
+        if (stylesheetFile) theme.load_stylesheet(stylesheetFile);
         this.stylesheet = stylesheetFile;
       } else {
-        theme.load_stylesheet(defaultStylesheetFile);
+        if (defaultStylesheetFile) theme.load_stylesheet(defaultStylesheetFile);
         this.stylesheet = defaultStylesheetFile;
       }
     } catch (e) {

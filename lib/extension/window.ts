@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * This file is part of the Anvil extension for GNOME
  *
@@ -21,7 +20,6 @@
 import GLib from "gi://GLib";
 import Clutter from "gi://Clutter";
 
-import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 import Meta from "gi://Meta";
 import St from "gi://St";
@@ -33,6 +31,7 @@ import { PACKAGE_VERSION } from "resource:///org/gnome/shell/misc/config.js";
 
 // Shared state
 import { Logger } from "../shared/logger.js";
+import type { WindowConfig } from "../shared/settings.js";
 
 // App imports
 import * as Utils from "./utils.js";
@@ -45,6 +44,7 @@ import {
   LAYOUT_TYPES,
   ORIENTATION_TYPES,
   NODE_TYPES,
+  RectLike,
 } from "./tree.js";
 import { production } from "../shared/settings.js";
 
@@ -55,13 +55,69 @@ export const WINDOW_MODES = Utils.createEnum(["FLOAT", "TILE", "GRAB_TILE", "DEF
 // Simplify the grab modes
 export const GRAB_TYPES = Utils.createEnum(["RESIZING", "MOVING", "UNKNOWN"]);
 
+// Runtime-monkey-patched Meta types — these properties are set by anvil at runtime
+// and are not present in @girs type declarations.
+type AnvilMetaWindow = Meta.Window & {
+  windowSignals?: number[];
+  firstRender?: boolean;
+  /** @deprecated pre-GNOME 49 fallback, removed from @girs types */
+  get_maximized(): number;
+};
+type AnvilWindowActor = Clutter.Actor & {
+  actorSignals?: number[];
+  border?: St.Bin;
+  splitBorder?: St.Bin;
+};
+type AnvilMetaWorkspace = Meta.Workspace & {
+  workspaceSignals?: number[];
+};
+
 export class WindowManager extends GObject.Object {
   static {
     GObject.registerClass(this);
   }
 
   ext: AnvilExtension;
-  windowProps: any;
+  windowProps!: WindowConfig;
+
+  // --- State ---
+  declare prefsTitle: string;
+  declare shouldFocusOnHover: boolean;
+  declare disabled: boolean;
+  declare _signalsBound: boolean;
+  declare _freezeRender: boolean;
+  declare workspaceAdded: boolean;
+  declare workspaceRemoved: boolean;
+  declare fromOverview: boolean;
+  declare toOverview: boolean;
+  declare cancelGrab: boolean;
+
+  // --- Object references ---
+  declare _kbd: import("./keybindings.js").Keybindings;
+  declare _tree: Tree;
+  declare eventQueue: Queue;
+  declare theme: import("./extension-theme-manager.js").ExtensionThemeManager;
+  declare lastFocusedWindow: Node<any> | null;
+  declare nodeWinAtPointer: Node<any> | null;
+  declare sortedWindows: Meta.Window[];
+
+  // --- Signal handler ID arrays ---
+  declare _displaySignals: number[] | undefined;
+  declare _windowManagerSignals: number[] | undefined;
+  declare _workspaceManagerSignals: number[] | undefined;
+  declare _overviewSignals: number[] | null;
+
+  // --- GLib source IDs ---
+  declare _queueSourceId: number;
+  declare _renderTreeSrcId: number;
+  declare _reloadTreeSrcId: number;
+  declare _wsWindowAddSrcId: number;
+  declare _pointerFocusTimeoutId: number;
+  declare _prefsOpenSrcId: number;
+  declare _liveResizeSrcId: number;
+
+  // --- Grab state ---
+  declare grabOp: Meta.GrabOp;
 
   constructor(ext: AnvilExtension) {
     super();
@@ -75,9 +131,7 @@ export class WindowManager extends GObject.Object {
     this.eventQueue = new Queue();
     this.theme = this.ext.theme;
     this.lastFocusedWindow = null;
-    this.shouldFocusOnHover = !!(this.ext.settings as Gio.Settings)?.get_boolean(
-      "focus-on-hover-enabled"
-    );
+    this.shouldFocusOnHover = !!this.ext.settings?.get_boolean("focus-on-hover-enabled");
 
     Logger.info("anvil initialized");
 
@@ -100,12 +154,12 @@ export class WindowManager extends GObject.Object {
     );
   }
 
-  addFloatOverride(metaWindow, withWmId) {
-    const configMgr = this.ext.configMgr as import("../shared/settings.js").ConfigManager;
+  addFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
+    const configMgr = this.ext.configMgr;
     const currentProps = configMgr.windowProps;
     if (!currentProps) return;
     const overrides = currentProps.overrides;
-    const wmClass = metaWindow.get_wm_class();
+    const wmClass = metaWindow.get_wm_class() ?? "";
     const wmId = metaWindow.get_id();
 
     for (const override of overrides) {
@@ -113,8 +167,8 @@ export class WindowManager extends GObject.Object {
       if (override.wmClass === wmClass && override.mode === "float" && !override.wmTitle) return;
     }
     overrides.push({
-      wmClass: wmClass,
-      wmId: withWmId ? wmId : undefined,
+      wmClass,
+      wmId: withWmId ? String(wmId) : undefined,
       mode: "float",
     });
 
@@ -123,13 +177,13 @@ export class WindowManager extends GObject.Object {
     configMgr.windowProps = currentProps;
   }
 
-  removeFloatOverride(metaWindow, withWmId) {
-    const configMgr = this.ext.configMgr as import("../shared/settings.js").ConfigManager;
+  removeFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
+    const configMgr = this.ext.configMgr;
     const currentProps = configMgr.windowProps;
     if (!currentProps) return;
     let overrides = currentProps.overrides;
-    const wmClass = metaWindow.get_wm_class();
-    const wmId = metaWindow.get_id();
+    const wmClass = metaWindow.get_wm_class() ?? "";
+    const wmId = String(metaWindow.get_id());
     overrides = overrides.filter(
       (override) =>
         !(
@@ -145,7 +199,7 @@ export class WindowManager extends GObject.Object {
     configMgr.windowProps = currentProps;
   }
 
-  toggleFloatingMode(action, metaWindow) {
+  toggleFloatingMode(action: any, metaWindow: Meta.Window) {
     const nodeWindow = this.findNodeWindow(metaWindow);
     if (!nodeWindow || !(action || action.mode)) return;
     if (nodeWindow.nodeType !== NODE_TYPES.WINDOW) return;
@@ -155,9 +209,7 @@ export class WindowManager extends GObject.Object {
 
     if (floatingExempt) {
       this.removeFloatOverride(metaWindow, withWmId);
-      this.windowProps = (
-        this.ext.configMgr as import("../shared/settings.js").ConfigManager
-      ).windowProps;
+      this.windowProps = this.ext.configMgr.windowProps ?? this.windowProps;
       if (!this.isActiveWindowWorkspaceTiled(metaWindow)) {
         nodeWindow.mode = WINDOW_MODES.FLOAT;
       } else {
@@ -165,14 +217,12 @@ export class WindowManager extends GObject.Object {
       }
     } else {
       this.addFloatOverride(metaWindow, withWmId);
-      this.windowProps = (
-        this.ext.configMgr as import("../shared/settings.js").ConfigManager
-      ).windowProps;
+      this.windowProps = this.ext.configMgr.windowProps ?? this.windowProps;
       nodeWindow.mode = WINDOW_MODES.FLOAT;
     }
   }
 
-  queueEvent(eventObj, interval = 220) {
+  queueEvent(eventObj: { name: string; callback: () => void }, interval: number = 220) {
     this.eventQueue.enqueue(eventObj);
 
     if (!this._queueSourceId) {
@@ -196,7 +246,7 @@ export class WindowManager extends GObject.Object {
   _bindSignals() {
     if (this._signalsBound) return;
 
-    const extDisplay = global.display as Meta.Display;
+    const extDisplay = global.display;
     const shellWm = global.window_manager;
 
     this._displaySignals = [
@@ -237,10 +287,10 @@ export class WindowManager extends GObject.Object {
         this.hideWindowBorders();
         const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
         if (focusNodeWindow) {
-          if (this.tree.getTiledChildren(focusNodeWindow.parentNode.childNodes).length === 0) {
-            this.tree.resetSiblingPercent(focusNodeWindow.parentNode.parentNode);
+          if (this.tree.getTiledChildren(focusNodeWindow!.parentNode!.childNodes).length === 0) {
+            this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!.parentNode);
           }
-          this.tree.resetSiblingPercent(focusNodeWindow.parentNode);
+          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
         }
 
         const prevFrozen = this._freezeRender;
@@ -251,7 +301,7 @@ export class WindowManager extends GObject.Object {
       shellWm.connect("unminimize", () => {
         const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
         if (focusNodeWindow) {
-          this.tree.resetSiblingPercent(focusNodeWindow.parentNode);
+          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
         }
 
         const prevFrozen = this._freezeRender;
@@ -264,7 +314,7 @@ export class WindowManager extends GObject.Object {
       }),
     ];
 
-    const extWsm = global.workspace_manager as Meta.WorkspaceManager;
+    const extWsm = global.workspace_manager;
 
     this._workspaceManagerSignals = [
       extWsm.connect("showing-desktop-changed", () => {
@@ -295,11 +345,11 @@ export class WindowManager extends GObject.Object {
     const numberOfWorkspaces = extWsm.get_n_workspaces();
 
     for (let i = 0; i < numberOfWorkspaces; i++) {
-      const workspace = extWsm.get_workspace_by_index(i);
+      const workspace = extWsm.get_workspace_by_index(i)!;
       this.bindWorkspaceSignals(workspace);
     }
 
-    const settings = this.ext.settings as Gio.Settings;
+    const settings = this.ext.settings;
 
     settings.connect("changed", (_, settingName) => {
       switch (settingName) {
@@ -407,7 +457,8 @@ export class WindowManager extends GObject.Object {
     // remove the setting for each node window
     this.allNodeWindows.forEach((w) => {
       if (w.mode === WINDOW_MODES.FLOAT) {
-        if (w.nodeValue.is_above()) w.nodeValue.unmake_above();
+        const mw = w.nodeValue as Meta.Window;
+        if (mw.is_above()) mw.unmake_above();
       }
     });
   }
@@ -415,13 +466,14 @@ export class WindowManager extends GObject.Object {
   restoreAlwaysFloat() {
     this.allNodeWindows.forEach((w) => {
       if (w.mode === WINDOW_MODES.FLOAT) {
-        if (!w.nodeValue.is_above()) w.nodeValue.make_above();
+        const mw = w.nodeValue as Meta.Window;
+        if (!mw.is_above()) mw.make_above();
       }
     });
   }
 
   trackCurrentMonWs() {
-    const metaWindow = this.focusMetaWindow as Meta.Window | null;
+    const metaWindow = this.focusMetaWindow;
     if (!metaWindow) return;
     const currentMonitor = global.display.get_current_monitor();
     const currentWorkspace = global.display.get_workspace_manager().get_active_workspace_index();
@@ -440,7 +492,7 @@ export class WindowManager extends GObject.Object {
         .getNodeByType(NODE_TYPES.WINDOW)
         .filter(
           (w) =>
-            !w.nodeValue.minimized &&
+            !(w.nodeValue as Meta.Window).minimized &&
             w.isTile() &&
             w.nodeValue !== metaWindow &&
             // The searched window should be on the same monitor workspace
@@ -450,13 +502,16 @@ export class WindowManager extends GObject.Object {
         .map((w) => w.nodeValue);
     });
 
-    this.sortedWindows = global.display.sort_windows_by_stacking(monWindows).reverse();
+    this.sortedWindows = global.display
+      .sort_windows_by_stacking(monWindows as Meta.Window[])
+      .reverse();
   }
 
   // TODO move this to workspace.js
-  bindWorkspaceSignals(metaWorkspace) {
+  bindWorkspaceSignals(metaWorkspace: Meta.Workspace) {
     if (metaWorkspace) {
-      if (!metaWorkspace.workspaceSignals) {
+      const ws = metaWorkspace as AnvilMetaWorkspace;
+      if (!ws.workspaceSignals) {
         const workspaceSignals = [
           metaWorkspace.connect("window-added", (_, metaWindow) => {
             if (!this._wsWindowAddSrcId) {
@@ -472,13 +527,13 @@ export class WindowManager extends GObject.Object {
             }
           }),
         ];
-        metaWorkspace.workspaceSignals = workspaceSignals;
+        ws.workspaceSignals = workspaceSignals;
       }
     }
   }
 
   // TODO move this in command.js
-  command(action) {
+  command(action: any) {
     const focusWindow = this.focusMetaWindow;
     // Do not check if the node window is null, some of the commands do not need the focus window
     let focusNodeWindow = this.findNodeWindow(focusWindow);
@@ -506,11 +561,11 @@ export class WindowManager extends GObject.Object {
 
         this.move(focusWindow, moveRect);
 
-        const existParent = focusNodeWindow.parentNode;
+        const existParent = focusNodeWindow!.parentNode!;
 
         if (this.tree.getTiledChildren(existParent.childNodes).length <= 1) {
           existParent.percent = 0.0;
-          this.tree.resetSiblingPercent(existParent.parentNode);
+          this.tree.resetSiblingPercent(existParent.parentNode!);
         }
 
         this.tree.resetSiblingPercent(existParent);
@@ -519,9 +574,10 @@ export class WindowManager extends GObject.Object {
       }
       case "Move": {
         this.unfreezeRender();
-        const moveDirection = Utils.resolveDirection(action.direction);
+        const moveDirection = Utils.resolveDirection(action.direction)!;
+
         const prev = focusNodeWindow;
-        const moved = this.tree.move(focusNodeWindow, moveDirection);
+        const moved = this.tree.move(focusNodeWindow!, moveDirection);
         if (!focusNodeWindow) {
           focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
         }
@@ -530,16 +586,20 @@ export class WindowManager extends GObject.Object {
           callback: () => {
             if (this.eventQueue.length <= 0) {
               this.unfreezeRender();
-              if (focusNodeWindow.parentNode.layout === LAYOUT_TYPES.STACKED) {
-                focusNodeWindow.parentNode.appendChild(focusNodeWindow);
-                focusNodeWindow.nodeValue.raise();
-                focusNodeWindow.nodeValue.activate(global.display.get_current_time());
+              if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.STACKED) {
+                focusNodeWindow!.parentNode!.appendChild(focusNodeWindow!);
+                (focusNodeWindow!.nodeValue as Meta.Window).raise();
+                (focusNodeWindow!.nodeValue as Meta.Window).activate(
+                  global.display.get_current_time()
+                );
                 this.renderTree("move-stacked-queue");
               }
-              if (focusNodeWindow.parentNode.layout === LAYOUT_TYPES.TABBED) {
-                focusNodeWindow.nodeValue.raise();
-                focusNodeWindow.nodeValue.activate(global.display.get_current_time());
-                if (prev) prev.parentNode.lastTabFocus = prev.nodeValue;
+              if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.TABBED) {
+                (focusNodeWindow!.nodeValue as Meta.Window).raise();
+                (focusNodeWindow!.nodeValue as Meta.Window).activate(
+                  global.display.get_current_time()
+                );
+                if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
                 this.renderTree("move-tabbed-queue");
               }
               this.movePointerWith(focusNodeWindow);
@@ -547,14 +607,14 @@ export class WindowManager extends GObject.Object {
           },
         });
         if (moved) {
-          if (prev) prev.parentNode.lastTabFocus = prev.nodeValue;
+          if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
           this.renderTree("move-window");
         }
 
         break;
       }
       case "Focus": {
-        const focusDirection = Utils.resolveDirection(action.direction);
+        const focusDirection = Utils.resolveDirection(action.direction)!;
         focusNodeWindow = this.tree.focus(focusNodeWindow, focusDirection);
         if (!focusNodeWindow) {
           focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
@@ -564,9 +624,9 @@ export class WindowManager extends GObject.Object {
       case "Swap": {
         if (!focusNodeWindow) return;
         this.unfreezeRender();
-        const swapDirection = Utils.resolveDirection(action.direction);
+        const swapDirection = Utils.resolveDirection(action.direction)!;
         this.tree.swap(focusNodeWindow, swapDirection);
-        focusNodeWindow.nodeValue.raise();
+        (focusNodeWindow.nodeValue as Meta.Window).raise();
         this.updateTabbedFocus(focusNodeWindow);
         this.updateStackedFocus(focusNodeWindow);
         this.movePointerWith(focusNodeWindow);
@@ -575,7 +635,7 @@ export class WindowManager extends GObject.Object {
       }
       case "Split": {
         if (!focusNodeWindow) return;
-        currentLayout = focusNodeWindow.parentNode.layout;
+        currentLayout = focusNodeWindow!.parentNode!.layout;
         if (currentLayout === LAYOUT_TYPES.STACKED || currentLayout === LAYOUT_TYPES.TABBED) {
           return;
         }
@@ -588,29 +648,25 @@ export class WindowManager extends GObject.Object {
       }
       case "LayoutToggle":
         if (!focusNodeWindow) return;
-        currentLayout = focusNodeWindow.parentNode.layout;
+        currentLayout = focusNodeWindow!.parentNode!.layout;
         if (currentLayout === LAYOUT_TYPES.HSPLIT) {
-          focusNodeWindow.parentNode.layout = LAYOUT_TYPES.VSPLIT;
+          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.VSPLIT;
         } else if (currentLayout === LAYOUT_TYPES.VSPLIT) {
-          focusNodeWindow.parentNode.layout = LAYOUT_TYPES.HSPLIT;
+          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.HSPLIT;
         }
-        this.tree.attachNode = focusNodeWindow.parentNode;
+        this.tree.attachNode = focusNodeWindow!.parentNode!;
         this.renderTree("layout-split-toggle");
         break;
       case "FocusBorderToggle": {
-        const focusBorderEnabled = (this.ext.settings as Gio.Settings).get_boolean(
-          "focus-border-toggle"
-        );
-        (this.ext.settings as Gio.Settings).set_boolean("focus-border-toggle", !focusBorderEnabled);
+        const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
+        this.ext.settings.set_boolean("focus-border-toggle", !focusBorderEnabled);
         break;
       }
       case "TilingModeToggle": {
         // FIXME, not sure if this toggle is still needed from a use case
         // perspective, since Extension.disable also should do the same thing.
-        const tilingModeEnabled = (this.ext.settings as Gio.Settings).get_boolean(
-          "tiling-mode-enabled"
-        );
-        (this.ext.settings as Gio.Settings).set_boolean("tiling-mode-enabled", !tilingModeEnabled);
+        const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
+        this.ext.settings.set_boolean("tiling-mode-enabled", !tilingModeEnabled);
         if (tilingModeEnabled) {
           this.floatAllWindows();
         } else {
@@ -620,23 +676,19 @@ export class WindowManager extends GObject.Object {
         break;
       }
       case "GapSize": {
-        let gapIncrement = (this.ext.settings as Gio.Settings).get_uint(
-          "window-gap-size-increment"
-        );
+        let gapIncrement = this.ext.settings.get_uint("window-gap-size-increment");
         const amount = action.amount;
         gapIncrement = gapIncrement + amount;
         if (gapIncrement < 0) gapIncrement = 0;
         if (gapIncrement > 8) gapIncrement = 8;
-        (this.ext.settings as Gio.Settings).set_uint("window-gap-size-increment", gapIncrement);
+        this.ext.settings.set_uint("window-gap-size-increment", gapIncrement);
         break;
       }
       case "WorkspaceActiveTileToggle": {
         const activeWorkspace = global.workspace_manager.get_active_workspace_index();
-        const skippedWorkspaces = (this.ext.settings as Gio.Settings).get_string(
-          "workspace-skip-tile"
-        );
+        const skippedWorkspaces = this.ext.settings.get_string("workspace-skip-tile");
         let workspaceSkipped = false;
-        let skippedArr = [];
+        let skippedArr: string[] = [];
         if (skippedWorkspaces.length === 0) {
           skippedArr.push(`${activeWorkspace}`);
           this.floatWorkspace(activeWorkspace);
@@ -661,64 +713,61 @@ export class WindowManager extends GObject.Object {
             this.floatWorkspace(activeWorkspace);
           }
         }
-        (this.ext.settings as Gio.Settings).set_string(
-          "workspace-skip-tile",
-          skippedArr.toString()
-        );
+        this.ext.settings.set_string("workspace-skip-tile", skippedArr.toString());
         this.renderTree("workspace-toggle");
         break;
       }
       case "LayoutStackedToggle":
         if (!focusNodeWindow) return;
-        if (!(this.ext.settings as Gio.Settings).get_boolean("stacked-tiling-mode-enabled")) return;
+        if (!this.ext.settings.get_boolean("stacked-tiling-mode-enabled")) return;
 
-        if (focusNodeWindow.parentNode.isMonitor()) {
+        if (focusNodeWindow!.parentNode!.isMonitor()) {
           this.tree.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
         }
 
-        currentLayout = focusNodeWindow.parentNode.layout;
+        currentLayout = focusNodeWindow!.parentNode!.layout;
 
         if (currentLayout === LAYOUT_TYPES.STACKED) {
-          focusNodeWindow.parentNode.layout = this.determineSplitLayout();
-          this.tree.resetSiblingPercent(focusNodeWindow.parentNode);
+          focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
+          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
         } else {
           if (currentLayout === LAYOUT_TYPES.TABBED) {
-            focusNodeWindow.parentNode.lastTabFocus = null;
+            focusNodeWindow!.parentNode!.lastTabFocus = null;
           }
-          focusNodeWindow.parentNode.layout = LAYOUT_TYPES.STACKED;
-          const lastChild = focusNodeWindow.parentNode.lastChild;
-          if (lastChild.nodeType === NODE_TYPES.WINDOW) {
-            lastChild.nodeValue.activate(global.display.get_current_time());
+          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.STACKED;
+          const lastChild = focusNodeWindow!.parentNode!.lastChild;
+          if (lastChild && lastChild.nodeType === NODE_TYPES.WINDOW) {
+            (lastChild.nodeValue as Meta.Window).activate(global.display.get_current_time());
           }
         }
         this.unfreezeRender();
-        this.tree.attachNode = focusNodeWindow.parentNode;
+        this.tree.attachNode = focusNodeWindow!.parentNode!;
         this.renderTree("layout-stacked-toggle");
         break;
       case "LayoutTabbedToggle":
         if (!focusNodeWindow) return;
-        if (!(this.ext.settings as Gio.Settings).get_boolean("tabbed-tiling-mode-enabled")) return;
+        if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
 
-        if (focusNodeWindow.parentNode.isMonitor()) {
+        if (focusNodeWindow!.parentNode!.isMonitor()) {
           this.tree.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
         }
 
-        currentLayout = focusNodeWindow.parentNode.layout;
+        currentLayout = focusNodeWindow!.parentNode!.layout;
 
         if (currentLayout === LAYOUT_TYPES.TABBED) {
-          focusNodeWindow.parentNode.layout = this.determineSplitLayout();
-          this.tree.resetSiblingPercent(focusNodeWindow.parentNode);
-          focusNodeWindow.parentNode.lastTabFocus = null;
+          focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
+          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
+          focusNodeWindow!.parentNode!.lastTabFocus = null;
         } else {
-          focusNodeWindow.parentNode.layout = LAYOUT_TYPES.TABBED;
-          focusNodeWindow.parentNode.lastTabFocus = focusNodeWindow.nodeValue;
+          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.TABBED;
+          focusNodeWindow!.parentNode!.lastTabFocus = focusNodeWindow.nodeValue;
         }
         this.unfreezeRender();
-        this.tree.attachNode = focusNodeWindow.parentNode;
+        this.tree.attachNode = focusNodeWindow!.parentNode!;
         this.renderTree("layout-tabbed-toggle");
         break;
       case "CancelOperation":
-        if (focusNodeWindow.mode === WINDOW_MODES.GRAB_TILE) {
+        if (focusNodeWindow?.mode === WINDOW_MODES.GRAB_TILE) {
           this.cancelGrab = true;
         }
         break;
@@ -739,18 +788,20 @@ export class WindowManager extends GObject.Object {
           const lastActiveWindow = global.display.get_tab_next(
             Meta.TabList.NORMAL,
             global.display.get_workspace_manager().get_active_workspace(),
-            focusNodeWindow.nodeValue,
+            focusNodeWindow.nodeValue as Meta.Window,
             false
           );
           const lastActiveNodeWindow = this.tree.findNode(lastActiveWindow);
-          this.tree.swapPairs(lastActiveNodeWindow, focusNodeWindow);
+          this.tree.swapPairs(lastActiveNodeWindow!, focusNodeWindow);
           this.movePointerWith(focusNodeWindow);
           this.renderTree("swap-last-active");
         }
         break;
       case "SnapLayoutMove": {
         if (focusNodeWindow) {
-          const workareaRect = focusNodeWindow.nodeValue.get_work_area_current_monitor();
+          const workareaRect = (
+            focusNodeWindow.nodeValue as Meta.Window
+          ).get_work_area_current_monitor();
           const layoutAmount = action.amount;
           const layoutDirection = action.direction.toUpperCase();
           let layout = {} as Record<string, string | number | undefined>;
@@ -772,12 +823,12 @@ export class WindowManager extends GObject.Object {
               processGap = true;
               break;
             case "CENTER": {
-              const metaRect = (this.focusMetaWindow as Meta.Window | null).get_frame_rect();
+              const metaRect = this.focusMetaWindow.get_frame_rect();
               layout.x = "center";
               layout.y = "center";
               layout = {
-                x: Utils.resolveX(layout, this.focusMetaWindow as Meta.Window | null),
-                y: Utils.resolveY(layout, this.focusMetaWindow as Meta.Window | null),
+                x: Utils.resolveX(layout, this.focusMetaWindow),
+                y: Utils.resolveY(layout, this.focusMetaWindow),
                 width: metaRect.width,
                 height: metaRect.height,
               };
@@ -786,14 +837,14 @@ export class WindowManager extends GObject.Object {
             default:
               break;
           }
-          focusNodeWindow.rect = layout;
+          focusNodeWindow.rect = layout as any;
           if (processGap) {
-            focusNodeWindow.rect = this.tree.processGap(focusNodeWindow);
+            focusNodeWindow.rect = this.tree.processGap(focusNodeWindow) as any;
           }
           if (!focusNodeWindow.isFloat()) {
-            this.addFloatOverride(focusNodeWindow.nodeValue, false);
+            this.addFloatOverride(focusNodeWindow.nodeValue as Meta.Window, false);
           }
-          this.move(focusNodeWindow.nodeValue, focusNodeWindow.rect);
+          this.move(focusNodeWindow.nodeValue as Meta.Window, focusNodeWindow.rect!);
           this.queueEvent({
             name: "snap-layout-move",
             callback: () => {
@@ -806,15 +857,13 @@ export class WindowManager extends GObject.Object {
       }
       case "ShowTabDecorationToggle": {
         if (!focusNodeWindow) return;
-        if (!(this.ext.settings as Gio.Settings).get_boolean("tabbed-tiling-mode-enabled")) return;
+        if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
 
-        const showTabs = (this.ext.settings as Gio.Settings).get_boolean(
-          "showtab-decoration-enabled"
-        );
-        (this.ext.settings as Gio.Settings).set_boolean("showtab-decoration-enabled", !showTabs);
+        const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
+        this.ext.settings.set_boolean("showtab-decoration-enabled", !showTabs);
 
         this.unfreezeRender();
-        this.tree.attachNode = focusNodeWindow.parentNode;
+        this.tree.attachNode = focusNodeWindow!.parentNode!;
         this.renderTree("showtab-decoration-enabled");
         break;
       }
@@ -839,8 +888,8 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  resize(grabOp, amount) {
-    const metaWindow = this.focusMetaWindow as Meta.Window | null;
+  resize(grabOp: Meta.GrabOp, amount: number) {
+    const metaWindow = this.focusMetaWindow;
     if (!metaWindow) return;
     const display = global.display;
 
@@ -892,7 +941,7 @@ export class WindowManager extends GObject.Object {
     Logger.debug(`extension:enable`);
   }
 
-  findNodeWindow(metaWindow) {
+  findNodeWindow(metaWindow: Meta.Window) {
     return this.tree.findNode(metaWindow);
   }
 
@@ -918,23 +967,17 @@ export class WindowManager extends GObject.Object {
 
   get windowsActiveWorkspace() {
     const wsManager = global.workspace_manager;
-    return (global.display as Meta.Display).get_tab_list(
-      Meta.TabList.NORMAL_ALL,
-      wsManager.get_active_workspace()
-    );
+    return global.display.get_tab_list(Meta.TabList.NORMAL_ALL, wsManager.get_active_workspace());
   }
 
   get windowsAllWorkspaces() {
     const wsManager = global.workspace_manager;
-    const windowsAll = [];
+    const windowsAll: Meta.Window[] = [];
 
     for (let i = 0; i < wsManager.get_n_workspaces(); i++) {
       Array.prototype.push.apply(
         windowsAll,
-        (global.display as Meta.Display).get_tab_list(
-          Meta.TabList.NORMAL_ALL,
-          wsManager.get_workspace_by_index(i)
-        )
+        global.display.get_tab_list(Meta.TabList.NORMAL_ALL, wsManager.get_workspace_by_index(i))
       );
     }
     windowsAll.sort((w1, w2) => {
@@ -943,7 +986,7 @@ export class WindowManager extends GObject.Object {
     return windowsAll;
   }
 
-  getWindowsOnWorkspace(workspaceIndex) {
+  getWindowsOnWorkspace(workspaceIndex: number) {
     const workspaceNode = this.tree.findNode(`ws${workspaceIndex}`);
     if (!workspaceNode) return [];
     const workspaceWindows = workspaceNode.getNodeByType(NODE_TYPES.WINDOW);
@@ -952,16 +995,14 @@ export class WindowManager extends GObject.Object {
 
   determineSplitLayout() {
     // if the monitor width is less than height, the monitor could be vertical orientation;
-    const monitorRect = (global.display as Meta.Display).get_monitor_geometry(
-      global.display.get_current_monitor()
-    );
+    const monitorRect = global.display.get_monitor_geometry(global.display.get_current_monitor());
     if (monitorRect.width < monitorRect.height) {
       return LAYOUT_TYPES.VSPLIT;
     }
     return LAYOUT_TYPES.HSPLIT;
   }
 
-  floatWorkspace(workspaceIndex) {
+  floatWorkspace(workspaceIndex: number) {
     const workspaceWindows = this.getWindowsOnWorkspace(workspaceIndex);
     if (!workspaceWindows) return;
     workspaceWindows.forEach((w) => {
@@ -969,7 +1010,7 @@ export class WindowManager extends GObject.Object {
     });
   }
 
-  unfloatWorkspace(workspaceIndex) {
+  unfloatWorkspace(workspaceIndex: number) {
     const workspaceWindows = this.getWindowsOnWorkspace(workspaceIndex);
     if (!workspaceWindows) return;
     workspaceWindows.forEach((w) => {
@@ -977,7 +1018,8 @@ export class WindowManager extends GObject.Object {
     });
   }
 
-  hideActorBorder(actor) {
+  hideActorBorder(actor: AnvilWindowActor | null) {
+    if (!actor) return;
     if (actor.border) {
       actor.border.hide();
     }
@@ -992,7 +1034,7 @@ export class WindowManager extends GObject.Object {
       if (actor) {
         this.hideActorBorder(actor);
       }
-      if (nodeWindow.parentNode.isTabbed()) {
+      if (nodeWindow!.parentNode!.isTabbed()) {
         if (nodeWindow.tab) {
           // TODO: review the cleanup of the tab:St.Widget variable
           try {
@@ -1006,21 +1048,21 @@ export class WindowManager extends GObject.Object {
   }
 
   // Window movement API
-  move(metaWindow, rect) {
+  move(metaWindow: Meta.Window, rect: { x: number; y: number; width: number; height: number }) {
     if (!metaWindow) return;
-    if (metaWindow.grabbed) return;
+    if ((metaWindow as any).grabbed) return;
     try {
       // GNOME 49+
       metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
       metaWindow.unmaximize();
     } catch {
       // pre-49 fallback
-      metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-      metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
-      metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
+      (metaWindow as any).unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+      (metaWindow as any).unmaximize(Meta.MaximizeFlags.VERTICAL);
+      (metaWindow as any).unmaximize(Meta.MaximizeFlags.BOTH);
     }
 
-    const windowActor = metaWindow.get_compositor_private();
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
     if (!windowActor) return;
     windowActor.remove_all_transitions();
 
@@ -1028,7 +1070,7 @@ export class WindowManager extends GObject.Object {
     metaWindow.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
   }
 
-  moveCenter(metaWindow) {
+  moveCenter(metaWindow: Meta.Window) {
     if (!metaWindow) return;
     const frameRect = metaWindow.get_frame_rect();
     const rectRequest = {
@@ -1047,17 +1089,19 @@ export class WindowManager extends GObject.Object {
     this.move(metaWindow, moveRect);
   }
 
-  rectForMonitor(node, targetMonitor) {
+  rectForMonitor(node: Node<any>, targetMonitor: number) {
     if (!node || (node && node.nodeType !== NODE_TYPES.WINDOW)) return null;
     if (targetMonitor < 0) return null;
-    const currentWorkArea = node.nodeValue.get_work_area_current_monitor();
-    const nextWorkArea = node.nodeValue.get_work_area_for_monitor(targetMonitor);
+    const metaWindow = node.nodeValue as Meta.Window;
+    const currentWorkArea = metaWindow.get_work_area_current_monitor();
+    const nextWorkArea = metaWindow.get_work_area_for_monitor(targetMonitor);
 
     if (currentWorkArea && nextWorkArea) {
-      let rect = node.rect;
+      let rect: RectLike | null = node.rect;
       if (!rect && node.mode === WINDOW_MODES.FLOAT) {
-        rect = node.nodeValue.get_frame_rect();
+        rect = metaWindow.get_frame_rect();
       }
+      if (!rect) return null;
       const hRatio = nextWorkArea.height / currentWorkArea.height;
       const wRatio = nextWorkArea.width / currentWorkArea.width;
       rect.height *= hRatio;
@@ -1115,8 +1159,8 @@ export class WindowManager extends GObject.Object {
     const numberOfWorkspaces = globalWsm.get_n_workspaces();
 
     for (let i = 0; i < numberOfWorkspaces; i++) {
-      const workspace = globalWsm.get_workspace_by_index(i);
-      if (workspace.workspaceSignals) {
+      const workspace = globalWsm.get_workspace_by_index(i) as AnvilMetaWorkspace;
+      if (workspace && workspace.workspaceSignals) {
         for (const workspaceSignal of workspace.workspaceSignals) {
           workspace.disconnect(workspaceSignal);
         }
@@ -1128,7 +1172,8 @@ export class WindowManager extends GObject.Object {
     const allWindows = this.windowsAllWorkspaces;
 
     if (allWindows) {
-      for (const metaWindow of allWindows) {
+      for (const metaWindowRaw of allWindows) {
+        const metaWindow = metaWindowRaw as AnvilMetaWindow;
         if (metaWindow.windowSignals !== undefined) {
           for (const windowSignal of metaWindow.windowSignals) {
             metaWindow.disconnect(windowSignal);
@@ -1137,7 +1182,7 @@ export class WindowManager extends GObject.Object {
           metaWindow.windowSignals = undefined;
         }
 
-        const windowActor = metaWindow.get_compositor_private();
+        const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
         if (windowActor && windowActor.actorSignals) {
           for (const actorSignal of windowActor.actorSignals) {
             windowActor.disconnect(actorSignal);
@@ -1205,13 +1250,10 @@ export class WindowManager extends GObject.Object {
     this._signalsBound = false;
   }
 
-  renderTree(from, force = false) {
+  renderTree(from: string, force: boolean = false) {
     const wasFrozen = this._freezeRender;
     if (force && wasFrozen) this.unfreezeRender();
-    if (
-      this._freezeRender ||
-      !(this.ext.settings as Gio.Settings).get_boolean("tiling-mode-enabled")
-    ) {
+    if (this._freezeRender || !this.ext.settings.get_boolean("tiling-mode-enabled")) {
       this.updateDecorationLayout();
       this.updateBorderLayout();
     } else {
@@ -1230,8 +1272,8 @@ export class WindowManager extends GObject.Object {
   }
 
   processFloats() {
-    this.allNodeWindows.forEach((nodeWindow) => {
-      const metaWindow = nodeWindow.nodeValue;
+    this.allNodeWindows.forEach((nodeWindow: Node<any>) => {
+      const metaWindow = nodeWindow.nodeValue as Meta.Window;
       if (this.isFloatingExempt(metaWindow) || !this.isActiveWindowWorkspaceTiled(metaWindow)) {
         nodeWindow.float = true;
       } else {
@@ -1251,13 +1293,13 @@ export class WindowManager extends GObject.Object {
    * TODO: add support to reload the tree from a JSON dump file.
    * TODO: move this to tree.js
    */
-  reloadTree(from) {
+  reloadTree(from: string) {
     if (!this._reloadTreeSrcId) {
       this._reloadTreeSrcId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
         Utils._disableDecorations();
         // empty out the root children nodes
         this.tree.childNodes.length = 0;
-        this.tree.attachNode = undefined;
+        this.tree.attachNode = null;
         // initialize the workspaces and monitors id strings
         this.tree._initWorkspaces();
         this.trackCurrentWindows();
@@ -1268,39 +1310,31 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  sameParentMonitor(firstNode, secondNode) {
+  sameParentMonitor(firstNode: Node<any>, secondNode: Node<any>) {
     if (!firstNode || !secondNode) return false;
     if (!firstNode.nodeValue || !secondNode.nodeValue) return false;
-    if (!firstNode.nodeValue.get_workspace()) return false;
-    if (!secondNode.nodeValue.get_workspace()) return false;
-    const firstMonWs = `mo${firstNode.nodeValue.get_monitor()}ws${firstNode.nodeValue
-      .get_workspace()
-      .index()}`;
-    const secondMonWs = `mo${secondNode.nodeValue.get_monitor()}ws${secondNode.nodeValue
-      .get_workspace()
-      .index()}`;
+    const firstWin = firstNode.nodeValue as Meta.Window;
+    const secondWin = secondNode.nodeValue as Meta.Window;
+    if (!firstWin.get_workspace()) return false;
+    if (!secondWin.get_workspace()) return false;
+    const firstMonWs = `mo${firstWin.get_monitor()}ws${firstWin.get_workspace().index()}`;
+    const secondMonWs = `mo${secondWin.get_monitor()}ws${secondWin.get_workspace().index()}`;
     return firstMonWs === secondMonWs;
   }
 
   showWindowBorders() {
-    const metaWindow = this.focusMetaWindow as Meta.Window | null;
+    const metaWindow = this.focusMetaWindow;
     if (!metaWindow) return;
-    const windowActor = metaWindow.get_compositor_private();
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
     if (!windowActor) return;
     const nodeWindow = this.findNodeWindow(metaWindow);
     if (!nodeWindow) return;
     if (metaWindow.get_wm_class() === null) return;
 
-    const borders = [];
-    const focusBorderEnabled = (this.ext.settings as Gio.Settings).get_boolean(
-      "focus-border-toggle"
-    );
-    const splitBorderEnabled = (this.ext.settings as Gio.Settings).get_boolean(
-      "split-border-toggle"
-    );
-    const tilingModeEnabled = (this.ext.settings as Gio.Settings).get_boolean(
-      "tiling-mode-enabled"
-    );
+    const borders: St.Bin[] = [];
+    const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
+    const splitBorderEnabled = this.ext.settings.get_boolean("split-border-toggle");
+    const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
     const gap = this.calculateGaps(nodeWindow);
     const maximized = () => {
       try {
@@ -1308,13 +1342,17 @@ export class WindowManager extends GObject.Object {
         return metaWindow.is_maximized() || metaWindow.is_fullscreen() || gap === 0;
       } catch {
         // pre-49 fallback
-        return metaWindow.get_maximized() === 3 || metaWindow.is_fullscreen() || gap === 0;
+        return (
+          (metaWindow as AnvilMetaWindow).get_maximized() === 3 ||
+          metaWindow.is_fullscreen() ||
+          gap === 0
+        );
       }
     };
     const monitorCount = global.display.get_n_monitors();
-    const tiledChildren = this.tree.getTiledChildren(nodeWindow.parentNode.childNodes);
+    const tiledChildren = this.tree.getTiledChildren(nodeWindow!.parentNode!.childNodes);
     let inset = 3;
-    const parentNode = nodeWindow.parentNode;
+    const parentNode = nodeWindow!.parentNode!;
 
     const floatingWindow = nodeWindow.isFloat();
     const tiledBorder = windowActor.border;
@@ -1369,7 +1407,10 @@ export class WindowManager extends GObject.Object {
           return metaWindow.is_maximized();
         } catch {
           // pre-49 fallback
-          return metaWindow.get_maximized() === 1 || metaWindow.get_maximized() === 2;
+          return (
+            (metaWindow as AnvilMetaWindow).get_maximized() === 1 ||
+            (metaWindow as AnvilMetaWindow).get_maximized() === 2
+          );
         }
       })()
     ) {
@@ -1428,10 +1469,10 @@ export class WindowManager extends GObject.Object {
     this.showWindowBorders();
   }
 
-  calculateGaps(node) {
+  calculateGaps(node: Node<any>) {
     if (!node) return 0;
 
-    const settings = this.ext.settings as Gio.Settings;
+    const settings = this.ext.settings;
     const gapSize = settings.get_uint("window-gap-size");
     const gapIncrement = settings.get_uint("window-gap-size-increment");
     let gap = gapSize * gapIncrement;
@@ -1456,13 +1497,13 @@ export class WindowManager extends GObject.Object {
    * MONITOR, CONTAINER
    *
    */
-  trackWindow(_display, metaWindow) {
-    const autoSplit = (this.ext.settings as Gio.Settings)?.get_boolean("auto-split-enabled");
-    const focusMetaWindow = this.focusMetaWindow as Meta.Window | null;
+  trackWindow(_display: Meta.Display, metaWindow: Meta.Window) {
+    const autoSplit = this.ext.settings?.get_boolean("auto-split-enabled");
+    const focusMetaWindow = this.focusMetaWindow;
     if (autoSplit && focusMetaWindow) {
       const currentFocusNode = this.tree.findNode(focusMetaWindow);
       if (currentFocusNode) {
-        const currentParentFocusNode = currentFocusNode.parentNode;
+        const currentParentFocusNode = currentFocusNode!.parentNode!;
         const layout = currentParentFocusNode.layout;
         if (layout === LAYOUT_TYPES.HSPLIT || layout === LAYOUT_TYPES.VSPLIT) {
           const frameRect = focusMetaWindow.get_frame_rect();
@@ -1519,32 +1560,33 @@ export class WindowManager extends GObject.Object {
           WINDOW_MODES.FLOAT
         );
 
-        metaWindow.firstRender = true;
+        const anvilMetaWin = metaWindow as AnvilMetaWindow;
+        anvilMetaWin.firstRender = true;
 
-        const windowActor = metaWindow.get_compositor_private();
+        const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
 
-        if (!metaWindow.windowSignals) {
+        if (!anvilMetaWin.windowSignals) {
           const windowSignals = [
-            metaWindow.connect("position-changed", (_metaWindow) => {
+            metaWindow.connect("position-changed", (_metaWindow: Meta.Window) => {
               const from = "position-changed";
               this.updateMetaPositionSize(_metaWindow, from);
             }),
-            metaWindow.connect("size-changed", (_metaWindow) => {
+            metaWindow.connect("size-changed", (_metaWindow: Meta.Window) => {
               const from = "size-changed";
               this.updateMetaPositionSize(_metaWindow, from);
             }),
-            metaWindow.connect("unmanaged", (_metaWindow) => {
+            metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
               this.hideActorBorder(windowActor);
             }),
-            metaWindow.connect("focus", (_metaWindowFocus) => {
+            metaWindow.connect("focus", (_metaWindowFocus: Meta.Window) => {
               this.queueEvent({
                 name: "focus-update",
                 callback: () => {
                   this.unfreezeRender();
                   this.updateBorderLayout();
                   this.updateDecorationLayout();
-                  this.updateStackedFocus();
-                  this.updateTabbedFocus();
+                  this.updateStackedFocus(undefined);
+                  this.updateTabbedFocus(undefined);
                   const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
                   this.movePointerWith(focusNodeWindow);
                 },
@@ -1565,20 +1607,20 @@ export class WindowManager extends GObject.Object {
               }
               this.renderTree("focus", true);
             }),
-            metaWindow.connect("workspace-changed", (_metaWindow) => {
+            metaWindow.connect("workspace-changed", (_metaWindow: Meta.Window) => {
               this.updateMetaWorkspaceMonitor("metawindow-workspace-changed", null, _metaWindow);
               this.trackCurrentMonWs();
             }),
           ];
-          metaWindow.windowSignals = windowSignals;
+          anvilMetaWin.windowSignals = windowSignals;
         }
 
-        if (!windowActor.actorSignals) {
+        if (windowActor && !windowActor.actorSignals) {
           const actorSignals = [windowActor.connect("destroy", this.windowDestroy.bind(this))];
           windowActor.actorSignals = actorSignals;
         }
 
-        if (!windowActor.border) {
+        if (windowActor && !windowActor.border) {
           const border = new St.Bin({ style_class: "window-tiled-border" });
 
           if (global.window_group) global.window_group.add_child(border);
@@ -1587,7 +1629,7 @@ export class WindowManager extends GObject.Object {
           border.show();
         }
 
-        this.postProcessWindow(nodeWindow);
+        this.postProcessWindow(nodeWindow as Node<any> | null);
         this.queueEvent(
           {
             name: "window-create-queue",
@@ -1598,9 +1640,9 @@ export class WindowManager extends GObject.Object {
                 metaWindow.unmaximize();
               } catch {
                 // pre-49 fallback
-                metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                metaWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
-                metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
+                (metaWindow as any).unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+                (metaWindow as any).unmaximize(Meta.MaximizeFlags.VERTICAL);
+                (metaWindow as any).unmaximize(Meta.MaximizeFlags.BOTH);
               }
               this.renderTree("window-create", true);
             },
@@ -1609,7 +1651,7 @@ export class WindowManager extends GObject.Object {
         );
 
         if (nodeWindow?.parentNode) {
-          const childNodes = this.tree.getTiledChildren(nodeWindow.parentNode.childNodes);
+          const childNodes = this.tree.getTiledChildren(nodeWindow!.parentNode!.childNodes);
           childNodes.forEach((n) => {
             n.percent = 0.0;
           });
@@ -1618,8 +1660,9 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  postProcessWindow(nodeWindow) {
-    const metaWindow = nodeWindow.nodeValue;
+  postProcessWindow(nodeWindow: Node<any> | null) {
+    if (!nodeWindow) return;
+    const metaWindow = nodeWindow.nodeValue as Meta.Window;
     if (metaWindow) {
       if (metaWindow.get_title() === this.prefsTitle) {
         metaWindow
@@ -1627,19 +1670,19 @@ export class WindowManager extends GObject.Object {
           .activate_with_focus(metaWindow, global.display.get_current_time());
         this.moveCenter(metaWindow);
       } else {
-        this.movePointerWith(metaWindow);
+        this.movePointerWith(nodeWindow);
       }
     }
   }
 
-  updateStackedFocus(focusNodeWindow) {
+  updateStackedFocus(focusNodeWindow: Node<any> | undefined | null) {
     if (!focusNodeWindow) return;
-    const parentNode = focusNodeWindow.parentNode;
+    const parentNode = focusNodeWindow!.parentNode!;
     if (parentNode.layout === LAYOUT_TYPES.STACKED && !this._freezeRender) {
       parentNode.appendChild(focusNodeWindow);
       parentNode.childNodes
-        .filter((child) => child.isWindow())
-        .forEach((child) => child.nodeValue.raise());
+        .filter((child: Node<any>) => child.isWindow())
+        .forEach((child: Node<any>) => (child.nodeValue as Meta.Window).raise());
       this.queueEvent({
         name: "render-focus-stack",
         callback: () => {
@@ -1649,10 +1692,10 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  updateTabbedFocus(focusNodeWindow) {
+  updateTabbedFocus(focusNodeWindow: Node<any> | null | undefined) {
     if (!focusNodeWindow) return;
-    if (focusNodeWindow.parentNode.layout === LAYOUT_TYPES.TABBED && !this._freezeRender) {
-      const metaWindow = focusNodeWindow.nodeValue;
+    if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.TABBED && !this._freezeRender) {
+      const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
       metaWindow.raise();
     }
   }
@@ -1660,9 +1703,9 @@ export class WindowManager extends GObject.Object {
   /**
    * Check if a Meta Window's workspace is skipped for tiling.
    */
-  isActiveWindowWorkspaceTiled(metaWindow) {
+  isActiveWindowWorkspaceTiled(metaWindow: Meta.Window) {
     if (!metaWindow) return true;
-    const skipWs = (this.ext.settings as Gio.Settings).get_string("workspace-skip-tile");
+    const skipWs = this.ext.settings.get_string("workspace-skip-tile");
     const skipArr = skipWs.split(",");
     let skipThisWs = false;
 
@@ -1683,7 +1726,7 @@ export class WindowManager extends GObject.Object {
    * Check the current active workspace's tiling mode
    */
   isCurrentWorkspaceTiled() {
-    const skipWs = (this.ext.settings as Gio.Settings).get_string("workspace-skip-tile");
+    const skipWs = this.ext.settings.get_string("workspace-skip-tile");
     const skipArr = skipWs.split(",");
     let skipThisWs = false;
     const wsMgr = global.workspace_manager;
@@ -1714,7 +1757,7 @@ export class WindowManager extends GObject.Object {
     this.updateDecorationLayout();
   }
 
-  _validWindow(metaWindow) {
+  _validWindow(metaWindow: Meta.Window) {
     const windowType = metaWindow.get_window_type();
     return (
       windowType === Meta.WindowType.NORMAL ||
@@ -1723,7 +1766,7 @@ export class WindowManager extends GObject.Object {
     );
   }
 
-  windowDestroy(actor) {
+  windowDestroy(actor: AnvilWindowActor) {
     // Release any resources on the window
     const border = actor.border;
     if (border) {
@@ -1742,7 +1785,7 @@ export class WindowManager extends GObject.Object {
     }
 
     const nodeWindow = this.tree.findNodeByActor(actor) as unknown as
-      | import("./tree.js").Node
+      | import("./tree.js").Node<any>
       | null;
 
     if (nodeWindow?.isWindow()) {
@@ -1754,7 +1797,7 @@ export class WindowManager extends GObject.Object {
     // find the next attachNode here
     const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
     if (focusNodeWindow) {
-      this.tree.attachNode = focusNodeWindow.parentNode;
+      this.tree.attachNode = focusNodeWindow!.parentNode!;
     }
 
     this.queueEvent({
@@ -1768,7 +1811,7 @@ export class WindowManager extends GObject.Object {
   /**
    * Handles any workspace/monitor update for the Meta.Window.
    */
-  updateMetaWorkspaceMonitor(from, _monitor, metaWindow) {
+  updateMetaWorkspaceMonitor(from: string, _monitor: number | null, metaWindow: Meta.Window) {
     if (this._validWindow(metaWindow)) {
       if (metaWindow.get_workspace() === null) return;
       const existNodeWindow = this.tree.findNode(metaWindow);
@@ -1791,7 +1834,7 @@ export class WindowManager extends GObject.Object {
               this.updateStackedFocus(existNodeWindow);
             } else {
               if (this.floatingWindow(existNodeWindow)) {
-                existNodeWindow.nodeValue.raise();
+                (existNodeWindow.nodeValue as Meta.Window).raise();
               }
             }
           }
@@ -1805,16 +1848,14 @@ export class WindowManager extends GObject.Object {
    * Handle any updates to the current focused window's position.
    * Useful for updating the active window border, etc.
    */
-  updateMetaPositionSize(_metaWindow, from) {
-    const focusMetaWindow = this.focusMetaWindow as Meta.Window | null;
+  updateMetaPositionSize(_metaWindow: Meta.Window, from: string) {
+    const focusMetaWindow = this.focusMetaWindow;
     if (!focusMetaWindow) return;
 
     const focusNodeWindow = this.findNodeWindow(focusMetaWindow);
     if (!focusNodeWindow) return;
 
-    const tilingModeEnabled = (this.ext.settings as Gio.Settings).get_boolean(
-      "tiling-mode-enabled"
-    );
+    const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
 
     if (focusNodeWindow.grabMode && tilingModeEnabled) {
       if (focusNodeWindow.grabMode === GRAB_TYPES.RESIZING) {
@@ -1830,7 +1871,7 @@ export class WindowManager extends GObject.Object {
             return !focusMetaWindow.is_maximized();
           } catch {
             // pre-49 fallback
-            return focusMetaWindow.get_maximized() === 0;
+            return (focusMetaWindow as AnvilMetaWindow).get_maximized() === 0;
           }
         })()
       ) {
@@ -1857,7 +1898,7 @@ export class WindowManager extends GObject.Object {
     if (!activeWsNode) return;
     const allWindows = activeWsNode.getNodeByType(NODE_TYPES.WINDOW);
     const allHiddenWindows = allWindows.filter((w) => {
-      const metaWindow = w.nodeValue;
+      const metaWindow = w.nodeValue as Meta.Window;
       return !metaWindow.showing_on_its_workspace() || metaWindow.minimized;
     });
 
@@ -1874,12 +1915,15 @@ export class WindowManager extends GObject.Object {
           return (() => {
             try {
               // GNOME 49+
-              return w.nodeValue.is_maximized() || w.nodeValue.is_fullscreen();
+              return (
+                (w.nodeValue as Meta.Window).is_maximized() ||
+                (w.nodeValue as Meta.Window).is_fullscreen()
+              );
             } catch {
               // pre-49 fallback
               return (
-                w.nodeValue.get_maximized() === Meta.MaximizeFlags.BOTH ||
-                w.nodeValue.is_fullscreen()
+                (w.nodeValue as AnvilMetaWindow).get_maximized() === Meta.MaximizeFlags.BOTH ||
+                (w.nodeValue as Meta.Window).is_fullscreen()
               );
             }
           })();
@@ -1891,12 +1935,10 @@ export class WindowManager extends GObject.Object {
       const activeMonWsCons = monitorWs.getNodeByType(NODE_TYPES.CON);
       activeMonWsCons.forEach((con) => {
         const tiled = this.tree.getTiledChildren(con.childNodes);
-        const showTabs = (this.ext.settings as Gio.Settings).get_boolean(
-          "showtab-decoration-enabled"
-        );
+        const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
         if (con.decoration && tiled.length > 0 && showTabs) {
           con.decoration.show();
-          const focusMetaWindow = this.focusMetaWindow as Meta.Window | null;
+          const focusMetaWindow = this.focusMetaWindow;
           if (global.window_group.contains(con.decoration) && focusMetaWindow) {
             global.window_group.remove_child(con.decoration);
             // Show it below the focused window
@@ -1921,7 +1963,7 @@ export class WindowManager extends GObject.Object {
     this._freezeRender = false;
   }
 
-  floatingWindow(node) {
+  floatingWindow(node: Node<any> | null) {
     if (!node) return false;
     return node.nodeType === NODE_TYPES.WINDOW && node.mode === WINDOW_MODES.FLOAT;
   }
@@ -1932,10 +1974,9 @@ export class WindowManager extends GObject.Object {
    * This is useful for making sure that Anvil calculates the attachNode
    * properly
    */
-  movePointerWith(nodeWindow, { force = false } = {}) {
+  movePointerWith(nodeWindow: Node<any> | null, { force = false }: { force?: boolean } = {}) {
     if (!nodeWindow || !nodeWindow._data) return;
-    const shouldWarp =
-      force || (this.ext.settings as Gio.Settings).get_boolean("move-pointer-focus-enabled");
+    const shouldWarp = force || this.ext.settings.get_boolean("move-pointer-focus-enabled");
     if (shouldWarp) {
       this.storePointerLastPosition(this.lastFocusedWindow);
       if (this.canMovePointerInsideNodeWindow(nodeWindow)) {
@@ -1946,28 +1987,28 @@ export class WindowManager extends GObject.Object {
     this.tree.debugParentNodes(nodeWindow);
   }
 
-  warpPointerToNodeWindow(nodeWindow) {
+  warpPointerToNodeWindow(nodeWindow: Node<any>) {
     const newCoord = this.getPointerPositionInside(nodeWindow);
     if (newCoord && newCoord.x && newCoord.y) {
       const seat = Clutter.get_default_backend().get_default_seat();
       if (seat) {
-        const wmTitle = nodeWindow.nodeValue.get_title();
+        const wmTitle = (nodeWindow.nodeValue as Meta.Window).get_title();
         Logger.debug(`moved pointer to [${wmTitle}] at (${newCoord.x},${newCoord.y})`);
         seat.warp_pointer(newCoord.x, newCoord.y);
       }
     }
   }
 
-  getPointer() {
-    return global.get_pointer();
+  getPointer(): [number, number] {
+    return global.get_pointer() as unknown as [number, number];
   }
 
-  minimizedWindow(node) {
+  minimizedWindow(node: Node<any> | null) {
     if (!node) return false;
-    return node._type === NODE_TYPES.WINDOW && node._data && node._data.minimized;
+    return node._type === NODE_TYPES.WINDOW && node._data && (node._data as Meta.Window).minimized;
   }
 
-  swapWindowsUnderPointer(focusNodeWindow) {
+  swapWindowsUnderPointer(focusNodeWindow: Node<any>) {
     if (this.cancelGrab) {
       return;
     }
@@ -1980,7 +2021,7 @@ export class WindowManager extends GObject.Object {
    * Handle previewing and applying where a drag-drop window is going to be tiled
    *
    */
-  moveWindowToPointer(focusNodeWindow, preview = false) {
+  moveWindowToPointer(focusNodeWindow: Node<any>, preview: boolean = false) {
     if (this.cancelGrab) {
       return;
     }
@@ -1989,23 +2030,22 @@ export class WindowManager extends GObject.Object {
     const nodeWinAtPointer = this.nodeWinAtPointer;
 
     if (nodeWinAtPointer) {
-      const targetRect = nodeWinAtPointer.nodeValue.get_frame_rect();
+      const targetRect = (nodeWinAtPointer.nodeValue as Meta.Window).get_frame_rect();
       const parentNodeTarget = nodeWinAtPointer.parentNode;
       const currPointer = this.getPointer();
-      const horizontal = parentNodeTarget.isHSplit() || parentNodeTarget.isTabbed();
-      const isMonParent = parentNodeTarget.nodeType === NODE_TYPES.MONITOR;
-      const isConParent = parentNodeTarget.nodeType === NODE_TYPES.CON;
-      const centerLayout = (this.ext.settings as Gio.Settings)
-        .get_string("dnd-center-layout")
-        .toUpperCase();
-      const stacked = parentNodeTarget.isStacked();
-      const tabbed = parentNodeTarget.isTabbed();
+      const horizontal = parentNodeTarget!.isHSplit() || parentNodeTarget!.isTabbed();
+      const isMonParent = parentNodeTarget!.nodeType === NODE_TYPES.MONITOR;
+      const isConParent = parentNodeTarget!.nodeType === NODE_TYPES.CON;
+      const centerLayout = this.ext.settings.get_string("dnd-center-layout").toUpperCase();
+      const stacked = parentNodeTarget!.isStacked();
+      const tabbed = parentNodeTarget!.isTabbed();
       const stackedOrTabbed = stacked || tabbed;
-      const updatePreview = (focusNodeWindow, previewParams) => {
+      const updatePreview = (
+        focusNodeWindow: Node<any>,
+        previewParams: { className: string; targetRect: any }
+      ) => {
         const previewHint = focusNodeWindow.previewHint;
-        const previewHintEnabled = (this.ext.settings as Gio.Settings).get_boolean(
-          "preview-hint-enabled"
-        );
+        const previewHintEnabled = this.ext.settings.get_boolean("preview-hint-enabled");
         const previewRect = previewParams.targetRect;
         if (previewHint && previewHintEnabled) {
           if (!previewRect) {
@@ -2018,7 +2058,10 @@ export class WindowManager extends GObject.Object {
           previewHint.show();
         }
       };
-      const regions = (targetRect, regionWidth) => {
+      const regions = (
+        targetRect: { x: number; y: number; width: number; height: number },
+        regionWidth: number
+      ) => {
         leftRegion = {
           x: targetRect.x,
           y: targetRect.y,
@@ -2062,8 +2105,8 @@ export class WindowManager extends GObject.Object {
           center: centerRegion,
         };
       };
-      let referenceNode = null;
-      let containerNode;
+      let referenceNode: Node<any> | null = null;
+      let containerNode: Node<any> | null = null;
       let childNode = focusNodeWindow;
       let previewParams: { className: string; targetRect: any } = {
         className: "",
@@ -2123,7 +2166,7 @@ export class WindowManager extends GObject.Object {
             } else {
               containerNode = parentNodeTarget;
               referenceNode = null;
-              const parentTargetRect = this.tree.processGap(parentNodeTarget);
+              const parentTargetRect = this.tree.processGap(parentNodeTarget!);
               previewParams = {
                 className: "",
                 targetRect: parentTargetRect,
@@ -2144,7 +2187,7 @@ export class WindowManager extends GObject.Object {
           childNode.detachWindow = true;
           if (!isMonParent) {
             referenceNode = parentNodeTarget;
-            containerNode = parentNodeTarget.parentNode;
+            containerNode = parentNodeTarget!.parentNode;
           } else {
             // It is a monitor that's a stack/tab
             // TODO: update the stacked/tabbed toggles to not
@@ -2172,8 +2215,8 @@ export class WindowManager extends GObject.Object {
           // split left, top, right or bottom accordingly (subsequent if conditions):
           childNode.detachWindow = true;
           if (!isMonParent) {
-            referenceNode = parentNodeTarget.nextSibling;
-            containerNode = parentNodeTarget.parentNode;
+            referenceNode = parentNodeTarget!.nextSibling;
+            containerNode = parentNodeTarget!.parentNode;
           } else {
             // It is a monitor that's a stack/tab
             // TODO: update the stacked/tabbed toggles to not
@@ -2272,7 +2315,7 @@ export class WindowManager extends GObject.Object {
       }
 
       if (!preview) {
-        const previousParent = focusNodeWindow.parentNode;
+        const previousParent = focusNodeWindow!.parentNode!;
         this.tree.resetSiblingPercent(containerNode);
         this.tree.resetSiblingPercent(previousParent);
 
@@ -2282,10 +2325,10 @@ export class WindowManager extends GObject.Object {
         }
 
         if (childNode.createCon) {
-          const numWin = parentNodeTarget.childNodes.filter(
+          const numWin = parentNodeTarget!.childNodes.filter(
             (c) => c.nodeType === NODE_TYPES.WINDOW
           ).length;
-          const numChild = parentNodeTarget.childNodes.length;
+          const numChild = parentNodeTarget!.childNodes.length;
           const sameNumChild = numWin === numChild;
           // Child Node will still be created
           if (
@@ -2293,10 +2336,10 @@ export class WindowManager extends GObject.Object {
             ((isConParent && numWin === 1 && sameNumChild) ||
               (isMonParent && numWin == 2 && sameNumChild))
           ) {
-            childNode = parentNodeTarget;
+            childNode = parentNodeTarget!;
           } else {
             childNode = new Node(NODE_TYPES.CON, new St.Bin());
-            containerNode.insertBefore(childNode, referenceNode);
+            containerNode!.insertBefore(childNode!, referenceNode);
             childNode.appendChild(nodeWinAtPointer);
           }
 
@@ -2311,26 +2354,26 @@ export class WindowManager extends GObject.Object {
           } else if (isTop || isBottom) {
             childNode.layout = LAYOUT_TYPES.VSPLIT;
           } else if (isCenter) {
-            childNode.layout = LAYOUT_TYPES[centerLayout];
+            childNode.layout = (LAYOUT_TYPES as Record<string, string>)[centerLayout];
           }
         } else if (childNode.detachWindow) {
           const orientation =
             isLeft || isRight ? ORIENTATION_TYPES.HORIZONTAL : ORIENTATION_TYPES.VERTICAL;
-          this.tree.split(childNode, orientation);
-          containerNode.insertBefore(childNode.parentNode, referenceNode);
+          this.tree.split(childNode as Node<any>, orientation);
+          containerNode!.insertBefore(childNode!.parentNode!, referenceNode);
         } else if (isCenter && centerLayout == "SWAP") {
-          this.tree.swapPairs(referenceNode, focusNodeWindow);
+          this.tree.swapPairs(referenceNode!, focusNodeWindow);
           this.renderTree("drag-swap");
         } else {
           // Child Node is a WINDOW
-          containerNode.insertBefore(childNode, referenceNode);
+          containerNode!.insertBefore(childNode, referenceNode);
           if (isLeft || isRight) {
-            containerNode.layout = LAYOUT_TYPES.HSPLIT;
+            containerNode!.layout = LAYOUT_TYPES.HSPLIT;
           } else if (isTop || isBottom) {
-            if (!stackedOrTabbed) containerNode.layout = LAYOUT_TYPES.VSPLIT;
+            if (!stackedOrTabbed) containerNode!.layout = LAYOUT_TYPES.VSPLIT;
           } else if (isCenter) {
-            if (containerNode.isHSplit() || containerNode.isVSplit()) {
-              containerNode.layout = LAYOUT_TYPES[centerLayout];
+            if (containerNode!.isHSplit() || containerNode!.isVSplit()) {
+              containerNode!.layout = (LAYOUT_TYPES as Record<string, string>)[centerLayout];
             }
           }
         }
@@ -2343,11 +2386,11 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  canMovePointerInsideNodeWindow(nodeWindow) {
+  canMovePointerInsideNodeWindow(nodeWindow: Node<any> | null) {
     if (nodeWindow && nodeWindow._data) {
-      const metaWindow = nodeWindow.nodeValue;
+      const metaWindow = nodeWindow.nodeValue as Meta.Window;
       const metaRect = metaWindow.get_frame_rect();
-      const pointerCoord = global.get_pointer();
+      const pointerCoord = global.get_pointer() as unknown as [number, number];
       return (
         metaRect &&
         // xdg-copy creates a 1x1 pixel window to capture mouse events.
@@ -2362,19 +2405,19 @@ export class WindowManager extends GObject.Object {
     return false;
   }
 
-  pointerIsOverParentDecoration(nodeWindow, pointerCoord) {
-    if (pointerCoord && nodeWindow && nodeWindow.parentNode) {
-      const node = nodeWindow.parentNode;
+  pointerIsOverParentDecoration(nodeWindow: Node<any>, pointerCoord: [number, number]) {
+    if (pointerCoord && nodeWindow && nodeWindow!.parentNode!) {
+      const node = nodeWindow!.parentNode!;
       if (node.isTabbed() || node.isStacked()) {
-        return Utils.rectContainsPoint(node.rect, pointerCoord);
+        return Utils.rectContainsPoint(node.rect!, pointerCoord);
       }
     }
     return false;
   }
 
-  getPointerPositionInside(nodeWindow) {
+  getPointerPositionInside(nodeWindow: Node<any> | null) {
     if (nodeWindow && nodeWindow._data) {
-      const metaWindow = nodeWindow.nodeValue;
+      const metaWindow = nodeWindow.nodeValue as Meta.Window;
       const metaRect = metaWindow.get_frame_rect();
       // on: last position of cursor inside window
       // on: titlebar: near to app toolbars, menubar, tabs, etc...
@@ -2391,11 +2434,11 @@ export class WindowManager extends GObject.Object {
     return null;
   }
 
-  storePointerLastPosition(nodeWindow) {
+  storePointerLastPosition(nodeWindow: Node<any> | null) {
     if (nodeWindow && nodeWindow._data) {
-      const metaWindow = nodeWindow.nodeValue;
+      const metaWindow = nodeWindow.nodeValue as Meta.Window;
       const metaRect = metaWindow.get_frame_rect();
-      const pointerCoord = global.get_pointer();
+      const pointerCoord = global.get_pointer() as unknown as [number, number];
       if (Utils.rectContainsPoint(metaRect, pointerCoord)) {
         const px = pointerCoord[0] - metaRect.x;
         const py = pointerCoord[1] - metaRect.y;
@@ -2407,10 +2450,13 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  findNodeWindowAtPointer(focusNodeWindow) {
-    const pointerCoord = global.get_pointer();
+  findNodeWindowAtPointer(focusNodeWindow: Node<any>) {
+    const pointerCoord = global.get_pointer() as unknown as [number, number];
 
-    const nodeWinAtPointer = this._findNodeWindowAtPointer(focusNodeWindow.nodeValue, pointerCoord);
+    const nodeWinAtPointer = this._findNodeWindowAtPointer(
+      focusNodeWindow.nodeValue as Meta.Window,
+      pointerCoord
+    );
     return nodeWinAtPointer;
   }
 
@@ -2428,7 +2474,7 @@ export class WindowManager extends GObject.Object {
     if (Main.overview.visible) return true;
 
     // Get the global mouse position
-    const pointer = global.get_pointer() as [number, number];
+    const pointer = global.get_pointer() as unknown as [number, number];
 
     const metaWindow = this._getMetaWindowAtPointer(pointer);
 
@@ -2456,6 +2502,7 @@ export class WindowManager extends GObject.Object {
     for (let i = windows.length - 1; i >= 0; i--) {
       const window = windows[i];
       const metaWindow = window.meta_window;
+      if (!metaWindow) continue;
 
       const { x: wx, y: wy, width, height } = metaWindow.get_frame_rect();
 
@@ -2473,7 +2520,7 @@ export class WindowManager extends GObject.Object {
    * Finds the NodeWindow under the Meta.Window and the
    * current pointer coordinates;
    */
-  _findNodeWindowAtPointer(metaWindow, pointer) {
+  _findNodeWindowAtPointer(metaWindow: Meta.Window, pointer: [number, number]) {
     if (!metaWindow) return undefined;
 
     const sortedWindows = this.sortedWindows;
@@ -2493,10 +2540,10 @@ export class WindowManager extends GObject.Object {
     return null;
   }
 
-  _handleGrabOpBegin(_display, _metaWindow, grabOp) {
+  _handleGrabOpBegin(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
     this.grabOp = grabOp;
     this.trackCurrentMonWs();
-    const focusMetaWindow = this.focusMetaWindow as Meta.Window | null;
+    const focusMetaWindow = this.focusMetaWindow;
 
     if (focusMetaWindow) {
       const focusNodeWindow = this.findNodeWindow(focusMetaWindow);
@@ -2524,7 +2571,7 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  _startLiveResizeLoop(focusNodeWindow) {
+  _startLiveResizeLoop(focusNodeWindow: Node<any>) {
     this._stopLiveResizeLoop();
 
     // Cache gaps once — they don't change during a resize
@@ -2533,7 +2580,7 @@ export class WindowManager extends GObject.Object {
     let lastHeight = focusNodeWindow.initRect?.height;
 
     this._liveResizeSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
-      const metaWindow = focusNodeWindow.nodeValue;
+      const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
       if (!metaWindow || !focusNodeWindow.grabMode) {
         this._liveResizeSrcId = 0;
         return GLib.SOURCE_REMOVE;
@@ -2569,10 +2616,10 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  _handleGrabOpEnd(_display, _metaWindow, grabOp) {
+  _handleGrabOpEnd(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
     this._stopLiveResizeLoop();
     this.unfreezeRender();
-    const focusMetaWindow = this.focusMetaWindow as Meta.Window | null;
+    const focusMetaWindow = this.focusMetaWindow;
     if (!focusMetaWindow) return;
     const focusNodeWindow = this.findNodeWindow(focusMetaWindow);
 
@@ -2594,7 +2641,7 @@ export class WindowManager extends GObject.Object {
           return !focusMetaWindow.is_maximized();
         } catch {
           // pre-49 fallback
-          return focusMetaWindow.get_maximized() === 0;
+          return (focusMetaWindow as AnvilMetaWindow).get_maximized() === 0;
         }
       })()
     ) {
@@ -2606,7 +2653,7 @@ export class WindowManager extends GObject.Object {
     this.nodeWinAtPointer = null;
   }
 
-  _grabCleanup(focusNodeWindow) {
+  _grabCleanup(focusNodeWindow: Node<any> | null) {
     this.cancelGrab = false;
     if (!focusNodeWindow) return;
     focusNodeWindow.initRect = null;
@@ -2629,17 +2676,19 @@ export class WindowManager extends GObject.Object {
     return this.kbd.allowDragDropTile();
   }
 
-  _handleResizing(focusNodeWindow) {
+  _handleResizing(focusNodeWindow: Node<any> | null) {
     if (!focusNodeWindow || focusNodeWindow.isFloat()) return;
     const grabOps = Utils.decomposeGrabOp(this.grabOp);
     for (const grabOp of grabOps) {
       const initGrabOp = focusNodeWindow.initGrabOp;
       const direction = Utils.directionFromGrab(grabOp);
       const orientation = Utils.orientationFromGrab(grabOp);
-      let parentNodeForFocus = focusNodeWindow.parentNode;
+      let parentNodeForFocus = focusNodeWindow!.parentNode!;
       const position = Utils.positionFromGrabOp(grabOp);
       // normalize the rect without gaps
-      const frameRect = (this.focusMetaWindow as Meta.Window | null).get_frame_rect();
+      const focusMeta = this.focusMetaWindow;
+      if (!focusMeta) return;
+      const frameRect = focusMeta.get_frame_rect();
       const gaps = this.calculateGaps(focusNodeWindow);
       const currentRect = Utils.removeGapOnRect(frameRect, gaps);
       let firstRect;
@@ -2651,11 +2700,11 @@ export class WindowManager extends GObject.Object {
         // the direction is null so do not process yet below.
         return;
       } else {
-        resizePairForWindow = this.tree.nextVisible(focusNodeWindow, direction);
+        resizePairForWindow = this.tree.nextVisible(focusNodeWindow, direction!);
       }
 
       const sameParent = resizePairForWindow
-        ? resizePairForWindow.parentNode === focusNodeWindow.parentNode
+        ? resizePairForWindow.parentNode === focusNodeWindow!.parentNode!
         : false;
 
       if (orientation === ORIENTATION_TYPES.HORIZONTAL) {
@@ -2681,12 +2730,12 @@ export class WindowManager extends GObject.Object {
             return;
           }
 
-          parentRect = parentNodeForFocus.rect;
-          const changePx = currentRect.width - firstRect.width;
-          const firstPercent = (firstRect.width + changePx) / parentRect.width;
-          const secondPercent = (secondRect.width - changePx) / parentRect.width;
+          parentRect = parentNodeForFocus.rect!;
+          const changePx = currentRect.width - firstRect!.width;
+          const firstPercent = (firstRect!.width + changePx) / parentRect.width;
+          const secondPercent = (secondRect!.width - changePx) / parentRect.width;
           focusNodeWindow.percent = firstPercent;
-          resizePairForWindow.percent = secondPercent;
+          resizePairForWindow!.percent = secondPercent;
         } else {
           // use the parent pairs (con to another con or window)
           if (resizePairForWindow && resizePairForWindow.parentNode) {
@@ -2694,22 +2743,22 @@ export class WindowManager extends GObject.Object {
               return;
             }
             const firstWindowRect = focusNodeWindow.initRect;
-            let index = resizePairForWindow.index;
+            let index: number | null = resizePairForWindow.index;
             if (position === POSITION.BEFORE) {
               // Find the opposite node
-              index = index + 1;
+              index = index! + 1;
             } else {
-              index = index - 1;
+              index = index! - 1;
             }
-            parentNodeForFocus = resizePairForWindow.parentNode.childNodes[index];
+            parentNodeForFocus = resizePairForWindow.parentNode.childNodes[index!];
             firstRect = parentNodeForFocus.rect;
             secondRect = resizePairForWindow.rect;
             if (!firstRect || !secondRect) {
               return;
             }
 
-            parentRect = parentNodeForFocus.parentNode.rect;
-            const changePx = currentRect.width - firstWindowRect.width;
+            parentRect = parentNodeForFocus.parentNode!.rect!;
+            const changePx = currentRect.width - firstWindowRect!.width;
             const firstPercent = (firstRect.width + changePx) / parentRect.width;
             const secondPercent = (secondRect.width - changePx) / parentRect.width;
             parentNodeForFocus.percent = firstPercent;
@@ -2736,12 +2785,12 @@ export class WindowManager extends GObject.Object {
           if (!firstRect || !secondRect) {
             return;
           }
-          parentRect = parentNodeForFocus.rect;
-          const changePx = currentRect.height - firstRect.height;
-          const firstPercent = (firstRect.height + changePx) / parentRect.height;
-          const secondPercent = (secondRect.height - changePx) / parentRect.height;
+          parentRect = parentNodeForFocus.rect!;
+          const changePx = currentRect.height - firstRect!.height;
+          const firstPercent = (firstRect!.height + changePx) / parentRect.height;
+          const secondPercent = (secondRect!.height - changePx) / parentRect.height;
           focusNodeWindow.percent = firstPercent;
-          resizePairForWindow.percent = secondPercent;
+          resizePairForWindow!.percent = secondPercent;
         } else {
           // use the parent pairs (con to another con or window)
           if (resizePairForWindow && resizePairForWindow.parentNode) {
@@ -2749,22 +2798,22 @@ export class WindowManager extends GObject.Object {
               return;
             }
             const firstWindowRect = focusNodeWindow.initRect;
-            let index = resizePairForWindow.index;
+            let index: number | null = resizePairForWindow.index;
             if (position === POSITION.BEFORE) {
               // Find the opposite node
-              index = index + 1;
+              index = index! + 1;
             } else {
-              index = index - 1;
+              index = index! - 1;
             }
-            parentNodeForFocus = resizePairForWindow.parentNode.childNodes[index];
+            parentNodeForFocus = resizePairForWindow.parentNode.childNodes[index!];
             firstRect = parentNodeForFocus.rect;
             secondRect = resizePairForWindow.rect;
             if (!firstRect || !secondRect) {
               return;
             }
 
-            parentRect = parentNodeForFocus.parentNode.rect;
-            const changePx = currentRect.height - firstWindowRect.height;
+            parentRect = parentNodeForFocus.parentNode!.rect!;
+            const changePx = currentRect.height - firstWindowRect!.height;
             const firstPercent = (firstRect.height + changePx) / parentRect.height;
             const secondPercent = (secondRect.height - changePx) / parentRect.height;
             parentNodeForFocus.percent = firstPercent;
@@ -2780,7 +2829,7 @@ export class WindowManager extends GObject.Object {
    * EXCEPT the one currently being dragged (GNOME owns its position).
    * Bypasses this.move() which is blocked by metaWindow.grabbed on Wayland.
    */
-  _liveResizeNeighbors(draggingNodeWindow) {
+  _liveResizeNeighbors(draggingNodeWindow: Node<any>) {
     const draggingMetaWin = draggingNodeWindow.nodeValue as Meta.Window;
 
     // Only reprocess the affected container subtree, not the entire tree
@@ -2799,19 +2848,21 @@ export class WindowManager extends GObject.Object {
       if (r.width > 0 && r.height > 0) {
         // Call move_resize_frame directly — this.move() bails out because
         // metaWindow.grabbed is true for all windows during a Wayland grab
-        const actor = nodeWin.nodeValue.get_compositor_private();
+        const actor = (
+          nodeWin.nodeValue as Meta.Window
+        ).get_compositor_private() as Clutter.Actor | null;
         if (!actor) return;
         actor.remove_all_transitions();
-        nodeWin.nodeValue.move_resize_frame(true, r.x, r.y, r.width, r.height);
+        (nodeWin.nodeValue as Meta.Window).move_resize_frame(true, r.x, r.y, r.width, r.height);
       }
     });
   }
 
-  _handleMoving(focusNodeWindow) {
+  _handleMoving(focusNodeWindow: Node<any> | null) {
     if (!focusNodeWindow || focusNodeWindow.mode !== WINDOW_MODES.GRAB_TILE) return;
 
     const nodeWinAtPointer = this.findNodeWindowAtPointer(focusNodeWindow);
-    this.nodeWinAtPointer = nodeWinAtPointer;
+    this.nodeWinAtPointer = nodeWinAtPointer ?? null;
 
     const hidePreview = () => {
       if (focusNodeWindow.previewHint) {
@@ -2836,7 +2887,7 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  isFloatingExempt(metaWindow) {
+  isFloatingExempt(metaWindow: Meta.Window) {
     if (!metaWindow) return true;
     const windowTitle = metaWindow.get_title();
     const windowType = metaWindow.get_window_type();
@@ -2865,7 +2916,7 @@ export class WindowManager extends GObject.Object {
           } else {
             const titles = kf.wmTitle.split(",");
             matchTitle =
-              titles.filter((t) => {
+              titles.filter((t: string) => {
                 if (windowTitle) {
                   if (t.startsWith("!")) {
                     return !windowTitle.includes(t.slice(1));
@@ -2878,10 +2929,10 @@ export class WindowManager extends GObject.Object {
           }
         }
         if (kf.wmClass) {
-          matchClass = kf.wmClass.includes(metaWindow.get_wm_class());
+          matchClass = kf.wmClass.includes(metaWindow.get_wm_class() ?? "");
         }
         if (kf.wmId) {
-          matchId = kf.wmId === metaWindow.get_id();
+          matchId = kf.wmId === String(metaWindow.get_id());
         }
 
         return (!kf.wmId || matchId) && (!kf.wmTitle || matchTitle) && matchClass;
@@ -2891,7 +2942,7 @@ export class WindowManager extends GObject.Object {
   }
 
   _getDragDropCenterPreviewStyle() {
-    const centerLayout = (this.ext.settings as Gio.Settings).get_string("dnd-center-layout");
+    const centerLayout = this.ext.settings.get_string("dnd-center-layout");
     return `window-tilepreview-${centerLayout}`;
   }
 
@@ -2933,8 +2984,7 @@ export class WindowManager extends GObject.Object {
    */
   reloadWindowOverrides() {
     // Get fresh data from the ConfigManager
-    const freshProps = (this.ext.configMgr as import("../shared/settings.js").ConfigManager)
-      .windowProps;
+    const freshProps = this.ext.configMgr.windowProps;
     if (freshProps) {
       this.windowProps = freshProps;
       this.windowProps.overrides = this.windowProps.overrides.filter((override) => !override.wmId);

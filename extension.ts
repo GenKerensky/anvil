@@ -28,8 +28,12 @@ export default class AnvilExtension extends Extension {
     Logger.info("enable");
 
     if (this.settings.get_boolean("test-mode")) {
-      (global as any).context.unsafe_mode = true;
-      (global as any).__anvil_test_state = this;
+      const g = global as unknown as {
+        context: { unsafe_mode: boolean };
+        __anvil_test_state: unknown;
+      };
+      g.context.unsafe_mode = true;
+      g.__anvil_test_state = this;
     }
 
     this.configMgr = new ConfigManager(this as { dir: Gio.File });
@@ -49,8 +53,9 @@ export default class AnvilExtension extends Extension {
   disable() {
     Logger.info("disable");
 
-    if ((global as any).__anvil_test_state === this) {
-      (global as any).__anvil_test_state = null;
+    const g = global as unknown as { __anvil_test_state: unknown };
+    if (g.__anvil_test_state === this) {
+      g.__anvil_test_state = null;
     }
 
     if (this._sessionId) {
@@ -61,15 +66,15 @@ export default class AnvilExtension extends Extension {
     this._removeIndicator();
     this.extWm?.disable();
     this.keybindings?.disable();
-    this.keybindings = null as any;
-    this.extWm = null as any;
-    this.theme = null as any;
-    this.configMgr = null as any;
-    this.settings = null as any;
-    this.kbdSettings = null as any;
+    this.keybindings = null as unknown as Keybindings;
+    this.extWm = null as unknown as WindowManager;
+    this.theme = null as unknown as ExtensionThemeManager;
+    this.configMgr = null as unknown as ConfigManager;
+    this.settings = null as unknown as Gio.Settings;
+    this.kbdSettings = null as unknown as Gio.Settings;
   }
 
-  _onSessionModeChanged(session: any) {
+  _onSessionModeChanged(session: { currentMode: string; parentMode: string }) {
     if (session.currentMode === "user" || session.parentMode === "user") {
       Logger.info("user on session change");
       this._addIndicator();
@@ -85,14 +90,18 @@ export default class AnvilExtension extends Extension {
     this.indicator = new FeatureIndicator(this);
     const featureToggle = new FeatureMenuToggle(this);
     this.indicator.quickSettingsItems.push(featureToggle);
-    Main.panel.statusArea.quickSettings.addExternalIndicator(this.indicator as any);
+    Main.panel.statusArea.quickSettings.addExternalIndicator(
+      this.indicator as unknown as Parameters<
+        typeof Main.panel.statusArea.quickSettings.addExternalIndicator
+      >[0]
+    );
   }
 
   _removeIndicator() {
     if (!this.indicator) return;
     this.indicator.quickSettingsItems.forEach((item) => item.destroy());
     this.indicator.quickSettingsItems.length = 0;
-    this.indicator.destroy();
+    (this.indicator as { destroy(): void }).destroy();
     this.indicator = null;
   }
 
@@ -113,20 +122,36 @@ export default class AnvilExtension extends Extension {
 
   getTestState(): string | null {
     if (!this.settings?.get_boolean("test-mode")) return null;
-    const wm = this.extWm as any;
+    const wm = this.extWm as { _tree?: unknown } | null;
     if (!wm) return JSON.stringify({ error: "WindowManager not initialized" });
 
-    const serializeNode = (node: any): any => {
+    interface SerializedNode {
+      type: string;
+      layout: string | null;
+      mode: string | null;
+      childCount: number;
+      children: (SerializedNode | null)[];
+      wmClass?: string | null;
+    }
+
+    const serializeNode = (node: unknown): SerializedNode | null => {
       if (!node) return null;
-      const data: any = {
-        type: node._type,
-        layout: node.layout ?? null,
-        mode: node.mode ?? null,
-        childCount: node._nodes?.length ?? 0,
-        children: (node._nodes ?? []).map(serializeNode),
+      const n = node as {
+        _type: string;
+        layout?: string;
+        mode?: string;
+        _nodes?: unknown[];
+        nodeValue?: { wm_class?: string | null };
       };
-      if (node._type === "WINDOW" && node.nodeValue) {
-        data.wmClass = node.nodeValue.wm_class ?? null;
+      const data: SerializedNode = {
+        type: n._type,
+        layout: n.layout ?? null,
+        mode: n.mode ?? null,
+        childCount: n._nodes?.length ?? 0,
+        children: (n._nodes ?? []).map(serializeNode),
+      };
+      if (n._type === "WINDOW" && n.nodeValue) {
+        data.wmClass = n.nodeValue.wm_class ?? null;
       }
       return data;
     };

@@ -17,6 +17,7 @@
  */
 
 // Gnome imports
+import Adw from "gi://Adw";
 import Gdk from "gi://Gdk";
 import Gtk from "gi://Gtk";
 
@@ -28,13 +29,13 @@ import { SettingsPage } from "./lib/prefs/settings.js";
 import { FloatingPage } from "./lib/prefs/floating.js";
 
 export default class AnvilExtensionPreferences extends ExtensionPreferences {
-  window!: any;
+  window!: Adw.PreferencesWindow;
 
   settings = this.getSettings();
 
   kbdSettings = this.getSettings("org.gnome.shell.extensions.anvil.keybindings");
 
-  constructor(args) {
+  constructor(args: ConstructorParameters<typeof ExtensionPreferences>[0]) {
     super(args);
     const iconPath = this.dir.get_child("resources").get_child("icons").get_path() ?? "";
     const display = Gdk.Display.get_default();
@@ -44,14 +45,12 @@ export default class AnvilExtensionPreferences extends ExtensionPreferences {
     }
   }
 
-  async fillPreferencesWindow(window) {
+  async fillPreferencesWindow(window: Adw.PreferencesWindow) {
     this.window = window;
-    window._settings = this.settings;
-    window._kbdSettings = this.kbdSettings;
-    window.add(new SettingsPage(this as any));
-    window.add(new AppearancePage(this as any));
-    window.add(new KeyboardPage(this as any));
-    window.add(new FloatingPage(this as any));
+    window.add(new SettingsPage({ settings: this.settings, window, metadata: this.metadata }));
+    window.add(new AppearancePage({ settings: this.settings, dir: this.dir }));
+    window.add(new KeyboardPage({ kbdSettings: this.kbdSettings }));
+    window.add(new FloatingPage({ settings: this.settings, dir: this.dir }));
     window.search_enabled = true;
     window.can_navigate_back = true;
   }

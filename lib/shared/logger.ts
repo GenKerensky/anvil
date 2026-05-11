@@ -16,10 +16,12 @@
  *
  */
 
+import Gio from "gi://Gio";
+
 import { production } from "./settings.js";
 
 export class Logger {
-  static #settings;
+  static #settings: Gio.Settings;
 
   static LOG_LEVELS = {
     OFF: 0,
@@ -32,7 +34,7 @@ export class Logger {
     ALL: 7,
   };
 
-  static init(settings) {
+  static init(settings: Gio.Settings) {
     this.#settings = settings;
   }
 
@@ -46,35 +48,35 @@ export class Logger {
   }
 
   // TODO: use console.* methods
-  static format(msg, ...params) {
-    return params.reduce((acc, val) => acc.replace("{}", val), msg);
+  static format(msg: string, ...params: string[]) {
+    return params.reduce((acc: string, val) => acc.replace("{}", val), msg);
   }
 
-  static fatal(...args) {
-    if (this.#level > Logger.LOG_LEVELS.OFF) log(`[Anvil] [FATAL]`, ...args);
+  static fatal(...args: unknown[]) {
+    if (this.#level > Logger.LOG_LEVELS.OFF) log(`[Anvil] [FATAL]`, ...(args as any[]));
   }
 
-  static error(...args) {
-    if (this.#level > Logger.LOG_LEVELS.FATAL) log(`[Anvil] [ERROR]`, ...args);
+  static error(...args: unknown[]) {
+    if (this.#level > Logger.LOG_LEVELS.FATAL) log(`[Anvil] [ERROR]`, ...(args as any[]));
   }
 
-  static warn(...args) {
-    if (this.#level > Logger.LOG_LEVELS.ERROR) log(`[Anvil] [WARN]`, ...args);
+  static warn(...args: unknown[]) {
+    if (this.#level > Logger.LOG_LEVELS.ERROR) log(`[Anvil] [WARN]`, ...(args as any[]));
   }
 
-  static info(...args) {
-    if (this.#level > Logger.LOG_LEVELS.WARN) log(`[Anvil] [INFO]`, ...args);
+  static info(...args: unknown[]) {
+    if (this.#level > Logger.LOG_LEVELS.WARN) log(`[Anvil] [INFO]`, ...(args as any[]));
   }
 
-  static debug(...args) {
-    if (this.#level > Logger.LOG_LEVELS.INFO) log(`[Anvil] [DEBUG]`, ...args);
+  static debug(...args: unknown[]) {
+    if (this.#level > Logger.LOG_LEVELS.INFO) log(`[Anvil] [DEBUG]`, ...(args as any[]));
   }
 
-  static trace(...args) {
-    if (this.#level > Logger.LOG_LEVELS.DEBUG) log(`[Anvil] [TRACE]`, ...args);
+  static trace(...args: unknown[]) {
+    if (this.#level > Logger.LOG_LEVELS.DEBUG) log(`[Anvil] [TRACE]`, ...(args as any[]));
   }
 
-  static log(...args) {
-    if (this.#level > Logger.LOG_LEVELS.OFF) log(`[Anvil] [LOG]`, ...args);
+  static log(...args: unknown[]) {
+    if (this.#level > Logger.LOG_LEVELS.OFF) log(`[Anvil] [LOG]`, ...(args as any[]));
   }
 }

@@ -1,6 +1,6 @@
-// @ts-nocheck
 import GObject from "gi://GObject";
 import Gio from "gi://Gio";
+import St from "gi://St";
 
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { gettext as _ } from "resource:///org/gnome/shell/extensions/extension.js";
@@ -25,13 +25,11 @@ class SettingsPopupSwitch extends PopupSwitchMenuItem {
   extension: AnvilExtension;
 
   constructor(title: string, extension: AnvilExtension, bind: string) {
-    const active = !!(extension.settings as Gio.Settings).get_boolean(bind);
+    const active = !!extension.settings.get_boolean(bind);
     super(title, active);
     this.extension = extension;
     Logger.info(bind, active);
-    this.connect("toggled", (item) =>
-      (this.extension.settings as Gio.Settings).set_boolean(bind, item.state)
-    );
+    this.connect("toggled", (item) => this.extension.settings.set_boolean(bind, item.state));
   }
 }
 
@@ -40,7 +38,11 @@ export class FeatureMenuToggle extends QuickMenuToggle {
     GObject.registerClass(this);
   }
 
-  constructor(extension) {
+  extension!: AnvilExtension;
+  _singleSwitch!: SettingsPopupSwitch;
+  _focusHintSwitch!: SettingsPopupSwitch;
+  _focusMovePointer!: SettingsPopupSwitch;
+  constructor(extension: AnvilExtension) {
     const title = _("Tiling");
     const initSettings = Utils.isGnomeGTE(45)
       ? { title, iconName, toggleMode: true }
@@ -93,10 +95,9 @@ export class FeatureMenuToggle extends QuickMenuToggle {
     // Ensure the settings are unavailable when the screen is locked
     settingsItem.visible = Main.sessionMode.allowSettings;
     (
-      this.menu as unknown as Record<
-        string,
-        import("resource:///org/gnome/shell/ui/popupMenu.js").PopupMenuItem
-      >
+      this.menu as unknown as {
+        _settingsActions: Record<string, unknown>;
+      }
     )._settingsActions[this.extension.uuid] = settingsItem;
   }
 }
@@ -106,13 +107,17 @@ export class FeatureIndicator extends SystemIndicator {
     GObject.registerClass(this);
   }
 
-  constructor(extension) {
+  extension!: AnvilExtension;
+  _indicator!: St.Icon;
+  quickSettingsItems: FeatureMenuToggle[] = [];
+
+  constructor(extension: AnvilExtension) {
     super();
 
     this.extension = extension;
 
     // Create the icon for the indicator
-    this._indicator = this._addIndicator();
+    this._indicator = (this as unknown as { _addIndicator: () => St.Icon })._addIndicator();
     this._indicator.icon_name = iconName;
 
     const tilingModeEnabled = this.extension.settings.get_boolean("tiling-mode-enabled");
@@ -120,7 +125,7 @@ export class FeatureIndicator extends SystemIndicator {
 
     this._indicator.visible = tilingModeEnabled && quickSettingsEnabled;
 
-    this.extension.settings.connect("changed", (_, name) => {
+    this.extension.settings.connect("changed", (_settings: Gio.Settings, name: string) => {
       switch (name) {
         case "tiling-mode-enabled":
         case "quick-settings-enabled":

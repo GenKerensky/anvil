@@ -49,22 +49,6 @@ export default [
     },
   },
 
-  // Files with @ts-nocheck (GObject property patterns — strict mode TODO)
-  {
-    files: [
-      "lib/extension/window.ts",
-      "lib/extension/tree.ts",
-      "lib/extension/keybindings.ts",
-      "lib/extension/indicator.ts",
-      "lib/shared/theme.ts",
-      "lib/prefs/floating.ts",
-      "lib/extension/extension-theme-manager.ts",
-    ],
-    rules: {
-      "@typescript-eslint/ban-ts-comment": ["error", { "ts-nocheck": false }],
-    },
-  },
-
   // Third-party CSS parser
   {
     files: ["lib/css/index.ts"],

@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * This file is part of the Anvil extension for GNOME
  *
@@ -19,12 +18,14 @@
 
 // Gnome imports
 import Clutter from "gi://Clutter";
-
 import Gio from "gi://Gio";
 import GObject from "gi://GObject";
-
 import Meta from "gi://Meta";
+// Used in type annotations: import('gi://Mtk').Rectangle; also bootstraps Meta namespace transitively
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import Mtk from "gi://Mtk";
 import Shell from "gi://Shell";
+import type ShellNS from "@girs/shell-18";
 import St from "gi://St";
 
 // Shared state
@@ -55,6 +56,22 @@ export const ORIENTATION_TYPES = Utils.createEnum(["NONE", "HORIZONTAL", "VERTIC
 
 export const POSITION = Utils.createEnum(["BEFORE", "AFTER", "UNKNOWN"]);
 
+export interface RectLike {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/**
+ * Type guard interface: when isWindow() returns true, the node can be
+ * treated as having Meta.Window data for _data and nodeValue.
+ */
+interface WindowNode extends Node<any> {
+  _data: Meta.Window;
+  nodeValue: Meta.Window;
+}
+
 /**
  * The Node data representation of the following elements in the user's display:
  *
@@ -73,18 +90,43 @@ export class Node<T extends string> extends GObject.Object {
   _data: Meta.Window | string | St.Bin | null;
   _parent: Node<T> | null;
   _nodes: Node<T>[];
-  mode;
-  percent;
-  _rect;
-  tab;
-  decoration;
-  app;
-  pointer;
-  actorBin: St.Bin | null;
-  settings: Gio.Settings | null;
+  mode: string = "";
+  percent: number = 0;
+  _rect: RectLike | null = null;
+  tab: St.BoxLayout | null = null;
+  decoration: St.BoxLayout | null = null;
+  app: ShellNS.App | null = null;
+  /** Clutter.Actor for the compositor — only for WINDOW types */
+  _actor: Clutter.Actor | null = null;
+  /** Render rect set by processGap — used by processNode rendering */
+  renderRect?: RectLike;
+  pointer: { x: number; y: number } | null = null;
+  actorBin!: St.Bin | null;
+  settings!: Gio.Settings | null;
   layout: string | undefined;
+  lastTabFocus: any = null;
 
-  constructor(type, data) {
+  // --- WindowManager monkey-patched state (set at runtime) ---
+  /** Previous layout before stacked/tabbed toggle */
+  prevLayout?: string;
+  /** Was floating before mass-float operation */
+  prevFloat?: boolean;
+  /** Grab mode during grab operations (GRAB_TYPES) */
+  grabMode?: string | null;
+  /** Initial grab op code */
+  initGrabOp?: Meta.GrabOp | null;
+  /** Initial rect before resize/drag */
+  initRect?: RectLike | null;
+  /** Tab style marker for background windows */
+  backgroundTab?: boolean;
+  /** Preview hint actor during drag-drop tiling */
+  previewHint?: St.Bin | null;
+  /** Create container flag during drag-drop */
+  createCon?: boolean;
+  /** Detach window flag during drag-drop */
+  detachWindow?: boolean;
+
+  constructor(type: T, data: Meta.Window | string | St.Bin | null) {
     super();
     // TODO - move to GObject property definitions?
     this._type = type; // see NODE_TYPES
@@ -137,8 +179,9 @@ export class Node<T extends string> extends GObject.Object {
     }
   }
 
-  set rect(rect) {
+  set rect(rect: RectLike | null) {
     this._rect = rect;
+    if (!rect) return;
     switch (this.nodeType) {
       case NODE_TYPES.WINDOW:
         break;
@@ -147,8 +190,8 @@ export class Node<T extends string> extends GObject.Object {
       case NODE_TYPES.ROOT:
       case NODE_TYPES.WORKSPACE:
         if (this.actor) {
-          this.actor.set_size(rect.width, rect.height);
-          this.actor.set_position(rect.x, rect.y);
+          (this.actor as Clutter.Actor).set_size(rect.width, rect.height);
+          (this.actor as Clutter.Actor).set_position(rect.x, rect.y);
         }
         break;
     }
@@ -162,11 +205,11 @@ export class Node<T extends string> extends GObject.Object {
     return this._nodes;
   }
 
-  set childNodes(nodes) {
+  set childNodes(nodes: Node<T>[]) {
     this._nodes = nodes;
   }
 
-  get firstChild() {
+  get firstChild(): Node<T> | null {
     if (this._nodes && this._nodes.length >= 1) {
       return this._nodes[0];
     }
@@ -199,14 +242,14 @@ export class Node<T extends string> extends GObject.Object {
     return null;
   }
 
-  get lastChild() {
+  get lastChild(): Node<T> | null {
     if (this._nodes && this._nodes.length >= 1) {
       return this._nodes[this._nodes.length - 1];
     }
     return null;
   }
 
-  get nextSibling() {
+  get nextSibling(): Node<T> | null {
     if (this.parentNode) {
       const idx = this.index;
       if (idx !== null && this.parentNode.lastChild !== this) {
@@ -228,11 +271,11 @@ export class Node<T extends string> extends GObject.Object {
     return this._parent;
   }
 
-  set parentNode(node) {
+  set parentNode(node: Node<T> | null) {
     this._parent = node;
   }
 
-  get previousSibling() {
+  get previousSibling(): Node<T> | null {
     if (this.parentNode) {
       const idx = this.index;
       if (idx !== null && this.parentNode.firstChild !== this) {
@@ -242,7 +285,7 @@ export class Node<T extends string> extends GObject.Object {
     return null;
   }
 
-  appendChild(node) {
+  appendChild(node: Node<any>) {
     if (!node) return null;
     if (node.parentNode) node.parentNode.removeChild(node);
     this.childNodes.push(node);
@@ -254,33 +297,33 @@ export class Node<T extends string> extends GObject.Object {
    * Checks if node is a descendant of this,
    * or a descendant of its childNodes, etc
    */
-  contains(node) {
+  contains(node: Node<any>) {
     if (!node) return false;
     const searchNode = this.getNodeByValue(node.nodeValue);
     return searchNode ? true : false;
   }
 
-  getNodeByLayout(layout) {
+  getNodeByLayout(layout: string) {
     const results = this._search(layout, "LAYOUT");
     return results;
   }
 
-  getNodeByMode(mode) {
+  getNodeByMode(mode: string) {
     const results = this._search(mode, "MODE");
     return results;
   }
 
-  getNodeByValue(value) {
+  getNodeByValue(value: unknown) {
     const results = this._search(value, "VALUE");
     return results && results.length >= 1 ? results[0] : null;
   }
 
-  getNodeByType(type) {
+  getNodeByType(type: string) {
     const results = this._search(type, "TYPE");
     return results;
   }
 
-  insertBefore(newNode, childNode) {
+  insertBefore(newNode: Node<any>, childNode: Node<any> | null) {
     if (!newNode) return null;
     if (newNode === childNode) return null;
     if (!childNode) {
@@ -291,9 +334,9 @@ export class Node<T extends string> extends GObject.Object {
     if (newNode.parentNode) newNode.parentNode.removeChild(newNode);
     const index = childNode.index;
 
-    if (childNode.index === 0) {
+    if (index === 0) {
       this.childNodes.unshift(newNode);
-    } else if (childNode.index > 0) {
+    } else if (index !== null && index > 0) {
       this.childNodes.splice(index, 0, newNode);
     }
     newNode.parentNode = this;
@@ -301,7 +344,7 @@ export class Node<T extends string> extends GObject.Object {
     return newNode;
   }
 
-  isLayout(name) {
+  isLayout(name: string) {
     const layout = this.layout;
     if (!layout) return false;
 
@@ -324,14 +367,15 @@ export class Node<T extends string> extends GObject.Object {
     return this.isLayout(LAYOUT_TYPES.TABBED);
   }
 
-  isType(name) {
+  isType(name: string) {
     const type = this.nodeType;
     if (!type) return false;
 
     return name === type;
   }
 
-  isWindow() {
+  /** @returns {this is WindowNode} */
+  isWindow(): this is WindowNode {
     return this.isType(NODE_TYPES.WINDOW);
   }
 
@@ -351,7 +395,7 @@ export class Node<T extends string> extends GObject.Object {
     return this.isType(NODE_TYPES.ROOT);
   }
 
-  isMode(name) {
+  isMode(name: string) {
     const mode = this.mode;
     if (!name) return false;
 
@@ -370,7 +414,7 @@ export class Node<T extends string> extends GObject.Object {
     return this.isMode(Window.WINDOW_MODES.GRAB_TILE);
   }
 
-  removeChild(node) {
+  removeChild(node: Node<any>) {
     if (node.isTabbed() && node.decoration) {
       node.decoration.hide();
       node.decoration.destroy_all_children();
@@ -383,8 +427,9 @@ export class Node<T extends string> extends GObject.Object {
       // Since contains() tries to find node on all descendants,
       // detach only from the immediate parent
       const parentNode = node.parentNode;
-      refNode = parentNode.childNodes.splice(node.index, 1);
-      refNode.parentNode = null;
+      if (!parentNode || node.index === null) return null;
+      refNode = parentNode.childNodes.splice(node.index, 1)[0];
+      if (refNode) refNode.parentNode = null;
     }
     if (!refNode) {
       throw `NodeNotFound ${node}`;
@@ -395,9 +440,9 @@ export class Node<T extends string> extends GObject.Object {
   /**
    * Backend for getNodeBy[attribute]. It is similar to DOM.getElementBy functions
    */
-  _search(term, criteria) {
-    const results = [];
-    const searchFn = (candidate) => {
+  _search(term: any, criteria: string) {
+    const results: Node<any>[] = [];
+    const searchFn = (candidate: Node<any>) => {
       if (criteria) {
         switch (criteria) {
           case "VALUE":
@@ -432,11 +477,11 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   // start walking from root and all child nodes
-  _traverseBreadthFirst(callback) {
-    const queue = new Queue();
+  _traverseBreadthFirst(callback: (node: Node<any>) => void) {
+    const queue = new Queue<Node<any>>();
     queue.enqueue(this);
 
-    let currentNode = queue.dequeue();
+    let currentNode: Node<any> | undefined = queue.dequeue();
 
     while (currentNode) {
       for (let i = 0, length = currentNode.childNodes.length; i < length; i++) {
@@ -449,8 +494,8 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   // start walking from bottom to root
-  _traverseDepthFirst(callback) {
-    const recurse = (currentNode) => {
+  _traverseDepthFirst(callback: (node: Node<any>) => void) {
+    const recurse = (currentNode: Node<any>) => {
       for (let i = 0, length = currentNode.childNodes.length; i < length; i++) {
         recurse(currentNode.childNodes[i]);
       }
@@ -460,7 +505,7 @@ export class Node<T extends string> extends GObject.Object {
     recurse(this);
   }
 
-  _walk(callback, traversal) {
+  _walk(callback: (node: Node<any>) => void, traversal: (cb: (node: Node<any>) => void) => void) {
     traversal.call(this, callback);
   }
 
@@ -468,7 +513,7 @@ export class Node<T extends string> extends GObject.Object {
     if (this.isWindow()) {
       const windowTracker = Shell.WindowTracker.get_default();
       const metaWin = this.nodeValue;
-      const app = windowTracker.get_window_app(metaWin);
+      const app = windowTracker.get_window_app(metaWin) as ShellNS.App;
       this.app = app;
     }
   }
@@ -519,7 +564,7 @@ export class Node<T extends string> extends GObject.Object {
       metaWin.delete(global.get_current_time());
     };
 
-    const middleClickCloseFn = (_, event) => {
+    const middleClickCloseFn = (_: Clutter.Actor, event: Clutter.Event) => {
       if (event.get_button() === Clutter.BUTTON_MIDDLE) {
         metaWin.delete(global.get_current_time());
       }
@@ -541,8 +586,8 @@ export class Node<T extends string> extends GObject.Object {
   _createDecoration() {
     if (this.decoration) return;
     const decoration = new St.BoxLayout();
-    decoration.type = "anvil-deco";
-    decoration.parentNode = this;
+    (decoration as any).type = "anvil-deco";
+    (decoration as any).parentNode = this;
     const globalWinGrp = global.window_group;
     decoration.style_class = "window-tabbed-bg";
 
@@ -556,7 +601,7 @@ export class Node<T extends string> extends GObject.Object {
 
   _getTitle() {
     if (this.isWindow()) {
-      return this.nodeValue.title ? this.nodeValue.title : this.app.get_name();
+      return this.nodeValue.title ? this.nodeValue.title : this.app!.get_name();
     }
     return null;
   }
@@ -576,15 +621,15 @@ export class Node<T extends string> extends GObject.Object {
     }
   }
 
-  render() {
+  render(_from?: any) {
     // Always update the title for the tab
     if (this.tab !== null && this.tab !== undefined) {
       const titleLabel = this.tab.get_child_at_index(1);
-      if (titleLabel) titleLabel.label = this._getTitle();
+      if (titleLabel) (titleLabel as St.Button).label = this._getTitle()!;
     }
   }
 
-  set float(value) {
+  set float(value: boolean) {
     if (this.isWindow()) {
       const metaWindow = this.nodeValue;
       const floatAlwaysOnTop = this.settings?.get_boolean("float-always-on-top-enabled") ?? false;
@@ -602,7 +647,7 @@ export class Node<T extends string> extends GObject.Object {
     }
   }
 
-  set tile(value) {
+  set tile(value: boolean) {
     this.float = !value;
   }
 
@@ -621,10 +666,12 @@ export class Node<T extends string> extends GObject.Object {
 /**
  * An implementation of Queue using arrays
  */
-export class Queue extends GObject.Object {
+export class Queue<T = any> extends GObject.Object {
   static {
     GObject.registerClass(this);
   }
+
+  private _elements: T[] = [];
 
   constructor() {
     super();
@@ -635,19 +682,25 @@ export class Queue extends GObject.Object {
     return this._elements.length;
   }
 
-  enqueue(item) {
+  enqueue(item: T) {
     this._elements.push(item);
   }
 
-  dequeue() {
+  dequeue(): T | undefined {
     return this._elements.shift();
   }
 }
 
-export class Tree extends Node {
+export class Tree extends Node<string> {
   static {
     GObject.registerClass(this);
   }
+  _extWm!: import("./window.js").WindowManager;
+  ext!: import("../../extension.js").default;
+  windows: Record<string, any> = {};
+  allNodeWindows: any[] = [];
+  attachNode: Node<any> | null = null;
+  defaultStackHeight!: number;
 
   constructor(extWm: Window.WindowManager) {
     const rootBin = new St.Bin();
@@ -677,7 +730,7 @@ export class Tree extends Node {
   }
 
   // TODO move to monitor.js
-  addMonitor(wsIndex) {
+  addMonitor(wsIndex: number) {
     const monitors = global.display.get_n_monitors();
     for (let mi = 0; mi < monitors; mi++) {
       const monitorWsNode = this.createNode(
@@ -694,7 +747,7 @@ export class Tree extends Node {
   }
 
   // TODO move to workspace.js
-  addWorkspace(wsIndex) {
+  addWorkspace(wsIndex: number) {
     const wsManager = global.display.get_workspace_manager();
     const workspaceNodeValue = `ws${wsIndex}`;
 
@@ -713,22 +766,22 @@ export class Tree extends Node {
     if (!global.window_group.contains(newWsNode.actorBin))
       global.window_group.add_child(newWsNode.actorBin);
 
-    this.extWm.bindWorkspaceSignals(workspace);
+    this.extWm.bindWorkspaceSignals(workspace!);
     this.addMonitor(wsIndex);
 
     return true;
   }
 
   // TODO move to workspace.js
-  removeWorkspace(wsIndex) {
+  removeWorkspace(wsIndex: number) {
     const workspaceNodeData = `ws${wsIndex}`;
     const existingWsNode = this.findNode(workspaceNodeData);
     if (!existingWsNode) {
       return false;
     }
 
-    if (global.window_group.contains(existingWsNode.actorBin))
-      global.window_group.remove_child(existingWsNode.actorBin);
+    if (global.window_group.contains(existingWsNode.actorBin!))
+      global.window_group.remove_child(existingWsNode.actorBin!);
 
     this.removeChild(existingWsNode);
     return true;
@@ -748,19 +801,24 @@ export class Tree extends Node {
    * Creates a new Node and attaches it to a parent toData.
    * Parent can be MONITOR or CON types only.
    */
-  createNode(parentObj, type, value, mode = Window.WINDOW_MODES.TILE as string) {
+  createNode(
+    parentObj: unknown,
+    type: string,
+    value: unknown,
+    mode: string = Window.WINDOW_MODES.TILE as string
+  ) {
     const parentNode = this.findNode(parentObj);
     let child;
 
     if (parentNode) {
-      child = new Node(type, value);
+      child = new Node(type, value as Meta.Window | string | St.Bin | null);
       child.settings = this.settings;
 
       if (child.isWindow()) child.mode = mode;
 
       // Append after a window
       if (parentNode.isWindow()) {
-        const grandParentNode = parentNode.parentNode;
+        const grandParentNode = parentNode.parentNode!;
         grandParentNode.insertBefore(child, parentNode.nextSibling);
         Logger.debug(
           `Parent is a window, attaching to this window's parent ${grandParentNode.nodeType}`
@@ -783,7 +841,7 @@ export class Tree extends Node {
    * Container id strings takes the form `mo{m}ws{n}c{x}`
    *
    */
-  findNode(data) {
+  findNode(data: unknown) {
     const searchNode = this.getNodeByValue(data);
     return searchNode;
   }
@@ -791,9 +849,9 @@ export class Tree extends Node {
   /**
    * Find the NodeWindow using the Meta.WindowActor
    */
-  findNodeByActor(windowActor) {
+  findNodeByActor(windowActor: Clutter.Actor) {
     let searchNode;
-    const criteriaMatchFn = (node) => {
+    const criteriaMatchFn = (node: Node<any>) => {
       if (node.isWindow() && node.actor === windowActor) {
         searchNode = node;
       }
@@ -807,7 +865,7 @@ export class Tree extends Node {
   /**
    * Focuses on the next node, if metaWindow and tiled, raise it
    */
-  focus(node, direction) {
+  focus(node: Node<any> | null, direction: Meta.MotionDirection): Node<any> | null {
     if (!node) return null;
     let next = this.next(node, direction);
 
@@ -821,7 +879,9 @@ export class Tree extends Node {
       case NODE_TYPES.WINDOW:
         break;
       case NODE_TYPES.CON: {
-        const tiledConWindows = next.getNodeByType(NODE_TYPES.WINDOW).filter((w) => w.isTile());
+        const tiledConWindows = next
+          .getNodeByType(NODE_TYPES.WINDOW)
+          .filter((w: Node<any>) => w.isTile());
         if (next.layout === LAYOUT_TYPES.STACKED) {
           next = next.lastChild;
         } else {
@@ -849,7 +909,9 @@ export class Tree extends Node {
         }
 
         if (next && next.nodeType === NODE_TYPES.CON) {
-          const tiledConWindows = next.getNodeByType(NODE_TYPES.WINDOW).filter((w) => w.isTile());
+          const tiledConWindows = next
+            .getNodeByType(NODE_TYPES.WINDOW)
+            .filter((w: Node<any>) => w.isTile());
           if (next.layout === LAYOUT_TYPES.STACKED) {
             next = next.lastChild;
           } else {
@@ -869,7 +931,7 @@ export class Tree extends Node {
 
     if (!next) return null;
 
-    const metaWindow = next.nodeValue;
+    const metaWindow = next.nodeValue as Meta.Window;
     if (!metaWindow) return null;
     const previousMetaWindow = this.extWm.focusMetaWindow;
     if (metaWindow.minimized) {
@@ -899,8 +961,8 @@ export class Tree extends Node {
    * Obtains the non-floating, non-minimized list of nodes
    * Useful for calculating the rect areas
    */
-  getTiledChildren(items) {
-    const filterFn = (node) => {
+  getTiledChildren(items: Node<any>[]) {
+    const filterFn = (node: Node<any>) => {
       if (node.isWindow()) {
         const floating = node.isFloat();
         const grabTiling = node.isGrabTile();
@@ -925,22 +987,20 @@ export class Tree extends Node {
    * TODO, handle minimized or floating windows
    *
    */
-  move(node, direction) {
+  move(node: Node<any>, direction: Meta.MotionDirection) {
     const next = this.next(node, direction);
     const position = Utils.positionFromDirection(direction);
 
-    if (!next || next === -1) {
-      if (next === -1) {
-        // TODO - update appending or prepending on the same monitor
-        const currMonWsNode = this.extWm.currentMonWsNode;
-        if (currMonWsNode) {
-          if (position === POSITION.AFTER) {
-            currMonWsNode.appendChild(node);
-          } else {
-            currMonWsNode.insertBefore(node, next.firstChild);
-          }
-          return true;
+    if (!next) {
+      // No adjacent node on the same monitor — append or prepend
+      const currMonWsNode = this.extWm.currentMonWsNode;
+      if (currMonWsNode) {
+        if (position === POSITION.AFTER) {
+          currMonWsNode.appendChild(node);
+        } else {
+          currMonWsNode.insertBefore(node, currMonWsNode.firstChild);
         }
+        return true;
       }
       return false;
     }
@@ -985,12 +1045,16 @@ export class Tree extends Node {
       case NODE_TYPES.MONITOR: {
         parentTarget = next;
         const currMonWsNode = this.extWm.currentMonWsNode;
+        if (!currMonWsNode) return false;
 
         if (
           !next.contains(node) &&
           (node === currMonWsNode.firstChild || node === currMonWsNode.lastChild)
         ) {
-          const targetMonRect = this.extWm.rectForMonitor(node, Utils.monitorIndex(next.nodeValue));
+          const targetMonRect = this.extWm.rectForMonitor(
+            node,
+            Utils.monitorIndex(next.nodeValue as string)
+          );
           if (!targetMonRect) return false;
           if (position === POSITION.AFTER) {
             next.insertBefore(node, next.firstChild);
@@ -998,7 +1062,7 @@ export class Tree extends Node {
             next.appendChild(node);
           }
           const rect = targetMonRect;
-          this.extWm.move(node.nodeValue, rect);
+          this.extWm.move(node.nodeValue as Meta.Window, rect);
           this.extWm.movePointerWith(node);
         } else {
           if (position === POSITION.AFTER) {
@@ -1012,9 +1076,9 @@ export class Tree extends Node {
       default:
         break;
     }
-    this.resetSiblingPercent(parentNode);
-    this.resetSiblingPercent(parentTarget);
-    parentNode.resetLayoutSingleChild();
+    this.resetSiblingPercent(parentNode!);
+    this.resetSiblingPercent(parentTarget!);
+    parentNode!.resetLayoutSingleChild();
     return true;
   }
 
@@ -1024,7 +1088,7 @@ export class Tree extends Node {
    *
    * Credits: borrowed logic from tree.c of i3
    */
-  next(node: Node, direction: Meta.MotionDirection) {
+  next(node: Node<any>, direction: Meta.MotionDirection): Node<any> | null {
     if (!node) return null;
     const orientation = Utils.orientationFromDirection(direction);
     const position = Utils.positionFromDirection(direction);
@@ -1050,6 +1114,7 @@ export class Tree extends Node {
       case NODE_TYPES.MONITOR: {
         // Find the next monitor
         const nodeWindow = this.findFirstNodeWindowFrom(node);
+        if (!nodeWindow) return null;
         return this.nextMonitor(nodeWindow, position, orientation);
       }
     }
@@ -1060,57 +1125,64 @@ export class Tree extends Node {
       }
       const parentNode = node.parentNode;
       if (!parentNode) return null;
-      const parentOrientation = Utils.orientationFromLayout(parentNode.layout);
+      const parentOrientation = Utils.orientationFromLayout(parentNode.layout!);
 
       if (parentNode.childNodes.length > 1 && orientation === parentOrientation) {
-        const next = previous ? node.previousSibling : node.nextSibling;
-        if (next) {
-          return next;
+        const sibling = previous ? node.previousSibling : node.nextSibling;
+        if (sibling) {
+          return sibling;
         }
       }
       if (!node.parentNode) break;
       node = node.parentNode;
     }
+
+    return null;
   }
 
-  nextMonitor(nodeWindow, position, orientation) {
+  nextMonitor(nodeWindow: Node<any>, position: string, orientation: string) {
     if (!nodeWindow) return null;
     const nodeValue = nodeWindow.nodeValue as Meta.Window;
     // Use the built in logic to determine adjacent monitors
-    const monitorDirection = Utils.directionFrom(position, orientation);
+    const monitorDirection = Utils.directionFrom(position, orientation)!;
     const targetMonitor = global.display.get_monitor_neighbor_index(
       nodeValue.get_monitor(),
       monitorDirection
     );
-    if (targetMonitor < 0) return targetMonitor;
+    if (targetMonitor < 0) return null;
     const monWs = `mo${targetMonitor}ws${nodeValue.get_workspace().index()}`;
     const monitorNode = this.findNode(monWs);
     return monitorNode;
   }
 
-  findAncestorMonitor(node) {
+  findAncestorMonitor(node: Node<any>) {
     return this.findAncestor(node, NODE_TYPES.MONITOR);
   }
 
-  findAncestor(node, ancestorType) {
-    let ancestorNode;
+  findAncestor(node: Node<any>, ancestorType: string) {
+    let ancestorNode: Node<any> | undefined;
 
     while (node && ancestorType && !node.isRoot()) {
       if (node.isType(ancestorType)) {
         ancestorNode = node;
         break;
       } else {
-        node = node.parentNode;
+        node = node.parentNode!;
       }
     }
 
     return ancestorNode;
   }
 
-  nextVisible(node, direction) {
+  nextVisible(node: Node<any>, direction: Meta.MotionDirection): Node<any> | null {
     if (!node) return null;
     let next = this.next(node, direction);
-    if (next && next.nodeType === NODE_TYPES.WINDOW && next.nodeValue && next.nodeValue.minimized) {
+    if (
+      next &&
+      next.nodeType === NODE_TYPES.WINDOW &&
+      next.nodeValue &&
+      (next.nodeValue as Meta.Window).minimized
+    ) {
       next = this.nextVisible(next, direction);
     }
     return next;
@@ -1119,7 +1191,7 @@ export class Tree extends Node {
   /**
    * Credits: i3-like split
    */
-  split(node, orientation, forceSplit = false) {
+  split(node: Node<any>, orientation: string, forceSplit: boolean = false) {
     if (!node) return;
     const type = node.nodeType;
 
@@ -1159,13 +1231,13 @@ export class Tree extends Node {
     newConNode.rect = node.rect;
     newConNode.percent = node.percent;
     newConNode.parentNode = parentNode;
-    parentNode.childNodes[currentIndex] = newConNode;
+    parentNode.childNodes[currentIndex!] = newConNode;
     this.createNode(container, node.nodeType, node.nodeValue);
     node.parentNode = newConNode;
     this.attachNode = newConNode;
   }
 
-  swap(node, direction) {
+  swap(node: Node<any>, direction: Meta.MotionDirection) {
     let nextSwapNode = this.next(node, direction);
     if (!nextSwapNode) {
       return;
@@ -1179,7 +1251,7 @@ export class Tree extends Node {
       case NODE_TYPES.MONITOR: {
         const childWindowNodes = nextSwapNode
           .getNodeByMode(Window.WINDOW_MODES.TILE)
-          .filter((t) => t.nodeType === NODE_TYPES.WINDOW);
+          .filter((t: Node<any>) => t.nodeType === NODE_TYPES.WINDOW);
         if (nextSwapNode.layout === LAYOUT_TYPES.STACKED) {
           nextSwapNode = childWindowNodes[childWindowNodes.length - 1];
         } else {
@@ -1201,7 +1273,7 @@ export class Tree extends Node {
     return nextSwapNode;
   }
 
-  swapPairs(fromNode, toNode, focus = true) {
+  swapPairs(fromNode: Node<any>, toNode: Node<any>, focus: boolean = true) {
     if (!(this._swappable(fromNode) && this._swappable(toNode))) return;
     // Swap the items in the array
     const parentForFrom = fromNode ? fromNode.parentNode : undefined;
@@ -1214,32 +1286,32 @@ export class Tree extends Node {
       fromNode.mode = toNode.mode;
       toNode.mode = transferMode;
 
-      const transferRect = fromNode.nodeValue.get_frame_rect();
-      const transferToRect = toNode.nodeValue.get_frame_rect();
+      const transferRect = (fromNode.nodeValue as Meta.Window).get_frame_rect();
+      const transferToRect = (toNode.nodeValue as Meta.Window).get_frame_rect();
       const transferPercent = fromNode.percent;
 
       fromNode.percent = toNode.percent;
       toNode.percent = transferPercent;
 
-      parentForTo.childNodes[nextIndex] = fromNode;
+      parentForTo.childNodes[nextIndex!] = fromNode;
       fromNode.parentNode = parentForTo;
-      parentForFrom.childNodes[focusIndex] = toNode;
+      parentForFrom.childNodes[focusIndex!] = toNode;
       toNode.parentNode = parentForFrom;
 
-      this.extWm.move(fromNode.nodeValue, transferToRect);
-      this.extWm.move(toNode.nodeValue, transferRect);
+      this.extWm.move(fromNode.nodeValue as Meta.Window, transferToRect);
+      this.extWm.move(toNode.nodeValue as Meta.Window, transferRect);
 
       if (focus) {
         // The fromNode is now on the parent-target
-        fromNode.nodeValue.raise();
-        fromNode.nodeValue.focus(global.get_current_time());
+        (fromNode.nodeValue as Meta.Window).raise();
+        (fromNode.nodeValue as Meta.Window).focus(global.get_current_time());
       }
     }
   }
 
-  _swappable(node) {
+  _swappable(node: Node<any> | null) {
     if (!node) return false;
-    if (node.nodeType === NODE_TYPES.WINDOW && !node.nodeValue.minimized) {
+    if (node.nodeType === NODE_TYPES.WINDOW && !(node.nodeValue as Meta.Window).minimized) {
       return true;
     }
     return false;
@@ -1249,10 +1321,10 @@ export class Tree extends Node {
    * Performs cleanup of dangling parents in addition to removing the
    * node from the parent.
    */
-  removeNode(node) {
+  removeNode(node: Node<any>) {
     let oldChild;
 
-    const cleanUpParent = (existParent) => {
+    const cleanUpParent = (existParent: Node<any>) => {
       if (this.getTiledChildren(existParent.childNodes).length === 0) {
         existParent.percent = 0.0;
         this.resetSiblingPercent(existParent.parentNode);
@@ -1261,13 +1333,16 @@ export class Tree extends Node {
     };
 
     const parentNode = node.parentNode;
+    if (!parentNode) return false;
+
     // If parent has only this window, remove the parent instead
     if (parentNode.childNodes.length === 1 && parentNode.nodeType !== NODE_TYPES.MONITOR) {
       const existParent = parentNode.parentNode;
+      if (!existParent) return false;
       oldChild = existParent.removeChild(parentNode);
       cleanUpParent(existParent);
     } else {
-      const existParent = node.parentNode;
+      const existParent = node.parentNode!;
       oldChild = existParent.removeChild(node);
       if (!this.extWm.floatingWindow(node)) cleanUpParent(existParent);
     }
@@ -1294,7 +1369,7 @@ export class Tree extends Node {
     return oldChild ? true : false;
   }
 
-  render(from) {
+  render(from?: any) {
     Logger.debug(`render tree ${from ? "from " + from : ""}`);
     this.processNode(this);
     this.apply(this);
@@ -1306,25 +1381,25 @@ export class Tree extends Node {
     Logger.debug(`*********************************************`);
   }
 
-  apply(node) {
+  apply(node: Node<any>) {
     if (!node) return;
     const tiledChildren = node
       .getNodeByMode(Window.WINDOW_MODES.TILE)
-      .filter((t) => t.nodeType === NODE_TYPES.WINDOW);
-    tiledChildren.forEach((w) => {
+      .filter((t: Node<any>) => t.isWindow());
+    tiledChildren.forEach((w: Node<any>) => {
       if (w.renderRect) {
         if (w.renderRect.width > 0 && w.renderRect.height > 0) {
           // Window may have been destroyed since processNode computed renderRect
           const metaWin = w.nodeValue;
           try {
-            this.extWm.move(metaWin, w.renderRect);
+            this.extWm.move(metaWin as Meta.Window, w.renderRect);
           } catch {}
         } else {
           Logger.debug(`ignoring apply for ${w.renderRect.width}x${w.renderRect.height}`);
         }
       }
 
-      if (w.nodeValue.firstRender) w.nodeValue.firstRender = false;
+      if ((w.nodeValue as any).firstRender) (w.nodeValue as any).firstRender = false;
     });
   }
 
@@ -1338,8 +1413,8 @@ export class Tree extends Node {
     });
 
     const invalidWindows = this.getNodeByType(NODE_TYPES.WINDOW).filter((w) => {
-      const metaWindow = w.nodeValue;
-      const wmClass = metaWindow.wm_class;
+      const metaWindow = w.nodeValue as Meta.Window;
+      const wmClass = (metaWindow as any).wm_class;
       return wmClass === "gjs";
     });
 
@@ -1370,24 +1445,24 @@ export class Tree extends Node {
    * Credits: Do the i3-like calculations
    *
    */
-  processNode(node) {
+  processNode(node: Node<any>) {
     if (!node) return;
 
     // Render the Root, Workspace and Monitor
     // For now, we let them render their children recursively
     if (node.nodeType === NODE_TYPES.ROOT) {
-      node.childNodes.forEach((child) => {
+      node.childNodes.forEach((child: Node<any>) => {
         this.processNode(child);
       });
     }
 
     if (node.nodeType === NODE_TYPES.WORKSPACE) {
-      node.childNodes.forEach((child) => {
+      node.childNodes.forEach((child: Node<any>) => {
         this.processNode(child);
       });
     }
 
-    const params = {};
+    const params: Record<string, any> = {};
 
     if (node.nodeType === NODE_TYPES.MONITOR || node.nodeType === NODE_TYPES.CON) {
       // The workarea from Meta.Window's assigned monitor
@@ -1400,7 +1475,7 @@ export class Tree extends Node {
 
       // If monitor, get the workarea
       if (node.nodeType === NODE_TYPES.MONITOR) {
-        const monitorIndex = Utils.monitorIndex(node.nodeValue);
+        const monitorIndex = Utils.monitorIndex(node.nodeValue as string);
         const monitorArea = global.display
           .get_workspace_manager()
           .get_active_workspace()
@@ -1422,15 +1497,15 @@ export class Tree extends Node {
 
       if (decoration) {
         const decoChildren = decoration.get_children();
-        decoChildren.forEach((decoChild) => {
+        decoChildren.forEach((decoChild: Clutter.Actor) => {
           decoration.remove_child(decoChild);
         });
       }
 
       // Skip windows whose actors were destroyed mid-render
       tiledChildren
-        .filter((c) => c.isNodeValid())
-        .forEach((child, index) => {
+        .filter((c: Node<any>) => c.isNodeValid())
+        .forEach((child: Node<any>, index: number) => {
           // A monitor can contain a window or container child
           if (node.layout === LAYOUT_TYPES.HSPLIT || node.layout === LAYOUT_TYPES.VSPLIT) {
             this.processSplit(node, child, params, index);
@@ -1452,11 +1527,12 @@ export class Tree extends Node {
   /**
    * Anvil processes both non-Window and Window gaps
    */
-  processGap(node) {
-    let nodeWidth = node.rect.width;
-    let nodeHeight = node.rect.height;
-    let nodeX = node.rect.x;
-    let nodeY = node.rect.y;
+  processGap(node: Node<any>) {
+    const rect = node.rect!;
+    let nodeWidth = rect.width;
+    let nodeHeight = rect.height;
+    let nodeX = rect.x;
+    let nodeY = rect.y;
     const gap = this.extWm.calculateGaps(node);
 
     if (nodeWidth > gap * 2 && nodeHeight > gap * 2) {
@@ -1471,13 +1547,13 @@ export class Tree extends Node {
     return { x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight };
   }
 
-  processSplit(node, child, params, index) {
+  processSplit(node: Node<any>, child: Node<any>, params: Record<string, any>, index: number) {
     const layout = node.layout;
-    const nodeRect = node.rect;
-    let nodeWidth;
-    let nodeHeight;
-    let nodeX;
-    let nodeY;
+    const nodeRect = node.rect!;
+    let nodeWidth: number;
+    let nodeHeight: number;
+    let nodeX: number;
+    let nodeY: number;
 
     if (layout === LAYOUT_TYPES.HSPLIT) {
       // Divide the parent container's width
@@ -1510,6 +1586,8 @@ export class Tree extends Node {
           i++;
         }
       }
+    } else {
+      return;
     }
 
     child.rect = {
@@ -1525,12 +1603,13 @@ export class Tree extends Node {
    * It will be moved to the Node class in the future as Node.render()
    *
    */
-  processStacked(node, child, params, index) {
+  processStacked(node: Node<any>, child: Node<any>, params: Record<string, any>, index: number) {
     const layout = node.layout;
-    const nodeWidth = node.rect.width;
-    let nodeHeight = node.rect.height;
-    const nodeX = node.rect.x;
-    let nodeY = node.rect.y;
+    const rect = node.rect!;
+    const nodeWidth = rect.width;
+    let nodeHeight = rect.height;
+    const nodeX = rect.x;
+    let nodeY = rect.y;
     const stackHeight = this.defaultStackHeight;
 
     if (layout === LAYOUT_TYPES.STACKED) {
@@ -1553,13 +1632,13 @@ export class Tree extends Node {
    * It will be moved to the Node class in the future as Node.render()
    *
    */
-  processTabbed(node, child, params, _index) {
+  processTabbed(node: Node<any>, child: Node<any>, params: Record<string, any>, _index: number) {
     const layout = node.layout;
-    const nodeRect = node.rect;
-    let nodeWidth;
-    let nodeHeight;
-    let nodeX;
-    let nodeY;
+    const nodeRect = node.rect!;
+    let nodeWidth: number;
+    let nodeHeight: number;
+    let nodeX: number;
+    let nodeY: number;
 
     if (layout === LAYOUT_TYPES.TABBED) {
       nodeWidth = nodeRect.width;
@@ -1578,8 +1657,9 @@ export class Tree extends Node {
           // Border actor may be gone if the window was destroyed mid-render
           let borderWidth = 0;
           try {
-            if (child.actor?.border) {
-              borderWidth = child.actor.border.get_theme_node().get_border_width(St.Side.TOP);
+            const actorWithBorder = child._actor as any;
+            if (actorWithBorder?.border) {
+              borderWidth = actorWithBorder.border.get_theme_node().get_border_width(St.Side.TOP);
             }
           } catch {}
 
@@ -1623,13 +1703,13 @@ export class Tree extends Node {
     }
   }
 
-  computeSizes(node, childItems) {
-    const sizes = [];
-    const orientation = Utils.orientationFromLayout(node.layout);
-    const totalSize =
-      orientation === ORIENTATION_TYPES.HORIZONTAL ? node.rect.width : node.rect.height;
+  computeSizes(node: Node<any>, childItems: Node<any>[]) {
+    const sizes: number[] = [];
+    const orientation = Utils.orientationFromLayout(node.layout!);
+    const rect = node.rect!;
+    const totalSize = orientation === ORIENTATION_TYPES.HORIZONTAL ? rect.width : rect.height;
     const grabTiled = node.getNodeByMode(Window.WINDOW_MODES.GRAB_TILE).length > 0;
-    childItems.forEach((childNode, index) => {
+    childItems.forEach((childNode: Node<any>, index: number) => {
       const percent =
         childNode.percent && childNode.percent > 0.0 && !grabTiled
           ? childNode.percent
@@ -1640,7 +1720,7 @@ export class Tree extends Node {
     return sizes;
   }
 
-  findFirstNodeWindowFrom(node) {
+  findFirstNodeWindowFrom(node: Node<any>) {
     const results = node.getNodeByType(NODE_TYPES.WINDOW);
     if (results.length > 0) {
       return results[0];
@@ -1648,10 +1728,10 @@ export class Tree extends Node {
     return null;
   }
 
-  resetSiblingPercent(parentNode) {
+  resetSiblingPercent(parentNode: Node<any> | null) {
     if (!parentNode) return;
     const children = parentNode.childNodes;
-    children.forEach((n) => {
+    children.forEach((n: Node<any>) => {
       n.percent = 0.0;
     });
   }
@@ -1660,14 +1740,14 @@ export class Tree extends Node {
     // this.debugChildNodes(this);
   }
 
-  debugChildNodes(node) {
+  debugChildNodes(node: Node<any>) {
     this.debugNode(this);
-    node.childNodes.forEach((child) => {
+    node.childNodes.forEach((child: Node<any>) => {
       this.debugChildNodes(child);
     });
   }
 
-  debugParentNodes(node) {
+  debugParentNodes(node: Node<any>) {
     if (node) {
       if (node.parentNode) {
         this.debugParentNodes(node.parentNode);
@@ -1676,7 +1756,7 @@ export class Tree extends Node {
     }
   }
 
-  debugNode(node) {
+  debugNode(node: Node<any>) {
     let spacing = "";
     const dashes = "-->";
     const level = node.level;
@@ -1703,7 +1783,12 @@ export class Tree extends Node {
     if (node.rect) {
       attributes += `,rect:${node.rect.width}x${node.rect.height}+${node.rect.x}+${node.rect.y}`;
       const pointerCoord = global.get_pointer();
-      const pointerInside = Utils.rectContainsPoint(node.rect, pointerCoord) ? "yes" : "no";
+      const pointerInside = Utils.rectContainsPoint(
+        node.rect!,
+        pointerCoord as unknown as [number, number]
+      )
+        ? "yes"
+        : "no";
       attributes += `,pointer:${pointerInside}`;
     }
 
@@ -1715,7 +1800,7 @@ export class Tree extends Node {
     );
   }
 
-  findParent(childNode, parentNodeType) {
+  findParent(childNode: Node<any>, parentNodeType: string) {
     const parents = this.getNodeByType(parentNodeType);
     // Only get the first parent
     return parents.filter((p) => p.contains(childNode))[0];

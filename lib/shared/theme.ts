@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * This file is part of the Anvil extension for GNOME
  *
@@ -24,14 +23,50 @@ import GObject from "gi://GObject";
 
 // Application imports
 import { stringify, parse } from "../css/index.js";
-import { production } from "./settings.js";
+import { ConfigManager, production } from "./settings.js";
+
+interface CssRuleItem {
+  selectors: string[];
+  declarations: CssDeclItem[];
+}
+
+interface CssDeclItem {
+  property: string;
+  value: string;
+}
+
+interface CssAst {
+  stylesheet: {
+    rules: CssRuleItem[];
+  };
+}
+
+interface PaletteColor {
+  color: string;
+  "border-width": string;
+  opacity: string;
+}
+
+interface Palette {
+  tiled: PaletteColor;
+  split: PaletteColor;
+  floated: PaletteColor;
+  stacked: PaletteColor;
+  tabbed: PaletteColor;
+}
 
 export class ThemeManagerBase extends GObject.Object {
   static {
     GObject.registerClass(this);
   }
 
-  constructor({ configMgr, settings }) {
+  configMgr!: ConfigManager;
+  settings!: Gio.Settings;
+  defaultPalette!: Palette;
+  cssTag!: number;
+  cssAst!: CssAst;
+
+  constructor({ configMgr, settings }: { configMgr: ConfigManager; settings: Gio.Settings }) {
     super();
     this.configMgr = configMgr;
     this.settings = settings;
@@ -57,7 +92,7 @@ export class ThemeManagerBase extends GObject.Object {
     return value.replace("px", "");
   }
 
-  getDefaultPalette() {
+  getDefaultPalette(): Palette {
     return {
       tiled: this.getDefaults("tiled"),
       split: this.getDefaults("split"),
@@ -79,33 +114,39 @@ export class ThemeManagerBase extends GObject.Object {
     return scheme;
   }
 
-  getDefaults(color: string) {
+  getDefaults(color: string): PaletteColor {
     return {
-      color: this.getCssProperty(`.${color}`, "color").value,
-      "border-width": this.removePx(this.getCssProperty(`.${color}`, "border-width").value),
-      opacity: this.getCssProperty(`.${color}`, "opacity").value,
+      color: this.getCssProperty(`.${color}`, "color")?.value ?? "",
+      "border-width": this.removePx(
+        this.getCssProperty(`.${color}`, "border-width")?.value ?? "0px"
+      ),
+      opacity: this.getCssProperty(`.${color}`, "opacity")?.value ?? "1",
     };
   }
 
-  getCssRule(selector: any) {
+  getCssRule(selector: string): CssRuleItem | null {
     if (this.cssAst) {
       const rules = this.cssAst.stylesheet.rules;
       // return only the first match, Anvil CSS authors should make sure class names are unique :)
-      const matchRules = rules.filter((r) => r.selectors.filter((s) => s === selector).length > 0);
-      return matchRules.length > 0 ? matchRules[0] : {};
+      const matchRules = rules.filter(
+        (r: CssRuleItem) => r.selectors.filter((s: string) => s === selector).length > 0
+      );
+      return matchRules.length > 0 ? matchRules[0] : null;
     }
-    return {};
+    return null;
   }
 
-  getCssProperty(selector: string, propertyName: string) {
+  getCssProperty(selector: string, propertyName: string): CssDeclItem | null {
     const cssRule = this.getCssRule(selector);
 
     if (cssRule) {
-      const matchDeclarations = cssRule.declarations.filter((d) => d.property === propertyName);
-      return matchDeclarations.length > 0 ? matchDeclarations[0] : {};
+      const matchDeclarations = cssRule.declarations.filter(
+        (d: CssDeclItem) => d.property === propertyName
+      );
+      return matchDeclarations.length > 0 ? matchDeclarations[0] : null;
     }
 
-    return {};
+    return null;
   }
 
   setCssProperty(selector: string, propertyName: string, propertyValue: string) {
@@ -127,10 +168,12 @@ export class ThemeManagerBase extends GObject.Object {
       cssFile = this.configMgr.defaultStylesheetFile;
     }
 
+    if (!cssFile) return;
+
     const [success, contents] = cssFile.load_contents(null);
     if (success) {
       const cssContents = new TextDecoder().decode(contents as Uint8Array);
-      this.cssAst = parse(cssContents);
+      this.cssAst = parse(cssContents, undefined) as CssAst;
     }
   }
 
@@ -147,12 +190,14 @@ export class ThemeManagerBase extends GObject.Object {
       cssFile = this.configMgr.defaultStylesheetFile;
     }
 
-    const cssContents = stringify(this.cssAst);
+    if (!cssFile) return;
+
+    const cssContents = stringify(this.cssAst, undefined);
     const PERMISSIONS_MODE = 0o744;
 
-    if (GLib.mkdir_with_parents(cssFile.get_parent().get_path(), PERMISSIONS_MODE) === 0) {
+    if (GLib.mkdir_with_parents(cssFile.get_parent()!.get_path()!, PERMISSIONS_MODE) === 0) {
       const [success, _tag] = cssFile.replace_contents(
-        cssContents,
+        cssContents as string,
         null,
         false,
         Gio.FileCreateFlags.REPLACE_DESTINATION,
@@ -175,7 +220,8 @@ export class ThemeManagerBase extends GObject.Object {
     if (this._needUpdate()) {
       const originalCss = this.configMgr.defaultStylesheetFile;
       const configCss = this.configMgr.stylesheetFile;
-      const copyConfigCss = Gio.File.new_for_path(this.configMgr.stylesheetFileName + ".bak");
+      if (!configCss || !originalCss) return false;
+      const copyConfigCss = Gio.File.new_for_path(configCss.get_path()! + ".bak");
       const backupFine = configCss.copy(copyConfigCss, Gio.FileCopyFlags.OVERWRITE, null, null);
       const copyFine = originalCss.copy(configCss, Gio.FileCopyFlags.OVERWRITE, null, null);
       if (backupFine && copyFine) {
@@ -203,29 +249,29 @@ export class ThemeManagerBase extends GObject.Object {
  * Credits: Color Space conversion functions from CSS Tricks
  * https://css-tricks.com/converting-color-spaces-in-javascript/
  */
-export function RGBAToHexA(rgba) {
+export function RGBAToHexA(rgba: string) {
   const sep = rgba.indexOf(",") > -1 ? "," : " ";
-  rgba = rgba.substr(5).split(")")[0].split(sep);
+  const vals: (string | number)[] = rgba.substr(5).split(")")[0].split(sep);
 
   // Strip the slash if using space-separated syntax
-  if (rgba.indexOf("/") > -1) rgba.splice(3, 1);
+  if (vals.indexOf("/") > -1) vals.splice(3, 1);
 
-  for (let R = 0; R < rgba.length; R++) {
-    const r = rgba[R];
-    if (r.indexOf("%") > -1) {
-      const p = r.substr(0, r.length - 1) / 100;
+  for (let R = 0; R < vals.length; R++) {
+    const r = vals[R];
+    if (typeof r === "string" && r.indexOf("%") > -1) {
+      const p = Number(r.substring(0, r.length - 1)) / 100;
 
       if (R < 3) {
-        rgba[R] = Math.round(p * 255);
+        vals[R] = Math.round(p * 255);
       } else {
-        rgba[R] = p;
+        vals[R] = p;
       }
     }
   }
-  let r = (+rgba[0]).toString(16),
-    g = (+rgba[1]).toString(16),
-    b = (+rgba[2]).toString(16),
-    a = Math.round(+rgba[3] * 255).toString(16);
+  let r = (+vals[0]).toString(16),
+    g = (+vals[1]).toString(16),
+    b = (+vals[2]).toString(16),
+    a = Math.round(+vals[3] * 255).toString(16);
 
   if (r.length == 1) r = "0" + r;
   if (g.length == 1) g = "0" + g;
@@ -235,7 +281,7 @@ export function RGBAToHexA(rgba) {
   return "#" + r + g + b + a;
 }
 
-export function hexAToRGBA(h) {
+export function hexAToRGBA(h: string) {
   let r = 0,
     g = 0,
     b = 0,

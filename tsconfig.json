@@ -7,8 +7,9 @@
     "skipLibCheck": true,
     "target": "ES2022",
     "lib": ["ES2022"],
-    "noImplicitAny": false,
-    "noImplicitThis": false,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "strict": true,
     "types": ["vitest/globals"],
     "paths": {
       "gi://Adw": ["./node_modules/@girs/adw-1"],
@@ -24,7 +25,12 @@
       "resource:///org/gnome/Shell/Extensions/js/misc/config.js": ["./test/types/prefs-config.d.ts"]
     }
   },
-  "include": ["ambient.d.ts", "test/types/gi-shell.d.ts", "test/types/prefs-config.d.ts"],
+  "include": [
+    "ambient.d.ts",
+    "test/types/gi-shell.d.ts",
+    "test/types/prefs-config.d.ts",
+    "test/types/meta-extensions.d.ts"
+  ],
   "files": ["extension.ts", "prefs.ts"],
   "exclude": ["node_modules", "dist"]
 }

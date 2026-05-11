@@ -1,4 +1,3 @@
-// @ts-nocheck
 /*
  * This file is part of the Anvil extension for GNOME
  *
@@ -18,6 +17,7 @@
  */
 
 // Gnome imports
+import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 import Meta from "gi://Meta";
 import Shell from "gi://Shell";
@@ -28,14 +28,27 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 // Shared state
 import { Logger } from "../shared/logger.js";
 
+interface KeybindingGrabber {
+  name: string;
+  accelerator: string;
+  callback: () => void;
+  action: number;
+}
+
 export class Keybindings extends GObject.Object {
   static {
     GObject.registerClass(this);
   }
 
+  private _grabbers: Map<number, KeybindingGrabber> = new Map();
+  extWm!: import("./window.js").WindowManager;
+  kbdSettings!: Gio.Settings;
+  settings!: Gio.Settings;
+  private _bindings!: Record<string, () => void>;
+
   ext: import("../../extension.js").default;
 
-  constructor(ext) {
+  constructor(ext: import("../../extension.js").default) {
     super();
     Logger.debug(`created keybindings`);
     this._grabbers = new Map();
@@ -48,7 +61,7 @@ export class Keybindings extends GObject.Object {
   }
 
   // @deprecated
-  _acceleratorActivate(action) {
+  _acceleratorActivate(action: number) {
     const grabber = this._grabbers.get(action);
     if (grabber) {
       Logger.debug(`Firing accelerator ${grabber.accelerator} : ${grabber.name}`);
@@ -136,8 +149,8 @@ export class Keybindings extends GObject.Object {
   }
 
   get modifierState() {
-    const [_x, _y, state] = this.extWm.getPointer();
-    return state;
+    const pointer = this.extWm.getPointer();
+    return (pointer as unknown as number[])[2] ?? 0;
   }
 
   allowDragDropTile() {

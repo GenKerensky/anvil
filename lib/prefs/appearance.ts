@@ -1,7 +1,9 @@
 // Gnome imports
 import Adw from "gi://Adw";
+import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 import Gdk from "gi://Gdk";
+import Gtk from "gi://Gtk";
 
 // Extension imports
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
@@ -19,8 +21,8 @@ export class AppearancePage extends PreferencesPage {
     GObject.registerClass(this);
   }
 
-  settings!: any;
-  themeMgr!: any;
+  settings!: Gio.Settings;
+  themeMgr!: PrefsThemeManager;
 
   static getCssSelectorAsMessage(selector: string) {
     switch (selector) {
@@ -38,7 +40,7 @@ export class AppearancePage extends PreferencesPage {
     }
   }
 
-  constructor({ settings, dir }) {
+  constructor({ settings, dir }: { settings: Gio.Settings; dir: Gio.File }) {
     super({ title: _("Appearance"), icon_name: "brush-symbolic" });
     this.settings = settings;
     const configMgr = new ConfigManager({ dir });
@@ -82,7 +84,7 @@ export class AppearancePage extends PreferencesPage {
     const currentRadius = parseInt(
       String(
         this.themeMgr.removePx(
-          this.themeMgr.getCssProperty(".window-tiled-border", "border-radius").value ?? "18px"
+          this.themeMgr.getCssProperty(".window-tiled-border", "border-radius")!.value ?? "18px"
         )
       )
     );
@@ -108,7 +110,7 @@ export class AppearancePage extends PreferencesPage {
           for (const selector of borderRadiusSelectors) {
             this.themeMgr.setCssProperty(selector, "border-radius", px);
           }
-          (borderRadiusRow.activatable_widget as any).value = defaultRadius;
+          (borderRadiusRow.activatable_widget! as Gtk.SpinButton).value = defaultRadius;
         },
       })
     );
@@ -163,13 +165,13 @@ export class AppearancePage extends PreferencesPage {
     const selector = `.${prefix}`;
     const theme = this.themeMgr;
     const title = AppearancePage.getCssSelectorAsMessage(selector);
-    const colorScheme = theme.getColorSchemeBySelector(selector);
+    const colorScheme = theme.getColorSchemeBySelector(selector)!;
     const row = new Adw.ExpanderRow({ title });
 
     const borderSizeRow = new SpinButtonRow({
       title: _("Border size"),
       range: [1, 6, 1],
-      init: Number(theme.removePx(theme.getCssProperty(selector, "border-width").value)),
+      init: Number(theme.removePx(theme.getCssProperty(selector, "border-width")!.value)),
       onChange: (value) => {
         const px = theme.addPx(String(value));
         Logger.debug(`Setting border width for selector: ${selector} ${px}`);
@@ -180,14 +182,18 @@ export class AppearancePage extends PreferencesPage {
     borderSizeRow.add_suffix(
       new ResetButton({
         onReset: () => {
-          const borderDefault = String(theme.defaultPalette[colorScheme]["border-width"]);
+          const borderDefault = String(
+            this.themeMgr.defaultPalette[colorScheme as keyof typeof this.themeMgr.defaultPalette][
+              "border-width"
+            ]
+          );
           theme.setCssProperty(selector, "border-width", theme.addPx(borderDefault));
-          (borderSizeRow.activatable_widget as any).value = Number(borderDefault);
+          (borderSizeRow.activatable_widget! as Gtk.SpinButton).value = Number(borderDefault);
         },
       })
     );
 
-    const updateCssColors = (rgbaString) => {
+    const updateCssColors = (rgbaString: string) => {
       const rgba = new Gdk.RGBA();
 
       if (rgba.parse(rgbaString)) {
@@ -235,18 +241,20 @@ export class AppearancePage extends PreferencesPage {
 
     const borderColorRow = new ColorRow({
       title: _("Border color"),
-      init: theme.getCssProperty(selector, "border-color").value,
+      init: theme.getCssProperty(selector, "border-color")!.value,
       onChange: updateCssColors,
     });
 
     borderColorRow.add_suffix(
       new ResetButton({
         onReset: () => {
-          const selectorColor = String(theme.defaultPalette[colorScheme].color);
+          const selectorColor = String(
+            theme.defaultPalette[colorScheme as keyof typeof theme.defaultPalette].color
+          );
           updateCssColors(selectorColor);
           const rgba = new Gdk.RGBA();
           if (rgba.parse(selectorColor)) {
-            (borderColorRow as any).colorButton.set_rgba(rgba);
+            (borderColorRow as ColorRow).colorButton.set_rgba(rgba);
           }
         },
       })

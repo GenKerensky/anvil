@@ -1,6 +1,8 @@
-// @ts-nocheck
 // Gtk imports
+import Adw from "gi://Adw";
+import Gio from "gi://Gio";
 import GObject from "gi://GObject";
+import Gtk from "gi://Gtk";
 
 // Gnome imports
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
@@ -9,18 +11,29 @@ import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensio
 import { PreferencesPage, RemoveItemRow, ResetButton } from "./widgets.js";
 import { ConfigManager } from "../shared/settings.js";
 
+interface WindowOverride {
+  wmClass: string;
+  wmTitle?: string;
+  mode: string;
+}
+
 export class FloatingPage extends PreferencesPage {
   static {
     GObject.registerClass(this);
   }
 
-  constructor({ settings, dir }) {
+  settings!: Gio.Settings;
+  private configMgr!: ConfigManager;
+  private rows!: RemoveItemRow[];
+  private floatingWindowGroup!: Adw.PreferencesGroup;
+
+  constructor({ settings, dir }: { settings: Gio.Settings; dir: Gio.File }) {
     super({ title: _("Windows"), icon_name: "window-symbolic" });
 
     this.settings = settings;
     this.configMgr = new ConfigManager({ dir });
 
-    const overrides = this.configMgr.windowProps.overrides;
+    const overrides: WindowOverride[] = this.configMgr.windowProps?.overrides ?? [];
     this.rows = this.loadItemsFromConfig(overrides);
 
     this.floatingWindowGroup = this.add_group({
@@ -31,14 +44,14 @@ export class FloatingPage extends PreferencesPage {
     });
   }
 
-  loadItemsFromConfig(overrides) {
-    const children = [];
+  loadItemsFromConfig(overrides: WindowOverride[]) {
+    const children: RemoveItemRow[] = [];
     for (const override of overrides) {
       if (override.mode === "float") {
         const itemrow = new RemoveItemRow({
           title: override.wmTitle ?? override.wmClass,
           subtitle: override.wmClass,
-          onRemove: (item, parent) => this.onRemoveHandler(item, parent),
+          onRemove: (item: string, parent: Gtk.Widget) => this.onRemoveHandler(item, parent),
         });
         children.push(itemrow);
       }
@@ -46,20 +59,19 @@ export class FloatingPage extends PreferencesPage {
     return children;
   }
 
-  onRemoveHandler(item, parent) {
+  onRemoveHandler(item: string, parent: Gtk.Widget) {
     this.floatingWindowGroup.remove(parent);
     this.rows = this.rows.filter((row) => row != parent);
-    const existing = this.configMgr.windowProps.overrides;
+    const existing: WindowOverride[] = this.configMgr.windowProps?.overrides ?? [];
     const modified = existing.filter((row) => item != row.wmClass);
     this.saveOverrides(modified);
   }
 
-  saveOverrides(modified) {
+  saveOverrides(modified: WindowOverride[]) {
     if (modified) {
       this.configMgr.windowProps = {
         overrides: modified,
       };
-      // Signal the main extension to reload floating overrides
       const changed = Math.floor(Date.now() / 1000);
       this.settings.set_uint("window-overrides-reload-trigger", changed);
     }
@@ -67,7 +79,7 @@ export class FloatingPage extends PreferencesPage {
 
   onResetHandler() {
     const defaultWindowProps = this.configMgr.loadDefaultWindowConfigContents();
-    const original = defaultWindowProps.overrides;
+    const original = defaultWindowProps.overrides as WindowOverride[];
     this.saveOverrides(original);
 
     for (const child of this.rows) {

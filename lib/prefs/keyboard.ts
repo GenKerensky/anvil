@@ -1,5 +1,6 @@
 // Gnome imports
 import Adw from "gi://Adw";
+import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 import Gtk from "gi://Gtk";
 
@@ -15,7 +16,7 @@ export class KeyboardPage extends PreferencesPage {
     GObject.registerClass(this);
   }
 
-  constructor({ kbdSettings }) {
+  constructor({ kbdSettings }: { kbdSettings: Gio.Settings }) {
     super({ title: _("Keyboard"), icon_name: "input-keyboard-symbolic" });
 
     this.add_group({
@@ -54,9 +55,9 @@ export class KeyboardPage extends PreferencesPage {
     });
   }
 
-  static makeKeygroupExpander(prefix, gettextKey, settings) {
+  static makeKeygroupExpander(prefix: string, gettextKey: string, settings: Gio.Settings) {
     const expander = new Adw.ExpanderRow({ title: _(gettextKey) });
-    KeyboardPage.createKeyList(settings, prefix).forEach((key) =>
+    KeyboardPage.createKeyList(settings, prefix).forEach((key: string) =>
       expander.add_row(
         new EntryRow({
           title: key,
@@ -90,11 +91,11 @@ export class KeyboardPage extends PreferencesPage {
     return expander;
   }
 
-  static createKeyList(settings, categoryName) {
+  static createKeyList(settings: Gio.Settings, categoryName: string) {
     return settings
       .list_keys()
-      .filter((keyName) => !!keyName && !!categoryName && keyName.startsWith(categoryName))
-      .sort((a, b) => {
+      .filter((keyName: string) => !!keyName && !!categoryName && keyName.startsWith(categoryName))
+      .sort((a: string, b: string) => {
         const aUp = a.toUpperCase();
         const bUp = b.toUpperCase();
         if (aUp < bUp) return -1;
