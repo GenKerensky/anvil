@@ -214,7 +214,7 @@ actionsArea.add_child(new MyButton());
 
 ## Anvil Usage
 
-The existing implementation in `lib/extension/indicator.ts` demonstrates all major
+The existing implementation in `src/lib/extension/indicator.ts` demonstrates all major
 patterns:
 
 - **`FeatureIndicator`** (line 103) — extends `SystemIndicator`, manages icon visibility
@@ -249,4 +249,4 @@ The `destroy()` call on the indicator cascades to all items pushed onto
 
 Quick settings items cannot be tested headless (no keyboard/virtual pointer).
 Settings-level verification via gsettings is the only testable path. The
-`test/__mocks__/shell/main.js` mock provides a stub `addExternalIndicator`.
+`test/unit/__mocks__/shell/main.js` mock provides a stub `addExternalIndicator`.

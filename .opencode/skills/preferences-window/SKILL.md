@@ -14,15 +14,15 @@ run in a **separate GTK4/Adwaita process** from GNOME Shell — no access to `Me
 ## Architecture
 
 ```
-prefs.ts                              # Entry point: fillPreferencesWindow()
-lib/prefs/
+src/prefs.ts                          # Entry point: fillPreferencesWindow()
+src/lib/prefs/
   settings.ts   → SettingsPage         # "Tiling" page — behavior toggles, log level
   appearance.ts → AppearancePage       # "Appearance" page — gaps, colors, CSS, border radius
   keyboard.ts   → KeyboardPage         # "Keyboard" page — modifier key, shortcut entries
   floating.ts   → FloatingPage         # "Windows" page — per-window float overrides
   widgets.ts                          # Reusable widget classes (SwitchRow, ColorRow, etc.)
   prefs-theme-manager.ts              # CSS read/parse/modify/write + signal extension
-  metadata.js                         # Generated: developers list from git log (gitignored)
+  metadata.js                         # Generated: developers list from git log (gitignored; path: src/lib/prefs/metadata.js)
 ```
 
 Two GSettings schemas (from `metadata.json` `settings-schema`):
@@ -32,7 +32,7 @@ Two GSettings schemas (from `metadata.json` `settings-schema`):
 | `org.gnome.shell.extensions.anvil` | `/org/gnome/shell/extensions/anvil/` | Main settings |
 | `org.gnome.shell.extensions.anvil.keybindings` | `/org/gnome/shell/extensions/anvil/keybindings/` | Keyboard shortcuts |
 
-In `prefs.ts`, both are loaded:
+In `src/prefs.ts`, both are loaded:
 ```ts
 this.settings = this.getSettings();                                  // main schema
 this.kbdSettings = this.getSettings("org.gnome.shell.extensions.anvil.keybindings");
@@ -48,7 +48,7 @@ window.add(new SettingsPage(this as any));
 
 ### 1. Add the GSettings key
 
-In `schemas/org.gnome.shell.extensions.anvil.gschema.xml`:
+In `src/schemas/org.gnome.shell.extensions.anvil.gschema.xml`:
 ```xml
 <key type="b" name="my-new-setting">
     <default>true</default>
@@ -71,11 +71,11 @@ new SwitchRow({
 })
 ```
 
-The widget library is in `lib/prefs/widgets.ts`.
+The widget library is in `src/lib/prefs/widgets.ts`.
 
 ## Widget Library Reference
 
-All widgets are in `lib/prefs/widgets.ts`. Each extends a GTK/Adwaita class and registers
+All widgets are in `src/lib/prefs/widgets.ts`. Each extends a GTK/Adwaita class and registers
 with `GObject.registerClass(this)`.
 
 ### `SwitchRow` (extends `Adw.ActionRow`)
@@ -200,12 +200,12 @@ this.add_group({
 
 ## CSS / Appearance Settings
 
-CSS manipulation flows through `PrefsThemeManager` (`lib/prefs/prefs-theme-manager.ts`),
-which extends `ThemeManagerBase` (`lib/shared/theme.ts`).
+CSS manipulation flows through `PrefsThemeManager` (`src/lib/prefs/prefs-theme-manager.ts`),
+which extends `ThemeManagerBase` (`src/lib/shared/theme.ts`).
 
 ### How it works
 
-1. `ThemeManagerBase._importCss()` reads `stylesheet.css` (or `$HOME/.config/anvil/stylesheet/anvil/stylesheet.css`), parses it into an AST via `lib/css/index.ts`
+1. `ThemeManagerBase._importCss()` reads `stylesheet.css` (or `$HOME/.config/anvil/stylesheet/anvil/stylesheet.css`), parses it into an AST via `src/lib/css/index.ts`
 2. `getCssProperty(selector, property)` reads from the AST
 3. `setCssProperty(selector, property, value)` modifies the AST, writes it back to disk, then calls `reloadStylesheet()`
 4. `PrefsThemeManager.reloadStylesheet()` sets the `css-updated` GSettings key to a timestamp, which signals the extension process to reload themes
@@ -263,7 +263,7 @@ Keybinding GSettings key names follow a prefix pattern for grouping:
 
 ### Adding a new keybinding
 
-1. Add to `schemas/org.gnome.shell.extensions.anvil.gschema.xml`:
+1. Add to `src/schemas/org.gnome.shell.extensions.anvil.gschema.xml`:
 
 ```xml
 <key type="as" name="window-my-action">
@@ -272,7 +272,7 @@ Keybinding GSettings key names follow a prefix pattern for grouping:
 </key>
 ```
 
-2. Register the keybinding action in `lib/extension/keybindings.ts`.
+2. Register the keybinding action in `src/lib/extension/keybindings.ts`.
 3. The preferences UI auto-discovers it via the prefix — no widget code needed if the
    prefix matches an existing group.
 
@@ -283,8 +283,8 @@ Keybinding GSettings key names follow a prefix pattern for grouping:
 
 ## File-based Config (Window Overrides)
 
-`ConfigManager` (`lib/shared/settings.ts`) manages `$HOME/.config/anvil/config/windows.json`.
-The default overrides live in `config/windows.json` and are copied to the build output.
+`ConfigManager` (`src/lib/shared/settings.ts`) manages `$HOME/.config/anvil/config/windows.json`.
+The default overrides live in `src/config/windows.json` and are copied to the build output.
 
 ### FloatingPage pattern
 
@@ -304,7 +304,7 @@ Each override entry has `wmClass`, `wmTitle`, and `mode` ("float").
 
 ## Dev vs. Production Mode
 
-`lib/shared/settings.ts` exports `production` (default `true`). `make dev` toggles it to
+`src/lib/shared/settings.ts` exports `production` (default `true`). `make dev` toggles it to
 `false` via `sed`. Dev-only preferences (Logger page, About button) are conditionally
 rendered:
 ```ts
@@ -318,7 +318,7 @@ if (!production) {
 
 ## i18n
 
-Import `gettext as _` from the prefs module (NOT from `extension.ts`):
+Import `gettext as _` from the prefs module (NOT from `src/extension.ts`):
 ```ts
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 ```
@@ -433,7 +433,7 @@ Steps: `test/e2e/features/steps/preferences_steps.py`.
 ### Unit
 
 Pure-logic tests in `test/shared/theme.test.ts` verify `RGBAToHexA`, `hexAToRGBA`,
-CSS persistence. GSettings and GObject APIs are mocked via `test/__mocks__/`.
+CSS persistence. GSettings and GObject APIs are mocked via `test/unit/__mocks__/`.
 
 ## Debugging
 

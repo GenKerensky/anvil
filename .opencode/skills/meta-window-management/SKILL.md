@@ -37,7 +37,7 @@ const monitor = metaWindow.get_monitor();          // number — monitor index
 Use `move_resize_frame` for a single atomic operation (preferred over `move_frame` + separate resize):
 
 ```ts
-// Move AND resize — outer frame bounds (lib/extension/window.ts:1041)
+// Move AND resize — outer frame bounds (src/lib/extension/window.ts:1041)
 metaWindow.move_resize_frame(true, x, y, width, height);
 
 // Move only — useful for window repositioning without size change
@@ -71,7 +71,7 @@ import Meta from "gi://Meta";
 // Check state
 const isMaximized = metaWindow.is_maximized();
 
-// Partially unmaximize before tiling (lib/extension/window.ts:848-850)
+// Partially unmaximize before tiling (src/lib/extension/window.ts:848-850)
 metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
 metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
 ```
@@ -79,7 +79,7 @@ metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
 ### Stacking and floating
 
 ```ts
-// Always-on-top (lib/extension/window.ts:594, lib/extension/tree.ts:594)
+// Always-on-top (src/lib/extension/window.ts:594, src/lib/extension/tree.ts:594)
 metaWindow.make_above();
 metaWindow.unmake_above();
 const isAbove = metaWindow.is_above();
@@ -121,7 +121,7 @@ metaWindow.can_maximize()       // Can it be maximized?
 
 ### Window type filtering for tiling
 
-Anvil only tiles normal application windows (lib/extension/window.ts:1712-1720):
+Anvil only tiles normal application windows (src/lib/extension/window.ts:1712-1720):
 
 ```ts
 import Meta from "gi://Meta";
@@ -143,7 +143,7 @@ metaWindow.has_attached_dialogs()      // Whether has children
 
 ## Meta.GrabOp
 
-Describes window move/resize operations triggered by keyboard or mouse. Anvil uses grab ops extensively for keyboard-driven tiling (lib/extension/utils.ts:233-316, lib/extension/keybindings.ts).
+Describes window move/resize operations triggered by keyboard or mouse. Anvil uses grab ops extensively for keyboard-driven tiling (src/lib/extension/utils.ts:233-316, src/lib/extension/keybindings.ts).
 
 ### Mouse grab values
 
@@ -164,7 +164,7 @@ Describes window move/resize operations triggered by keyboard or mouse. Anvil us
 | `KEYBOARD_RESIZING_N` / `KEYBOARD_RESIZING_S` / `KEYBOARD_RESIZING_E` / `KEYBOARD_RESIZING_W` | Edge resize |
 | `KEYBOARD_RESIZING_NW` / `KEYBOARD_RESIZING_NE` / `KEYBOARD_RESIZING_SW` / `KEYBOARD_RESIZING_SE` | Corner resize |
 
-### Grab-to-direction mapping (lib/extension/utils.ts:334-344)
+### Grab-to-direction mapping (src/lib/extension/utils.ts:334-344)
 
 ```ts
 import Meta from "gi://Meta";
@@ -204,7 +204,7 @@ Directional navigation for focus movement and window swapping.
 | `DOWN_LEFT` | Diagonal |
 | `DOWN_RIGHT` | Diagonal |
 
-### Used in tree navigation (lib/extension/tree.ts:820)
+### Used in tree navigation (src/lib/extension/tree.ts:820)
 
 ```ts
 import Meta from "gi://Meta";
@@ -212,7 +212,7 @@ import Meta from "gi://Meta";
 // Move focus in a direction — returns the next node or null
 const nextNode = tree.focus(currentNode, Meta.MotionDirection.RIGHT);
 
-// Swap windows (lib/extension/tree.ts:1181)
+// Swap windows (src/lib/extension/tree.ts:1181)
 tree.swap(node, Meta.MotionDirection.LEFT);
 ```
 
@@ -227,10 +227,10 @@ const display = global.display as Meta.Display;
 ### Monitor geometry
 
 ```ts
-// Get monitor rect (lib/extension/window.ts:955)
+// Get monitor rect (src/lib/extension/window.ts:955)
 const monitorRect = display.get_monitor_geometry(monitorIndex);
 
-// Neighbor monitor (lib/extension/utils.ts:1080)
+// Neighbor monitor (src/lib/extension/utils.ts:1080)
 const neighborIndex = display.get_monitor_neighbor_index(monitorIndex, Meta.DisplayDirection.RIGHT);
 
 // Counts and sizes
@@ -245,7 +245,7 @@ const primaryMonitor = display.get_primary_monitor();
 // Currently focused window
 const focusWindow = display.get_focus_window();
 
-// All windows in tab-switching order (lib/extension/window.ts:934-937)
+// All windows in tab-switching order (src/lib/extension/window.ts:934-937)
 const windowsAll = display.get_tab_list(Meta.TabList.NORMAL_ALL, workspace);
 
 // Stacking order
@@ -258,7 +258,7 @@ const time = display.get_current_time();
 ### Keybinding registration
 
 ```ts
-// Register a keybinding (lib/extension/keybindings.ts:116-117)
+// Register a keybinding (src/lib/extension/keybindings.ts:116-117)
 const action = display.grab_accelerator(accelerator, Meta.KeyBindingFlags.NONE);
 
 // Release
@@ -323,7 +323,7 @@ Used for partial maximize/unmaximize:
 | `BOTH` | Fully maximized (HORIZONTAL \| VERTICAL) |
 
 ```ts
-// Unmaximize before tiling (lib/extension/window.ts:848-850)
+// Unmaximize before tiling (src/lib/extension/window.ts:848-850)
 metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
 metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
 
@@ -340,7 +340,7 @@ Controls which windows appear in the tab-switching list:
 | `NORMAL` | Normal windows |
 | `DOCKS` | Dock windows |
 | `GROUP` | Window groups |
-| `NORMAL_ALL` | All normal windows — used by anvil (lib/extension/window.ts:934) |
+| `NORMAL_ALL` | All normal windows — used by anvil (src/lib/extension/window.ts:934) |
 | `NORMAL_ALL_MRU` | All normal windows in MRU order |
 
 ```ts
@@ -381,7 +381,7 @@ const union = rect.union(otherRect);
 ### Global object access with TypeScript
 
 ```ts
-// Display singleton (lib/extension/window.ts)
+// Display singleton (src/lib/extension/window.ts)
 const display = global.display as Meta.Display;
 
 // Workspace manager
@@ -393,12 +393,12 @@ const wsm = global.workspace_manager as Meta.WorkspaceManager;
 Meta objects are GObjects — connect and disconnect follow standard GObject patterns:
 
 ```ts
-// Connect (lib/extension/window.ts:1521)
+// Connect (src/lib/extension/window.ts:1521)
 const windowSignals = [];
 windowSignals.push(metaWindow.connect("size-changed", () => { ... }));
 windowSignals.push(metaWindow.connect("position-changed", () => { ... }));
 
-// Disconnect (lib/extension/window.ts:1567)
+// Disconnect (src/lib/extension/window.ts:1567)
 for (const signal of windowSignals) {
   metaWindow.disconnect(signal);
 }
@@ -423,7 +423,7 @@ for (const actor of actors) {
 // From Clutter.Actor to Meta.Window directly
 const metaWindow = (actor as Meta.WindowActor).get_meta_window();
 
-// From node tree to window to actor back (lib/extension/window.ts:1722)
+// From node tree to window to actor back (src/lib/extension/window.ts:1722)
 const windowActor = (actor as Meta.WindowActor).get_meta_window();
 ```
 
@@ -440,7 +440,7 @@ const actor = global.get_window_actors().find(a => ...);
 
 ## Putting It Together
 
-A complete window tiling flow from anvil's codebase (lib/extension/window.ts:1286-1365):
+A complete window tiling flow from anvil's codebase (src/lib/extension/window.ts:1286-1365):
 
 ```ts
 import Meta from "gi://Meta";

@@ -32,7 +32,7 @@ npm run typecheck
 
 - Config: `tsconfig.json` — `outDir: "./dist"`, `module: "NodeNext"`, `moduleResolution: "NodeNext"`, `target: "ES2022"`. `noEmit` is used as a CLI flag for `npm run typecheck` (`tsc --noEmit`). `noImplicitAny` and `noImplicitThis` are currently `false`.
 - Type stubs for GJS APIs come from `@girs/*` packages (Adw, Clutter, Gdk, Gio, GLib, GObject, Gtk, Meta, St, gnome-shell).
-- `gi://Shell` is mapped to a hand-written `.d.ts` in `test/types/gi-shell.d.ts`.
+- `gi://Shell` is mapped to a hand-written `.d.ts` in `test/unit/types/gi-shell.d.ts`.
 - Failures here block submission — reviewers will reject extensions with broken type-level issues.
 
 ### 2. Lint
@@ -54,14 +54,14 @@ npm run test:unit
 ```
 
 - **Tests**: ~182 unit tests in `test/`. Covers tree data structures, window management logic, logger, color utilities, keybindings.
-- **Mocks**: Hand-written mocks in `test/__mocks__/` for all GJS/GNOME Shell APIs. Aliases wired in `vitest.config.js`.
+- **Mocks**: Hand-written mocks in `test/unit/__mocks__/` for all GJS/GNOME Shell APIs. Aliases wired in `vitest.config.js`.
 - **Coverage threshold**: At least 75%. Add `vitest.config.js` coverage config if not already present:
 
 ```js
 test: {
   coverage: {
     provider: "v8",
-    include: ["lib/**/*.ts"],
+    include: ["src/lib/**/*.ts"],
     thresholds: {
       lines: 75,
       branches: 75,
@@ -109,7 +109,7 @@ E2E tests cover:
 - GSettings: value read/write, layout mode toggles, window effects
 - AT-SPI: preferences dialog widget tree, role names, switch states, tab navigation
 
-Tests that must pass: `test/e2e/tests.sh` (47 bash assertions) + Behave scenarios in `test/e2e/features/` (AT-SPI tree + preferences).
+Tests that must pass: Behave scenarios in `test/integration/features/` (extension lifecycle, tiling, settings, AT-SPI tree, preferences) via `make test-integration`.
 
 ### 5. Build
 
@@ -131,22 +131,22 @@ Go through each item. Every **MUST** rule is a hard requirement for approval.
 
 ### Lifecycle Rules
 
-- [ ] **No objects/signals/sources in `constructor()`** — only static data (plain objects, Maps, etc.). GObjects like `Gio.Settings`, `St.Widget` are disallowed in the constructor. See `extension.ts`.
+- [ ] **No objects/signals/sources in `constructor()`** — only static data (plain objects, Maps, etc.). GObjects like `Gio.Settings`, `St.Widget` are disallowed in the constructor. See `src/extension.ts`.
 - [ ] **All objects destroyed in `disable()`** — every widget, GObject, or resource created in `enable()` must be destroyed in `disable()`.
 - [ ] **All signal connections disconnected in `disable()`** — store handler IDs from `connect()` and call `disconnect(id)`.
 - [ ] **All main loop sources removed in `disable()`** — every `GLib.timeout_add()` / `GLib.idle_add()` must have its source ID removed via `GLib.Source.remove()`, even if the callback returns `GLib.SOURCE_REMOVE`.
 
 ### Import Rules
 
-- [ ] **No `Gdk`, `Gtk`, or `Adw` in the extension process** — `extension.ts` and files under `lib/extension/` must NOT import GTK libraries. They belong only in `prefs.ts` and `lib/prefs/`.
-- [ ] **No `Clutter`, `Meta`, `St`, or `Shell` in the preferences process** — `prefs.ts` and files under `lib/prefs/` must NOT import Shell/Clutter libraries.
+- [ ] **No `Gdk`, `Gtk`, or `Adw` in the extension process** — `src/extension.ts` and files under `src/lib/extension/` must NOT import GTK libraries. They belong only in `src/prefs.ts` and `src/lib/prefs/`.
+- [ ] **No `Clutter`, `Meta`, `St`, or `Shell` in the preferences process** — `src/prefs.ts` and files under `src/lib/prefs/` must NOT import Shell/Clutter libraries.
 - [ ] **No deprecated modules** — no `ByteArray`, `Lang`, or `Mainloop`. Use `TextDecoder`/`TextEncoder`, ES6 classes, and `GLib.timeout_add()` instead.
 
 ### Code Quality
 
 - [ ] **No obfuscated or minified code** — all JavaScript must be readable and reviewable. TypeScript must be transpiled to well-formatted JS. Anvil uses TypeScript (compiled to JS at build time), so this is inherently satisfied.
 - [ ] **No AI-generated code** — reviewers check for unnecessary code, imaginary APIs, inconsistent style, LLM-prompt comments. The developer must be able to explain all code.
-- [ ] **No excessive logging** — `console.debug()`/`console.warn()` only for important messages. Reviewers reject extensions that spam the journal. Anvil's logger is in `lib/shared/logger.ts`.
+- [ ] **No excessive logging** — `console.debug()`/`console.warn()` only for important messages. Reviewers reject extensions that spam the journal. Anvil's logger is in `src/lib/shared/logger.ts`.
 
 ### GObject Safety
 
@@ -166,7 +166,7 @@ Go through each item. Every **MUST** rule is a hard requirement for approval.
 
 - [ ] **Schema ID uses `org.gnome.shell.extensions` base** — `org.gnome.shell.extensions.anvil` ✓
 - [ ] **Schema path uses `/org/gnome/shell/extensions` base** — `/org/gnome/shell/extensions/anvil/` ✓
-- [ ] **Schema XML included in ZIP** — checked via `schemas/org.gnome.shell.extensions.anvil.gschema.xml`
+- [ ] **Schema XML included in ZIP** — checked via `src/schemas/org.gnome.shell.extensions.anvil.gschema.xml`
 - [ ] **XML filename matches pattern** — `<schema-id>.gschema.xml` ✓
 
 ### Zip File Contents
@@ -187,7 +187,7 @@ unzip -l anvil@GenKerensky.github.com.zip
 ### Legal
 
 - [ ] **License is GPL-compatible** — Anvil is `GPL-3.0-or-later` (see `package.json:35`). GNOME Shell is `GPL-2.0-or-later`. Compatible.
-- [ ] **Attribution for derived code** — Anvil is a fork of Forge by Jose Maranan. Attribution must be in the distributed files. Check the license header in `extension.ts`, `prefs.ts`, and source files.
+- [ ] **Attribution for derived code** — Anvil is a fork of Forge by Jose Maranan. Attribution must be in the distributed files. Check the license header in `src/extension.ts`, `src/prefs.ts`, and source files.
 - [ ] **No copyrighted/trademarked content without permission** — no brand logos, proprietary artwork, etc.
 - [ ] **No Code of Conduct violations** — name, description, icons, screenshots must comply with [GNOME CoC](https://conduct.gnome.org).
 
@@ -204,7 +204,7 @@ unzip -l anvil@GenKerensky.github.com.zip
 
 ### Anvil Lifecycle Audit
 
-Check `extension.ts` constructor vs `enable()` vs `disable()`:
+Check `src/extension.ts` constructor vs `enable()` vs `disable()`:
 
 - Constructor: only `super(metadata)` and static data setup.
 - `enable()`: creates `Keybindings`, `WindowManager`, `FeatureIndicator`, `FeatureMenuToggle`, `ExtensionThemeManager`, connects signals, registers with `Main.panel`.
@@ -214,7 +214,7 @@ Run this check manually by reading `dist/extension.js` (the built output) and ve
 
 ### Preferences Window Audit
 
-- `prefs.ts` fills the preferences window without importing Shell/Clutter/Meta/St.
+- `src/prefs.ts` fills the preferences window without importing Shell/Clutter/Meta/St.
 - All pages import `gettext as _` from the correct prefs-side path: `resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js`.
 
 ### Translations
@@ -226,12 +226,12 @@ Run this check manually by reading `dist/extension.js` (the built output) and ve
 
 ### Keybindings
 
-- All keybindings registered in `lib/extension/keybindings.ts` must be disabled in `disable()`.
+- All keybindings registered in `src/lib/extension/keybindings.ts` must be disabled in `disable()`.
 - GSettings keybinding schema: `org.gnome.shell.extensions.anvil.keybindings`.
 
 ### Window Overrides Config
 
-- `ConfigManager` in `lib/shared/settings.ts` manages `$HOME/.config/anvil/config/windows.json`.
+- `ConfigManager` in `src/lib/shared/settings.ts` manages `$HOME/.config/anvil/config/windows.json`.
 - File access must use Gio (not Node.js `fs`), as is already done.
 - No hardcoded paths that would fail in sandboxed environments.
 

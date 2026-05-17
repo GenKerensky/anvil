@@ -247,7 +247,7 @@ make test-e2e FEDORA_VERSION=<fedora version>
 
 Or equivalently:
 ```bash
-./test/e2e/run-tests.sh -v <fedora version>
+./test/integration/run-tests.sh -v <fedora version>
 ```
 
 ### Run unit tests

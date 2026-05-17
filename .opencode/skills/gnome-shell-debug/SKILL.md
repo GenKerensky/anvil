@@ -132,4 +132,4 @@ For this project (`anvil@GenKerensky.github.com`):
 5. **Unit tests**: `npm run test:unit` (runs in Node.js with mocks — no GNOME runtime needed)
 6. **E2E tests**: `make test-e2e` (headless Wayland in Podman)
 
-The extension's entry point is `extension.ts`, with core logic in `lib/extension/`. The project logger is in `lib/shared/logger.ts`.
+The extension's entry point is `src/extension.ts`, with core logic in `src/lib/extension/`. The project logger is in `src/lib/shared/logger.ts`.

@@ -1,0 +1,448 @@
+import { vi } from "vitest";
+import { withSignals } from "../../mocks/helpers/signalMixin.js";
+
+export class Rectangle {
+  constructor(params = {}) {
+    this.x = params.x || 0;
+    this.y = params.y || 0;
+    this.width = params.width || 100;
+    this.height = params.height || 100;
+  }
+
+  equal(other) {
+    return (
+      this.x === other.x &&
+      this.y === other.y &&
+      this.width === other.width &&
+      this.height === other.height
+    );
+  }
+
+  contains_rect(other) {
+    return (
+      this.x <= other.x &&
+      this.y <= other.y &&
+      this.x + this.width >= other.x + other.width &&
+      this.y + this.height >= other.y + other.height
+    );
+  }
+
+  overlap(other) {
+    return !(
+      this.x + this.width <= other.x ||
+      other.x + other.width <= this.x ||
+      this.y + this.height <= other.y ||
+      other.y + other.height <= this.y
+    );
+  }
+
+  copy() {
+    return new Rectangle({
+      x: this.x,
+      y: this.y,
+      width: this.width,
+      height: this.height,
+    });
+  }
+}
+
+export class Window extends withSignals() {
+  constructor(params = {}) {
+    super();
+    this.id = params.id ?? Math.random();
+    this._rect = params.rect ?? new Rectangle();
+    this.wm_class = "wm_class" in params ? params.wm_class : "MockApp";
+    this.title = "title" in params ? params.title : "Mock Window";
+    this.maximized_horizontally = params.maximized_horizontally ?? false;
+    this.maximized_vertically = params.maximized_vertically ?? false;
+    this.minimized = params.minimized ?? false;
+    this.fullscreen = params.fullscreen ?? false;
+    this._window_type = "window_type" in params ? params.window_type : WindowType.NORMAL;
+    this._transient_for = "transient_for" in params ? params.transient_for : null;
+    this._allows_resize = "allows_resize" in params ? params.allows_resize : true;
+    this._workspace = params.workspace ?? null;
+    this._monitor = params.monitor ?? 0;
+  }
+
+  get_frame_rect() {
+    return this._rect;
+  }
+
+  get_buffer_rect() {
+    return this._rect;
+  }
+
+  get_work_area_current_monitor() {
+    return new Rectangle({ x: 0, y: 0, width: 1920, height: 1080 });
+  }
+
+  get_work_area_for_monitor(monitorIndex) {
+    return new Rectangle({ x: monitorIndex * 1920, y: 0, width: 1920, height: 1080 });
+  }
+
+  move_resize_frame(interactive, x, y, width, height) {
+    this._rect = new Rectangle({ x, y, width, height });
+  }
+
+  move_frame(interactive, x, y) {
+    this._rect.x = x;
+    this._rect.y = y;
+  }
+
+  get_wm_class() {
+    return this.wm_class;
+  }
+
+  get_title() {
+    return this.title;
+  }
+
+  get_workspace() {
+    return this._workspace;
+  }
+
+  get_monitor() {
+    return this._monitor;
+  }
+
+  is_on_all_workspaces() {
+    return false;
+  }
+
+  showing_on_its_workspace() {
+    return !this.minimized;
+  }
+
+  change_workspace(workspace) {
+    this._workspace = workspace;
+  }
+
+  maximize(directions) {
+    this.maximized_horizontally = true;
+    this.maximized_vertically = true;
+  }
+
+  unmaximize(directions) {
+    this.maximized_horizontally = false;
+    this.maximized_vertically = false;
+  }
+
+  get_maximized() {
+    if (this.maximized_horizontally && this.maximized_vertically) return 3;
+    if (this.maximized_horizontally) return 1;
+    if (this.maximized_vertically) return 2;
+    return 0;
+  }
+
+  is_maximized() {
+    return this.maximized_horizontally && this.maximized_vertically;
+  }
+
+  is_fullscreen() {
+    return this.fullscreen;
+  }
+
+  make_fullscreen() {
+    this.fullscreen = true;
+  }
+
+  unmake_fullscreen() {
+    this.fullscreen = false;
+  }
+
+  is_above() {
+    return this.above || false;
+  }
+
+  make_above() {
+    this.above = true;
+  }
+
+  unmake_above() {
+    this.above = false;
+  }
+
+  minimize() {
+    this.minimized = true;
+  }
+
+  unminimize() {
+    this.minimized = false;
+  }
+
+  raise() {}
+
+  focus(timestamp) {}
+
+  activate(timestamp) {
+    this.focus(timestamp);
+  }
+
+  delete(timestamp) {}
+
+  allows_resize() {
+    return this._allows_resize;
+  }
+
+  get_window_type() {
+    return this._window_type;
+  }
+
+  get_transient_for() {
+    return this._transient_for;
+  }
+
+  get_id() {
+    return this.id;
+  }
+
+  get_display() {
+    return global.display || null;
+  }
+
+  move_to_monitor(monitorIndex) {
+    this._monitor = monitorIndex;
+  }
+
+  appears_focused() {
+    return this.appears_focused_value ?? false;
+  }
+
+  get_stable_sequence() {
+    return this.id;
+  }
+
+  get_compositor_private() {
+    if (!this._actor) {
+      this._actor = {
+        border: null,
+        splitBorder: null,
+        actorSignals: null,
+        remove_all_transitions: vi.fn(),
+        connect: vi.fn(() => Math.random()),
+        disconnect: vi.fn(),
+      };
+    }
+    return this._actor;
+  }
+
+  set_unmaximize_flags(flags) {}
+}
+
+export class Workspace extends withSignals() {
+  constructor(params = {}) {
+    super();
+    this._index = params.index || 0;
+    this._windows = params.windows || [];
+  }
+
+  index() {
+    return this._index;
+  }
+
+  list_windows() {
+    return this._windows;
+  }
+
+  get_work_area_for_monitor(monitorIndex) {
+    return new Rectangle({ x: monitorIndex * 1920, y: 0, width: 1920, height: 1080 });
+  }
+
+  activate_with_focus(window, timestamp) {}
+}
+
+export class Display extends withSignals() {
+  constructor() {
+    super();
+    this._workspaces = [];
+  }
+
+  get_workspace_manager() {
+    return {
+      get_n_workspaces: () => this._workspaces.length,
+      get_workspace_by_index: (index) => this._workspaces[index] || null,
+      get_workspaces: () => this._workspaces,
+    };
+  }
+}
+
+export const WindowType = {
+  NORMAL: 0,
+  DESKTOP: 1,
+  DOCK: 2,
+  DIALOG: 3,
+  MODAL_DIALOG: 4,
+  TOOLBAR: 5,
+  MENU: 6,
+  UTILITY: 7,
+  SPLASHSCREEN: 8,
+  DROPDOWN_MENU: 9,
+  POPUP_MENU: 10,
+  TOOLTIP: 11,
+  NOTIFICATION: 12,
+  COMBO: 13,
+  DND: 14,
+  OVERRIDE_OTHER: 15,
+};
+
+export const DisplayDirection = {
+  UP: 0,
+  DOWN: 1,
+  LEFT: 2,
+  RIGHT: 3,
+};
+
+export const MotionDirection = {
+  UP: 0,
+  DOWN: 1,
+  LEFT: 2,
+  RIGHT: 3,
+  UP_LEFT: 4,
+  UP_RIGHT: 5,
+  DOWN_LEFT: 6,
+  DOWN_RIGHT: 7,
+};
+
+export const Side = {
+  LEFT: 1 << 0,
+  RIGHT: 1 << 1,
+  TOP: 1 << 2,
+  BOTTOM: 1 << 3,
+};
+
+export const MaximizeFlags = {
+  HORIZONTAL: 1 << 0,
+  VERTICAL: 1 << 1,
+  BOTH: (1 << 0) | (1 << 1),
+};
+
+export const GrabOp = {
+  NONE: 0,
+  MOVING: 1,
+  MOVING_UNCONSTRAINED: 1 | 1024,
+  KEYBOARD_MOVING: 19,
+  RESIZING_NW: 2,
+  RESIZING_N: 3,
+  RESIZING_NE: 4,
+  RESIZING_E: 5,
+  RESIZING_SE: 6,
+  RESIZING_S: 7,
+  RESIZING_SW: 8,
+  RESIZING_W: 9,
+  KEYBOARD_RESIZING_UNKNOWN: 10,
+  KEYBOARD_RESIZING_N: 11,
+  KEYBOARD_RESIZING_S: 12,
+  KEYBOARD_RESIZING_E: 13,
+  KEYBOARD_RESIZING_W: 14,
+  KEYBOARD_RESIZING_NW: 15,
+  KEYBOARD_RESIZING_NE: 16,
+  KEYBOARD_RESIZING_SE: 17,
+  KEYBOARD_RESIZING_SW: 18,
+  WINDOW_BASE: 1024,
+  COMPOSITOR: 1025,
+};
+
+export const TabList = {
+  NORMAL: 0,
+  DOCKS: 1,
+  GROUP: 2,
+  NORMAL_ALL: 3,
+};
+
+export const KeyBindingFlags = {
+  NONE: 0,
+  IS_REVERSED: 1,
+  IS_BUILTIN: 2,
+  PER_WINDOW: 4,
+};
+
+export const KeyBindingAction = {
+  NONE: 0,
+  WORKSPACE_1: 1,
+  WORKSPACE_2: 2,
+  MOVE_TO_WORKSPACE_1: 3,
+  MOVE_TO_WORKSPACE_2: 4,
+};
+
+export function external_binding_name_for_action(action) {
+  return `binding-${action}`;
+}
+
+export class Monitor {
+  constructor(params = {}) {
+    this._connector = params.connector ?? "eDP-1";
+    this._display_name = params.display_name ?? "Built-in Display";
+  }
+
+  get_connector() {
+    return this._connector;
+  }
+
+  get_display_name() {
+    return this._display_name;
+  }
+}
+
+export class LogicalMonitor {
+  constructor(params = {}) {
+    this._monitors = params.monitors ?? [new Monitor()];
+  }
+
+  get_monitors() {
+    return this._monitors;
+  }
+}
+
+export class MonitorManager {
+  constructor() {
+    this._logicalMonitors = [];
+  }
+
+  static _instance = null;
+
+  static get() {
+    if (!MonitorManager._instance) {
+      MonitorManager._instance = new MonitorManager();
+    }
+    return MonitorManager._instance;
+  }
+
+  get_logical_monitors() {
+    return this._logicalMonitors;
+  }
+
+  get_monitor_for_connector(connector) {
+    for (let i = 0; i < this._logicalMonitors.length; i++) {
+      const monitors = this._logicalMonitors[i].get_monitors();
+      for (const m of monitors) {
+        if (m.get_connector() === connector) return i;
+      }
+    }
+    return -1;
+  }
+
+  // test helper
+  set_logical_monitors(logicalMonitors) {
+    this._logicalMonitors = logicalMonitors;
+  }
+}
+
+export default {
+  Rectangle,
+  Window,
+  Workspace,
+  Display,
+  WindowType,
+  DisplayDirection,
+  MotionDirection,
+  Side,
+  MaximizeFlags,
+  GrabOp,
+  TabList,
+  KeyBindingFlags,
+  KeyBindingAction,
+  external_binding_name_for_action,
+  Monitor,
+  LogicalMonitor,
+  MonitorManager,
+};

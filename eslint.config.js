@@ -4,12 +4,18 @@ import vitest from "@vitest/eslint-plugin";
 import tseslint from "typescript-eslint";
 
 export default [
-  { ignores: ["node_modules/**", "dist/**", "locale/**", "test/__mocks__/**"] },
-
+  {
+    ignores: [
+      "node_modules/**",
+      "dist/**",
+      "locale/**",
+      "test/unit/__mocks__/**",
+      "test/e2e/.venv/**",
+    ],
+  },
   js.configs.recommended,
   prettierConfig,
   ...tseslint.configs.recommended,
-
   {
     languageOptions: {
       ecmaVersion: 2022,
@@ -33,7 +39,6 @@ export default [
       "@typescript-eslint/no-explicit-any": "warn",
     },
   },
-
   {
     files: ["test/**/*.{js,ts}"],
     plugins: { vitest },
@@ -46,17 +51,6 @@ export default [
       "@typescript-eslint/no-unused-vars": "off",
       "vitest/no-disabled-tests": "warn",
       "vitest/no-focused-tests": "error",
-    },
-  },
-
-  // Third-party CSS parser
-  {
-    files: ["lib/css/index.ts"],
-    rules: {
-      "@typescript-eslint/ban-ts-comment": "off",
-      "no-var": "off",
-      "@typescript-eslint/no-this-alias": "off",
-      "@typescript-eslint/no-explicit-any": "off",
     },
   },
 ];

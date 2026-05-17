@@ -12,7 +12,8 @@ gschemas.compiled
 *.zip
 *.exe
 *.mo
-po
+src/po
 .vscode
 node_modules
+.venv
 .github

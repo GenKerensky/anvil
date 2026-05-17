@@ -10,9 +10,9 @@ Anvil is a GNOME Shell tiling extension (fork of Forge). It runs inside **GJS** 
 
 | File | Process | Available APIs | Unavailable |
 |------|---------|---------------|-------------|
-| `extension.ts` | gnome-shell | Clutter, St, Meta, Shell, `global`, Gio, GLib | Gtk |
-| `prefs.ts` | isolated Gtk | Gtk4, Adwaita, Gio, GLib | Clutter, St, Meta, Shell, `global` |
-| `stylesheet.css` | Shell UI only | — | Does NOT apply to prefs window |
+| `src/extension.ts` | gnome-shell | Clutter, St, Meta, Shell, `global`, Gio, GLib | Gtk |
+| `src/prefs.ts` | isolated Gtk | Gtk4, Adwaita, Gio, GLib | Clutter, St, Meta, Shell, `global` |
+| `src/stylesheet.css` | Shell UI only | — | Does NOT apply to prefs window |
 
 Once loaded, an extension effectively becomes part of GNOME Shell — it can access and
 modify **any** internal Shell JS code or C library exposed via GObject-Introspection.
@@ -70,34 +70,55 @@ make dev             # Build + install in dev mode (restart shell to load)
 make build           # tsc → dist/ + copy static assets
 make install         # Install dist/ → ~/.local/share/gnome-shell/extensions/
 make dist            # Build → .zip artifact
-make clean           # Remove dist/, schemas/gschemas.compiled, metadata.js
+make clean           # Remove dist/, src/schemas/gschemas.compiled, src/lib/prefs/metadata.js
 npm run format       # Prettier (printWidth 100, tabWidth 2)
 npm run build        # tsc only (compile TS → dist/)
 npm run typecheck    # tsc --noEmit (type checking without emitting)
 ```
 
-`make build` depends on: `clean` → `npm run build` (tsc) → `schemas` → `compilemsgs` → `metadata`. Generated files: `lib/prefs/metadata.js` (from git log), `schemas/gschemas.compiled`, `po/anvil.pot`, `*.mo`. Output directory: `dist/`.
+`make build` depends on: `clean` → `npm run build` (tsc) → `schemas` → `compilemsgs` → `metadata`. Generated files: `src/lib/prefs/metadata.js` (from git log), `src/schemas/gschemas.compiled`, `src/po/anvil.pot`, `*.mo`. Output directory: `dist/`.
 
 ## Test Commands (run in this order)
 
 ```bash
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint . && prettier --check
-npm run test:unit    # vitest run (~182 tests, no GNOME runtime needed)
+npm run test:unit    # vitest run (~767 tests, no GNOME runtime needed)
 npm run test:watch   # vitest watch mode
 
 # Full pipeline (CI order):
-npm test             # typecheck → lint → unit → e2e build → e2e all
+npm test             # typecheck → lint → unit → integration build → integration all
 ```
 
-E2E tests require Podman + `glib2-devel` (`make dist` needs it). Container images are built per Fedora version:
+### Container integration tests (`test/integration/`)
+
+Container-based tests run `gnome-shell --headless --wayland` inside Podman.
+Communication with the shell uses a **JS D-Bus agent** (replaces the broken `Shell.Eval` API):
 
 ```bash
-make test-e2e              # Fedora 44 (default, GNOME 50)
-make test-e2e FEDORA_VERSION=43  # GNOME 49
-make test-e2e FEDORA_VERSION=42  # GNOME 48
-make test-e2e-all          # All three versions
+make test-integration              # Fedora 44 (default, GNOME 50)
+make test-integration FEDORA_VERSION=43  # GNOME 49
+make test-integration FEDORA_VERSION=42  # GNOME 48
+make test-integration-all          # All three versions
 ```
+
+The agent (`test/integration/agent/agent.js`) registers a D-Bus service (`org.gnome.Shell.AnvilTest`) inside gnome-shell via `--automation-script`. Behave test steps call it via Python wrappers (`call_agent`, `eval_test_state`). The agent must use **module-level code** (not `export async function run()`) because `gnome-shell --headless --wayland` loads the module but does **not** call `run()` — only `gnome-shell --devkit` does.
+
+Tests are organized as Behave feature files in `test/integration/features/`. All integration test scenarios — extension lifecycle, tiling, gsettings, preferences UI, and AT-SPI tree — run via a single `behave` invocation.
+
+Requires Podman + `glib2-devel` (`make dist` needs it). Container images are built per Fedora version. Test count: Behave steps across 5 feature files (extension_lifecycle, tiling, settings, preferences, atspi_tree).
+
+### Devkit E2E tests (`test/e2e/`)
+
+Local devkit-compositor tests that run on the host GNOME Shell:
+
+```bash
+make test-e2e                      # Local devkit compositor (host GNOME version)
+```
+
+Uses `gnome-shell --devkit --wayland --automation-script`. The `--devkit` flag **does** call `export async function run()` on the automation script. `run.py` (Python orchestrator) manages: isolated D-Bus → `dbus-daemon` → `gnome-shell --devkit` → extension install → wait for results JSON. Supports keyboard injection via `wtype` and screenshot via `gnome-screenshot`. 7 E2E tests (extension lifecycle, tiling geometry, keyboard shortcuts, Alt+F4 operations).
+
+**Important**: `Shell.Eval` is broken system-wide (returns `(false, '')` for all expressions); D-Bus APIs (`org.gnome.Shell.Extensions.*`, `org.gnome.Shell.AnvilTest`) replace it everywhere.
 
 ## Pre-commit Hook
 
@@ -120,34 +141,94 @@ If either fails, fix the errors before proceeding. The only acceptable warnings 
 
 For `.ts` test file changes, `npm run test:unit` must also pass.
 
-For E2E test changes (`test/e2e/`), `npm run test:e2e` must pass against at least Fedora 44 (default).
+For integration test changes (`test/integration/`), `npm run test:integration` must pass against at least Fedora 44 (default).
+
+For E2E test changes (`test/e2e/`), `make test-e2e` must pass.
+
+### GJS automation-script API pitfalls
+
+When writing scripts for `gnome-shell --automation-script`, remember:
+
+- **Module-level code executes in both `--headless` and `--devkit`**, but `export async function run()` is only called by `--devkit`. For the container agent, use top-level promise chains.
+- **`Gio.DBusConnection.register_object(path, iface, handler, userData, freeFunc)`** requires 5 args in GJS 1.88 (pass `null, null` for the last two).
+- **`Gio.bus_own_name()`** creates a separate connection that can be GC'd — use `Gio.DBus.session` + `call_sync('RequestName')` + `register_object()` instead.
+- **`GLib.Variant('(s)', value)`** for tuple types must wrap the string in an array: `['pong']` not `'pong'`. GJS 1.88 iterates a bare string, producing only the first character.
+- **`Main.extensionManager.lookup(UUID).extWm`** can be `null` even when extension state is ACTIVE; use `global.__anvil_test_state.extWm` as the reliable fallback (requires `test-mode=true` set via `Gio.Settings` before extension enable).
+- **`Gio.Settings({ schema_id })`** works inside automation scripts when `GSETTINGS_SCHEMA_DIR` env var points to the extension's schemas directory — set this in `start-session.sh` before launching gnome-shell.
 
 ## Architecture
 
 ```
-extension.ts          # Entry point loaded by GNOME Shell
-prefs.ts              # Preferences window entry point
-lib/
-  extension/          # Core tiling: tree, windows, keybindings, utils, theme
-  shared/             # Shared between extension + prefs: logger, settings, theme
-  prefs/              # Preferences UI (metadata.js is gitignored + auto-generated)
-  css/                # CSS parsing (@ts-nocheck — third-party library)
-config/windows.json   # Default window override config
+src/
+  extension.ts          # Entry point loaded by GNOME Shell
+  prefs.ts              # Preferences window entry point
+  ambient.d.ts          # Type declarations
+  stylesheet.css        # Shell theme overrides
+  lib/
+    extension/          # Core tiling: tree, windows, keybindings, utils, theme
+    shared/             # Shared between extension + prefs: logger, settings, theme
+    prefs/              # Preferences UI (metadata.js is gitignored + auto-generated)
+    css/                # CSS parsing (@ts-nocheck — third-party library)
+  config/windows.json   # Default window override config
+  po/                   # Translation files (POT, PO, MO)
+  resources/            # Static assets (icons)
+  schemas/              # GSettings schemas
+  types/                # TypeScript declaration files
 ```
 
-Source in `lib/shared/*.ts` → tests in `test/shared/*.test.ts`.
-Source in `lib/extension/*.ts` → tests in `test/extension/*.test.ts`.
+Source in `src/lib/shared/*.ts` → tests in `test/unit/shared/*.test.ts`.
+Source in `src/lib/extension/*.ts` → tests in `test/unit/extension/*.test.ts`.
+
+## Test Architecture
+
+```
+test/
+  unit/             # All vitest tests (hand-mocked GJS, no GNOME runtime)
+    __mocks__/      # GJS/GNOME Shell mocks (gi://, resource://)
+    mocks/helpers/  # Test fixtures (createMockWindow, createWindowManagerFixture)
+    setup.js        # Vitest setup: mock global, log, etc.
+    types/          # TypeScript declarations for test helpers
+    css/            # CSS parser unit tests
+    extension/      # Unit tests for src/lib/extension/ (WindowManager, Tree, etc.)
+    shared/         # Unit tests for src/lib/shared/ (settings, logger, theme)
+    window-operations.test.ts  # Mock integration test (vitest)
+  e2e/              # Devkit-based E2E (gnome-shell --devkit --automation-script)
+    run.py          # Python orchestrator: dbus-daemon → gnome-shell → wait for results
+    runner.js       # ES module loaded by --automation-script; calls run()
+    lib/            # Test framework & commands (describe/it/assert, launchApp, sendKeyCombo)
+    suites/         # Test suites (extension, tiling, keyboard, operations)
+  integration/      # Container-based integration (gnome-shell --headless --wayland)
+    agent/agent.js  # D-Bus service inside gnome-shell (replaces Shell.Eval)
+    run-tests.sh    # Runner: podman → install ext → wait for agent → run behave
+    start-session.sh # Container entrypoint: D-Bus → mocks → gnome-shell
+    set-env.sh      # Environment wrapper for all podman exec calls
+    features/       # Behave BDD feature files and step definitions
+      extension_lifecycle.feature  # Extension active/disabled state
+      tiling.feature              # Tiling mode, layout settings, window open
+      settings.feature            # All gsettings (gap, float, focus, effects)
+      preferences.feature         # Preferences window UI (Dogtail/AT-SPI)
+      atspi_tree.feature          # AT-SPI tree accessibility checks
+      environment.py              # Behave hooks (screenshots on failure)
+      steps/
+        helpers.py      # Shared Python helpers (gsetting, D-Bus agent, Dogtail)
+        agent_steps.py  # Step definitions for @agent-tagged features
+        atspi_steps.py  # Step definitions for @atspi-tagged features
+        preferences_steps.py  # Step definitions for @prefs-tagged features
+```
 
 ## Key Conventions
 
 - **Language**: TypeScript (not JavaScript). `tsc` compiles to JavaScript in `dist/`. The tsconfig uses `module: NodeNext, moduleResolution: NodeNext, target: ES2022`.
-- **TypeScript strict mode**: Enabled (`strict: true`, `noImplicitAny: true`, `noImplicitThis: true`). One file uses `@ts-nocheck` (`lib/css/index.ts` — third-party CSS parser). All other source files are fully typed. See `TODO.md` for remaining `any` usage patterns.
-- **GJS imports**: Source uses `gi://Gio`, `resource:///org/gnome/shell/...` paths. Unit tests remap these to `test/__mocks__/` via vitest aliases. Type declarations come from `@girs/*` packages and `ambient.d.ts`.
-- **Test globals**: `log`, `logError`, `print`, `global` are mocked in `test/setup.js`.
-- **ESLint**: Flat config (`eslint.config.js`) using `typescript-eslint` recommended rules. Test files have `vitest/no-focused-tests: error`. Third-party `lib/css/index.ts` has relaxed rules.
+- **TypeScript strict mode**: Enabled (`strict: true`, `noImplicitAny: true`, `noImplicitThis: true`). One file uses `@ts-nocheck` (`src/lib/css/index.ts` — third-party CSS parser). All other source files are fully typed. See `TODO.md` for remaining `any` usage patterns.
+- **GJS imports**: Source uses `gi://Gio`, `resource:///org/gnome/shell/...` paths. Unit tests remap these to `test/unit/__mocks__/` via vitest aliases. Type declarations come from `@girs/*` packages and `ambient.d.ts`.
+- **Test globals**: `log`, `logError`, `print`, `global` are mocked in `test/unit/setup.js`.
+- **ESLint**: Flat config (`eslint.config.js`) using `typescript-eslint` recommended rules. Test files have `vitest/no-focused-tests: error`. Third-party \`src/lib/css/index.ts\` has relaxed rules.
 - **Prettier**: `printWidth: 100, tabWidth: 2` — wider than defaults.
-- **E2E**: Uses GNOME Shell `--headless --wayland` (not `--nested` which was removed in GNOME 50). No keyboard/pixel/drag-drop testing possible headless. D-Bus, gsettings, and Dogtail/AT-SPI only.
+- **Integration**: Uses GNOME Shell `--headless --wayland` in containers. No keyboard/pixel/drag-drop testing possible headless. All tests run via Behave BDD framework: D-Bus agent calls for extension state, gsettings for settings verification, and Dogtail/AT-SPI for preferences UI. Relies on a JS D-Bus agent (`test/integration/agent/agent.js`) loaded via `--automation-script` — NOT `Shell.Eval` (which is broken system-wide). See `test/integration/`.  
+- **E2E**: Uses `gnome-shell --devkit --wayland` locally. Supports keyboard injection via `wtype` and screen capture via `gnome-screenshot`. Uses `export async function run()` in the automation script (devkit calls `run()`). See `test/e2e/`.
+- **Container agent agent.js**: Uses module-level code (not `run()`), registers `org.gnome.Shell.AnvilTest` D-Bus service via `Gio.DBus.session` + `call_sync('RequestName')` + `register_object(path, iface, handler, null, null)`. All `GLib.Variant('(s)', ...)` calls must wrap strings in arrays.
+- **`Shell.Eval` is dead**: Returns `(false, '')` for all expressions on this system. Never use it. D-Bus APIs (`org.gnome.Shell.Extensions.*`, `org.gnome.Shell.AnvilTest`) are the replacement.
 - **Extension UUID**: `anvil@GenKerensky.github.com`
 - **Install path**: `~/.local/share/gnome-shell/extensions/anvil@GenKerensky.github.com/`
-- **Type declarations**: `ambient.d.ts` imports `@girs/gjs`, `@girs/gnome-shell/ambient`, `@girs/gnome-shell/extensions/global`. `gi://Shell` types in `test/types/gi-shell.d.ts`.
-- **Build output**: `dist/` is gitignored. `lib/prefs/metadata.js` is auto-generated during build and gitignored.
+- **Type declarations**: `ambient.d.ts` imports `@girs/gjs`, `@girs/gnome-shell/ambient`, `@girs/gnome-shell/extensions/global`. `gi://Shell` types in `test/unit/types/gi-shell.d.ts`.
+- **Build output**: `dist/` is gitignored. `src/lib/prefs/metadata.js` is auto-generated during build and gitignored.

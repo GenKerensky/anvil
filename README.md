@@ -200,7 +200,7 @@ On failure, the test runner saves:
 Use `-k` to keep the container running for manual inspection:
 
 ```bash
-./test/e2e/run-tests.sh -v 44 -k
+./test/integration/run-tests.sh -v 44 -k
 # Container is left running — connect to it for debugging:
 podman exec -it --user gnomeshell <container-id> set-env.sh bash
 ```
@@ -217,8 +217,7 @@ test/e2e/
 │       ├── helpers.py           # Shared: gsettings, prefs, AT-SPI dump utilities
 │       ├── atspi_steps.py       # Step definitions for AT-SPI tree
 │       └── preferences_steps.py # Step definitions for preferences
-├── tests.sh                     # 47 bash assertions via D-Bus/gsettings
-├── run-tests.sh                 # Test runner (container lifecycle, orchestration)
+├── run-tests.sh                 # Test runner (container lifecycle, orchestration → behave)
 ├── start-session.sh             # Session D-Bus + dbusmock + gnome-shell --headless
 └── Containerfile                # Fedora-based image with AT-SPI + Dogtail + behave
 ```

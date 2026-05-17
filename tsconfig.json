@@ -2,6 +2,7 @@
   "compilerOptions": {
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
+    "rootDir": "./src",
     "outDir": "./dist",
     "sourceMap": false,
     "skipLibCheck": true,
@@ -10,9 +11,9 @@
     "noImplicitAny": true,
     "noImplicitThis": true,
     "strict": true,
-    "types": ["vitest/globals"],
     "paths": {
       "gi://Adw": ["./node_modules/@girs/adw-1"],
+      "gi://cairo": ["./node_modules/@girs/cairo-1.0"],
       "gi://Clutter": ["./node_modules/@girs/clutter-18"],
       "gi://Gdk": ["./node_modules/@girs/gdk-4.0"],
       "gi://Gio": ["./node_modules/@girs/gio-2.0"],
@@ -20,17 +21,11 @@
       "gi://GObject": ["./node_modules/@girs/gobject-2.0"],
       "gi://Gtk": ["./node_modules/@girs/gtk-4.0"],
       "gi://Meta": ["./node_modules/@girs/meta-18"],
-      "gi://Shell": ["./test/types/gi-shell.d.ts"],
+      "gi://Shell": ["./test/unit/types/gi-shell.d.ts"],
       "gi://St": ["./node_modules/@girs/st-18"],
-      "resource:///org/gnome/Shell/Extensions/js/misc/config.js": ["./test/types/prefs-config.d.ts"]
+      "resource:///org/gnome/Shell/Extensions/js/misc/config.js": ["./src/types/prefs-config.d.ts"]
     }
   },
-  "include": [
-    "ambient.d.ts",
-    "test/types/gi-shell.d.ts",
-    "test/types/prefs-config.d.ts",
-    "test/types/meta-extensions.d.ts"
-  ],
-  "files": ["extension.ts", "prefs.ts"],
+  "include": ["src/**/*.ts", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist"]
 }

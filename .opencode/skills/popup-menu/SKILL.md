@@ -171,7 +171,7 @@ menu.addMenuItem(section);
 
 ## Anvil Usage
 
-The existing implementation in `lib/extension/indicator.ts` demonstrates:
+The existing implementation in `src/lib/extension/indicator.ts` demonstrates:
 
 - **`FeatureMenuToggle`** (line 37) — extends `QuickMenuToggle`, uses `menu.setHeader()`,
   `menu.addMenuItem()` with `PopupSwitchMenuItem` subclasses, `PopupSeparatorMenuItem`,

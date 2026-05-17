@@ -4,8 +4,13 @@ gschemas.compiled
 *.zip
 *.exe
 *.mo
-po/anvil.pot
+src/po/anvil.pot
 .vscode
 node_modules
-lib/prefs/metadata.js
+src/lib/prefs/metadata.js
+test/integration/output
+test/e2e/.venv
 test/e2e/output
+__pycache__
+*.pyc
+coverage

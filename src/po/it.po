@@ -1,0 +1,629 @@
+# Anvil Italian Translation
+# Albano Battistella <albanobattistella@gmail.com>, 2023,2024.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Anvil\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-05-17 04:41-0400\n"
+"PO-Revision-Date: 2024-09-15 20:16+0100\n"
+"Last-Translator: Albano Battistella <albanobattistella@gmail.com>\n"
+"Language-Team: Italian <albanobattistella@gmail.com>\n"
+"Language: Italian\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n > 1)\n"
+"X-Generator: Gtranslator 42.0\n"
+
+#: src/lib/extension/indicator.ts:63 src/lib/prefs/settings.ts:87
+msgid "Tiling"
+msgstr "Affiancamento"
+
+#: src/lib/extension/indicator.ts:82 src/lib/prefs/settings.ts:45
+msgid "Anvil"
+msgstr ""
+
+#: src/lib/extension/indicator.ts:82
+msgid "Tiling Window Management"
+msgstr "Gestione delle finestre di affiancamento"
+
+#: src/lib/extension/indicator.ts:86
+msgid "Gaps Hidden when Single"
+msgstr "Margini nascosti quando c'è una sola finestra"
+
+#: src/lib/extension/indicator.ts:94
+msgid "Show Focus Hint Border"
+msgstr "Mostra suggerimento del bordo di messa a fuoco"
+
+#: src/lib/extension/indicator.ts:102
+msgid "Move Pointer with the Focus"
+msgstr "Sposta il puntatore con il focus"
+
+#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:144
+msgid "Settings"
+msgstr "Impostazioni"
+
+#: src/lib/prefs/appearance.ts:31
+#, fuzzy
+msgid "Tiled window"
+msgstr "Modalità di affiancamento a schede"
+
+#: src/lib/prefs/appearance.ts:33
+#, fuzzy
+msgid "Tabbed window"
+msgstr "Modalità di affiancamento a schede"
+
+#: src/lib/prefs/appearance.ts:35
+#, fuzzy
+msgid "Stacked window"
+msgstr "Modalità di affiancamento in pila"
+
+#: src/lib/prefs/appearance.ts:37
+msgid "Floating window"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:39
+#, fuzzy
+msgid "Split direction hint"
+msgstr "Indicatore per la direzione di divisione"
+
+#: src/lib/prefs/appearance.ts:44
+msgid "Appearance"
+msgstr "Aspetto"
+
+#: src/lib/prefs/appearance.ts:49
+msgid "Gaps"
+msgstr "Margini"
+
+#: src/lib/prefs/appearance.ts:50
+msgid "Change the gap size between windows"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:53
+msgid "Gap size"
+msgstr ""
+
+# I'm not sure that marges are a correct translation of gaps. There are other possibilities.
+#: src/lib/prefs/appearance.ts:59
+#, fuzzy
+msgid "Gap size multiplier"
+msgstr "Moltiplicatore delle dimensioni dei margini"
+
+#: src/lib/prefs/appearance.ts:65
+msgid "Disable gaps for single window"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:66
+msgid "Disables window gaps when only a single window is present"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:93
+#, fuzzy
+msgid "Border radius"
+msgstr "Bordi"
+
+#: src/lib/prefs/appearance.ts:94
+msgid "Set to 0 for square corners"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:119
+msgid "Style"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:120
+msgid "Change how the shell looks"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:123
+#, fuzzy
+msgid "Preview hint"
+msgstr "Attiva/disattiva l'indice di anteprima"
+
+#: src/lib/prefs/appearance.ts:124
+msgid "Shows where the window will be tiled when you let go of it"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:130
+#, fuzzy
+msgid "Border around focused window"
+msgstr ""
+"Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#: src/lib/prefs/appearance.ts:131
+msgid "Display a colored border around the focused window"
+msgstr "Visualizza un bordo colorato attorno alla finestra focalizzata"
+
+#: src/lib/prefs/appearance.ts:136
+#, fuzzy
+msgid "Window split hint border"
+msgstr "Mostra suggerimento finestra del bordo di messa a fuoco"
+
+#: src/lib/prefs/appearance.ts:137
+msgid "Show split direction border on focused window"
+msgstr ""
+"Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#: src/lib/prefs/appearance.ts:142
+#, fuzzy
+msgid "Anvil in quick settings"
+msgstr "Mostra le impostazioni rapide di affiancamento"
+
+#: src/lib/prefs/appearance.ts:143
+#, fuzzy
+msgid "Toggles the Anvil tile in quick settings"
+msgstr "Attiva la visualizzazione di Anvil nelle impostazioni rapide"
+
+#: src/lib/prefs/appearance.ts:152
+msgid "Color"
+msgstr "Colore"
+
+#: src/lib/prefs/appearance.ts:153
+#, fuzzy
+msgid "Changes the focused window's border and preview hint colors"
+msgstr ""
+"Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#: src/lib/prefs/appearance.ts:172
+#, fuzzy
+msgid "Border size"
+msgstr "Dimensione del bordo"
+
+#: src/lib/prefs/appearance.ts:243
+#, fuzzy
+msgid "Border color"
+msgstr "Couleur de la bordure"
+
+#: src/lib/prefs/floating.ts:31
+#, fuzzy
+msgid "Windows"
+msgstr "Finestri"
+
+#: src/lib/prefs/floating.ts:40
+msgid "Floating Windows"
+msgstr "Finestre flottanti"
+
+#: src/lib/prefs/floating.ts:41
+msgid "Windows that will not be tiled"
+msgstr ""
+
+#: src/lib/prefs/keyboard.ts:20
+msgid "Keyboard"
+msgstr "Tastiera"
+
+#: src/lib/prefs/keyboard.ts:23
+#, fuzzy
+msgid "Drag-and-drop modifier key"
+msgstr ""
+"Opzioni del tasto modificatore per affiancare il trascinamento della "
+"selezione"
+
+#: src/lib/prefs/keyboard.ts:25
+#, fuzzy
+msgid ""
+"Change the modifier key for tiling windows via drag-and-drop. Select 'None' "
+"to always tile"
+msgstr ""
+"Modifica il tasto modificatore per <b>affiancare</b> le finestre tramite "
+"mouse o trascina e rilascia"
+
+#: src/lib/prefs/keyboard.ts:29
+#, fuzzy
+msgid "Modifier key"
+msgstr "Tasti di modifica"
+
+#: src/lib/prefs/keyboard.ts:33
+msgid "Super"
+msgstr "Super"
+
+#: src/lib/prefs/keyboard.ts:34
+msgid "Ctrl"
+msgstr "Ctrl"
+
+#: src/lib/prefs/keyboard.ts:35
+msgid "Alt"
+msgstr "Alt"
+
+#: src/lib/prefs/keyboard.ts:36
+msgid "None"
+msgstr "Nessuno"
+
+#: src/lib/prefs/keyboard.ts:42
+#, fuzzy
+msgid "Shortcuts"
+msgstr "Scorciatoie"
+
+#: src/lib/prefs/keyboard.ts:44
+msgid ""
+"Change the tiling shortcuts. To clear a shortcut clear the input field. To "
+"apply a shortcut press enter. <a href=\"https://github.com/forge-ext/forge/"
+"wiki/Keyboard-Shortcuts\">Syntax examples</a>"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:44
+msgid "Monitors"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:143
+msgid "Select a monitor to configure"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:148
+msgid "Enable size constraints"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:149
+msgid "New feature — may not have predictable behavior"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:154
+msgid ""
+"<b>CAUTION</b>: This is a new feature and may not have predictable behavior"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:162
+msgid "Max width"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:163 src/lib/prefs/monitors.ts:172
+msgid "0 = no limit"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:171
+msgid "Max height"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:179
+msgid "Resize exemption"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:180
+msgid "Let manually resized windows exceed the size limits"
+msgstr ""
+
+#: src/lib/prefs/monitors.ts:336
+msgid "Monitor:"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:55
+msgid "translator-credits"
+msgstr "Albano Battistella"
+
+#: src/lib/prefs/settings.ts:66
+msgid "About"
+msgstr "Informazioni"
+
+#: src/lib/prefs/settings.ts:89
+#, fuzzy
+msgid "Behavior"
+msgstr "Comportamento"
+
+#: src/lib/prefs/settings.ts:90
+msgid "Change how the tiling behaves"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:94
+#, fuzzy
+msgid "Focus on Hover"
+msgstr "Mostra suggerimento del bordo di messa a fuoco"
+
+#: src/lib/prefs/settings.ts:95
+msgid "Window focus follows the pointer"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:101
+#, fuzzy
+msgid "Move pointer with focused window"
+msgstr "Sposta il puntatore con il focus"
+
+#: src/lib/prefs/settings.ts:102
+#, fuzzy
+msgid "Moves the pointer when focusing or swapping via keyboard"
+msgstr ""
+"Muovi il puntatore durante la messa a fuoco o lo scambio tramite tastiera"
+
+#: src/lib/prefs/settings.ts:108
+#, fuzzy
+msgid "Quarter tiling"
+msgstr "Affiancamento a quarto"
+
+#: src/lib/prefs/settings.ts:109
+msgid "Places new windows in a clock-wise fashion"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:115
+#, fuzzy
+msgid "Stacked tiling"
+msgstr "Modalità di affiancamento in pila"
+
+#: src/lib/prefs/settings.ts:116
+#, fuzzy
+msgid "Stacks windows on top of each other while still tiling them"
+msgstr "Impila le finestre una sopra l'altra pur continuando ad affiancarle"
+
+#: src/lib/prefs/settings.ts:122
+#, fuzzy
+msgid "Tabbed tiling"
+msgstr "Modalità di affiancamento a schede"
+
+#: src/lib/prefs/settings.ts:123
+#, fuzzy
+msgid "Groups windows as tabs"
+msgstr "Raggruppare le finestre dei riquadri come schede"
+
+#: src/lib/prefs/settings.ts:129
+#, fuzzy
+msgid "Auto exit tabbed tiling"
+msgstr "Uscita automatica dalla modalità di affiancamento a schede"
+
+#: src/lib/prefs/settings.ts:130
+msgid "Exit tabbed tiling mode when only a single tab remains"
+msgstr ""
+"Esci dalla modalità di affiancamento a schede quando rimane solo una scheda"
+
+#: src/lib/prefs/settings.ts:135
+#, fuzzy
+msgid "Drag-and-drop behavior"
+msgstr "Layout di trascinamento della selezione centrale predefinito"
+
+#: src/lib/prefs/settings.ts:136
+msgid "What to do when dragging one window on top of another"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:141
+msgid "Swap"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:142
+msgid "Tabbed"
+msgstr "Schede"
+
+#: src/lib/prefs/settings.ts:143
+msgid "Stacked"
+msgstr "Impilate"
+
+#: src/lib/prefs/settings.ts:147
+msgid "Always on Top mode for floating windows"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:148
+#, fuzzy
+msgid "Makes floating windows appear above tiled windows"
+msgstr "Finestre flottanti sempre sopra le finestre affiancate"
+
+#: src/lib/prefs/settings.ts:156
+msgid "Non-tiling workspaces"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:157
+msgid ""
+"Disables tiling on specified workspaces. Starts from 0, separated by commas"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:160
+msgid "Example: 0,1,2"
+msgstr ""
+
+#: src/lib/prefs/settings.ts:169
+msgid "Logger"
+msgstr "Log"
+
+#: src/lib/prefs/settings.ts:172
+#, fuzzy
+msgid "Log level"
+msgstr "Livello Log"
+
+#: src/lib/prefs/widgets.ts:64
+msgid ""
+"<b>CAUTION</b>: Enabling this setting can lead to bugs or cause the shell to "
+"crash"
+msgstr ""
+"<b>ATTENZIONE</b>: l'attivazione di questa impostazione può portare a bug o "
+"causare il crash della shell"
+
+#: src/lib/prefs/widgets.ts:253
+#, fuzzy
+msgid "Clear shortcut"
+msgstr "Scorciatoie per i container"
+
+#: src/lib/prefs/widgets.ts:277
+msgid "Reset to default"
+msgstr ""
+
+#: src/lib/prefs/widgets.ts:302
+msgid "Remove Item"
+msgstr ""
+
+#, fuzzy
+#~ msgid "Minimum tiled windows"
+#~ msgstr "Modalità di affiancamento a schede"
+
+#, fuzzy
+#~ msgid "Add Window"
+#~ msgstr "Finestra"
+
+#~ msgid "Reset"
+#~ msgstr "Ripristina"
+
+#~ msgid "Workspace"
+#~ msgstr "Spazio di lavoro"
+
+#~ msgid "Update Workspace Settings"
+#~ msgstr "Aggiorna le impostazioni dell'area di lavoro"
+
+#~ msgid ""
+#~ "Provide workspace indices to skip. E.g. 0,1. Empty text to disable. Enter "
+#~ "to accept"
+#~ msgstr ""
+#~ "Specificare gli indici degli spazi di lavoro da ignorare. Es: 0,1. "
+#~ "Lasciare vuoto per disabilitare. Premi Invio per accettare."
+
+#~ msgid "Skip Workspace Tiling"
+#~ msgstr "Disabilita l'affiancamento dell'area di lavoro"
+
+#, fuzzy
+#~ msgid "Show border around focused window"
+#~ msgstr ""
+#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#~ msgid "Legend"
+#~ msgstr "leggenda"
+
+#~ msgid "Windows  key"
+#~ msgstr "Tasto Windows"
+
+#~ msgid "Control key"
+#~ msgstr "Tasto di controllo"
+
+#~ msgid ""
+#~ "Delete text to unset. Press Return key to accept. Focus out to ignore."
+#~ msgstr ""
+#~ "Elimina il testo per annullare. Premi il tasto Invio per accettare.Fai "
+#~ "clic altrove per ignorare."
+
+# Seems to go hand in hand with the next one.
+# e.g. Resets to previous value when invalid.
+#~ msgid "Resets"
+#~ msgstr "Ripristinare"
+
+#~ msgid "to previous value when invalid"
+#~ msgstr "al valore precedente in caso di invalidità"
+
+#, fuzzy
+#~ msgid "Border color around tabbed window"
+#~ msgstr ""
+#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#, fuzzy
+#~ msgid "Border color around stacked window"
+#~ msgstr ""
+#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#, fuzzy
+#~ msgid "Border color around floating window"
+#~ msgstr ""
+#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#, fuzzy
+#~ msgid "Change the border colors around focused window"
+#~ msgstr ""
+#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#, fuzzy
+#~ msgid "Stacked focus hint and preview"
+#~ msgstr "Indicatore di messa a fuoco in pila e anteprima"
+
+#, fuzzy
+#~ msgid "Tabbed focus hint and preview"
+#~ msgstr "Indicatore di messa a fuoco a schede e anteprima"
+
+#, fuzzy
+#~ msgid "Tiled focus hint and preview"
+#~ msgstr "Indice di anteprima e di messa a fuoco affiancata"
+
+#, fuzzy
+#~ msgid "Floated focus hint"
+#~ msgstr "Indice di messa a fuoco fluttuante"
+
+#~ msgid "Syntax"
+#~ msgstr "Sintassi"
+
+#~ msgid "Tile Modifier"
+#~ msgstr "Tasto di modifica per l'affiancamento"
+
+#~ msgid "Auto Split"
+#~ msgstr "Divisione automatica"
+
+#, fuzzy
+#~ msgid "Behaviour"
+#~ msgstr "Comportamento"
+
+#, fuzzy
+#~ msgid "Show tiling quick settings"
+#~ msgstr "Mostra le impostazioni rapide di affiancamento"
+
+# I'm not sure that marges are a correct translation of gaps. There are other possibilities.
+#~ msgid "Gaps Size"
+#~ msgstr "Dimensione dei margini"
+
+#, fuzzy
+#~ msgid ""
+#~ "\n"
+#~ "Select <i>None</i> to <u>always tile immediately</u> by default"
+#~ msgstr ""
+#~ "Seleziona <i>Nessuno</i> per <u>affiancare sempreimmediatamente</u> per "
+#~ "impostazione predefinita"
+
+#, fuzzy
+#~ msgid "Workspaces to skip"
+#~ msgstr "Spazio di lavoro"
+
+#~ msgid "Float Mode Always On Top"
+#~ msgstr "Modalità flottante sempre in primo piano"
+
+#~ msgid "Toggle Anvil's high-level features"
+#~ msgstr "Attiva le funzionalità di alto livello di Anvil"
+
+#~ msgid "Update Shortcuts"
+#~ msgstr "Aggiorna scorciatoie"
+
+#~ msgid "Preview Hint Toggle"
+#~ msgstr "Attiva/disattiva l'indice di anteprima"
+
+#~ msgid "sezione in quarti"
+#~ msgstr "Sezione in quarti"
+
+#~ msgid "Development in Progress..."
+#~ msgstr "Sviluppo in corso..."
+
+#~ msgid "Development"
+#~ msgstr "Sviluppo"
+
+#~ msgid "Experimental"
+#~ msgstr "Sperimentale"
+
+#~ msgid "Home"
+#~ msgstr "Home"
+
+#~ msgid "Palette Mode"
+#~ msgstr "Modalità tavolozza"
+
+#~ msgid "Editor Mode"
+#~ msgstr "Modalità editor"
+
+#~ msgid "Apply Changes"
+#~ msgstr "Applicare le modifiche"
+
+#~ msgid "Layout"
+#~ msgstr "Layout"
+
+#~ msgid "Window Shortcuts"
+#~ msgstr "Scorciatoie della finestra"
+
+#~ msgid "Workspace Shortcuts"
+#~ msgstr "Scorciatoie dell'area di lavoro"
+
+#~ msgid "Focus Shortcuts"
+#~ msgstr "Scorciatoie per la messa a fuoco"
+
+#~ msgid "Update Keybindings"
+#~ msgstr "Aggiorna le scorciatoie da tastiera"
+
+#~ msgid "Action"
+#~ msgstr "Azione"
+
+#~ msgid "Notes"
+#~ msgstr "Note"
+
+# I'm not sure about that. It translates a bit oddly.
+#~ msgid "Anvil Panel Settings"
+#~ msgstr "Impostazioni del pannello di Anvil"
+
+#~ msgid "Tile Mode"
+#~ msgstr "Modalità affiancata"
+
+#~ msgid "Open Preferences"
+#~ msgstr "Apri le preferenze"
+
+#~ msgid "Gaps Size Increments"
+#~ msgstr "Moltiplicatore della dimensione del margine"
