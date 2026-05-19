@@ -6,9 +6,9 @@ import GLib from "gi://GLib";
 import { MonitorsPage } from "../../../src/lib/prefs/monitors.js";
 
 function createSettings(initialValues: Record<string, unknown> = {}) {
-  const settings = new Gio.Settings("org.gnome.shell.extensions.anvil");
+  const settings = new Gio.Settings("org.gnome.shell.extensions.anvil" as any);
   for (const [key, value] of Object.entries(initialValues)) {
-    settings.set_value(key, value);
+    settings.set_value(key, value as any);
   }
   return settings;
 }
@@ -17,7 +17,7 @@ describe("MonitorsPage", () => {
   let settings: Gio.Settings;
 
   beforeEach(() => {
-    Gdk._resetDisplay();
+    (Gdk as any)._resetDisplay();
   });
 
   describe("constructor", () => {
@@ -42,7 +42,7 @@ describe("MonitorsPage", () => {
 
     it("queries monitors from Gdk display", () => {
       settings = createSettings();
-      const display = Gdk.Display.get_default();
+      const display = Gdk.Display.get_default() as any;
       display._addMonitor({
         connector: "DP-1",
         geometry: { x: 0, y: 0, width: 1920, height: 1080 },
@@ -244,7 +244,7 @@ describe("MonitorsPage", () => {
   describe("_selectMonitor", () => {
     it("updates selectedConnector and boundConnector", () => {
       settings = createSettings();
-      const display = Gdk.Display.get_default();
+      const display = Gdk.Display.get_default() as any;
       display._addMonitor({
         connector: "DP-1",
         geometry: { x: 0, y: 0, width: 1920, height: 1080 },
@@ -261,7 +261,7 @@ describe("MonitorsPage", () => {
 
     it("updates monitor group title", () => {
       settings = createSettings();
-      const display = Gdk.Display.get_default();
+      const display = Gdk.Display.get_default() as any;
       display._addMonitor({
         connector: "DP-1",
         description: "My Monitor",

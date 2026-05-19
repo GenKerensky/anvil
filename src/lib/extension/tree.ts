@@ -22,7 +22,7 @@ import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 import Meta from "gi://Meta";
 // Used in type annotations: import('gi://Mtk').Rectangle; also bootstraps Meta namespace transitively
- 
+
 import { safeRaise, safeFocus, safeActivate } from "./mutter-safe.js";
 import Mtk from "gi://Mtk";
 import Shell from "gi://Shell";

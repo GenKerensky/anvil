@@ -16,7 +16,7 @@ import {
 } from "../mocks/helpers/index.js";
 
 describe("WindowManager - Floating Mode", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture();
@@ -545,8 +545,8 @@ describe("WindowManager - Floating Mode", () => {
   });
 
   describe("toggleFloatingMode", () => {
-    let metaWindow;
-    let nodeWindow;
+    let metaWindow: any;
+    let nodeWindow: any;
 
     beforeEach(() => {
       metaWindow = createMockWindow({
@@ -821,7 +821,7 @@ describe("WindowManager - Floating Mode", () => {
 
         const overrides = configMgr().windowProps.overrides;
         expect(overrides.length).toBe(2);
-        expect(overrides.some((o) => o.wmId === "123")).toBe(false);
+        expect(overrides.some((o: any) => o.wmId === "123")).toBe(false);
       });
 
       it("should update windowProps on WindowManager instance", () => {
@@ -860,7 +860,7 @@ describe("WindowManager - Floating Mode", () => {
 
         const overrides = wm().windowProps.overrides;
         expect(overrides.length).toBe(2);
-        expect(overrides.some((o) => o.wmId !== undefined)).toBe(false);
+        expect(overrides.some((o: any) => o.wmId !== undefined)).toBe(false);
       });
 
       it("should preserve wmTitle-based overrides", () => {

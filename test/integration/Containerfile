@@ -21,8 +21,9 @@
 #   GNOME 50 / mutter 50.1 removed the --nested flag (previously used to run
 #   the compositor inside Xvfb for xdotool/ImageMagick keyboard and pixel
 #   testing). Therefore keyboard-driven keybinding tests and pixel-level
-#   visual assertions are not feasible in the container — all tests use
-#   D-Bus methods, gsettings, and Shell.Eval.
+#   visual assertions are not feasible in the container — all tests run as
+#   Jasmine specs inside gnome-shell via --automation-script, using gi://Gio
+#   for GSettings and gi://Atspi for preferences UI checks.
 #
 #   The session requires several D-Bus services not present in a minimal
 #   container. These are provided by python-dbusmock stubs defined in
@@ -53,11 +54,9 @@ RUN dnf install -y --setopt=install_weak_deps=False \
     python3-dbus \
     python3-dbusmock \
     python3-gobject \
-    # AT-SPI accessibility toolkit (for Dogtail UI testing)
+    # AT-SPI accessibility toolkit (for gi://Atspi in the Jasmine specs)
     at-spi2-core \
     at-spi2-atk \
-    python3-dogtail \
-    python3-pip \
     # Scripting utilities
     jq \
     procps-ng \
@@ -71,8 +70,20 @@ RUN dnf install -y --setopt=install_weak_deps=False \
   && dnf clean all \
   && rm -rf /var/cache/dnf
 
-# BDD test framework for structured Dogtail/AT-SPI testing
-RUN pip3 install behave-html-pretty-formatter
+# Build and install jasmine-gjs from source (not available in Fedora repos).
+# Installs to /usr/bin/jasmine, /usr/libexec/jasmine-gjs/, /usr/share/jasmine-gjs/.
+# The automation-script runner imports jasmineBoot.js from /usr/share/jasmine-gjs/.
+# Build tools are removed afterward to keep the image lean.
+RUN dnf install -y --setopt=install_weak_deps=False \
+    git meson ninja-build \
+  && git clone --depth=1 https://github.com/ptomato/jasmine-gjs.git /tmp/jasmine-gjs \
+  && cd /tmp/jasmine-gjs \
+  && meson setup _build --prefix=/usr \
+  && ninja -C _build install \
+  && cd / && rm -rf /tmp/jasmine-gjs \
+  && dnf remove -y git meson ninja-build \
+  && dnf clean all \
+  && rm -rf /var/cache/dnf
 
 # ---------------------------------------------------------------------------
 # Non-root user: gnomeshell (UID 1000)
@@ -99,8 +110,8 @@ RUN useradd \
 # start-session.sh starts the session D-Bus at a fixed path, python-dbusmock
 # stubs, and gnome-shell --headless --wayland.
 #
-# NO_AT_BRIDGE suppresses the AT-SPI D-Bus bridge, which is not available
-# in a minimal container.
+# AT-SPI bridge is enabled via toolkit-accessibility in start-session.sh
+# so the Jasmine specs can use gi://Atspi for preferences UI testing.
 # ---------------------------------------------------------------------------
 RUN printf '\
 [Unit]\n\
@@ -117,7 +128,7 @@ Environment=XDG_SESSION_TYPE=wayland\n\
 Environment=XDG_SESSION_CLASS=user\n\
 Environment=GNOME_SHELL_SESSION_MODE=user\n\
 Environment=MUTTER_DEBUG_DUMMY_MODE_SPECS=1920x1080\n\
-# Accessibility bridge enabled for Dogtail/AT-SPI-based UI testing\n\
+# Accessibility bridge enabled for gi://Atspi UI testing in Jasmine specs\n\
 Environment=GJS_DEBUG_OUTPUT=stderr\n\
 ExecStartPre=!/bin/mkdir -p /run/user/1000\n\
 ExecStartPre=!/bin/chown gnomeshell:wheel /run/user/1000\n\
@@ -147,16 +158,15 @@ COPY start-session.sh /usr/local/bin/start-session.sh
 RUN chmod 0755 /usr/local/bin/start-session.sh
 
 # ---------------------------------------------------------------------------
-# Helper scripts (sourced from the test/e2e build context)
+# Helper scripts (sourced from the test/integration build context)
 # ---------------------------------------------------------------------------
 COPY set-env.sh        /usr/local/bin/set-env.sh
 COPY wait-user-bus.sh  /usr/local/bin/wait-user-bus.sh
-COPY tests-dogtail.py  /usr/local/bin/tests-dogtail.py
-RUN chmod 0755 /usr/local/bin/set-env.sh /usr/local/bin/wait-user-bus.sh /usr/local/bin/tests-dogtail.py
+RUN chmod 0755 /usr/local/bin/set-env.sh /usr/local/bin/wait-user-bus.sh
 
-# Behave BDD test framework — feature files and step definitions
-COPY behave.ini            /usr/local/share/anvil-tests/behave.ini
-COPY features/             /usr/local/share/anvil-tests/features/
+# Jasmine spec files and automation-script runner
+COPY runner.js             /usr/local/share/anvil-tests/runner.js
+COPY specs/                /usr/local/share/anvil-tests/specs/
 RUN chmod -R 0755 /usr/local/share/anvil-tests
 
 # ---------------------------------------------------------------------------

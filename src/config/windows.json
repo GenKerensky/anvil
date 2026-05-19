@@ -66,6 +66,11 @@
       "mode": "tile"
     },
     {
+      "wmClass": "org.gnome.Shell",
+      "wmTitle": "DevKit",
+      "mode": "float"
+    },
+    {
       "wmClass": "steam",
       "wmTitle": "Steam",
       "mode": "tile"

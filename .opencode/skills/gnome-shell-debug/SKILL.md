@@ -13,11 +13,11 @@ Comprehensive debugging guide for GNOME Shell extensions running in GJS (GNOME's
 
 Enable additional debugging by setting `SHELL_DEBUG` before launching GNOME Shell:
 
-| Value | Effect |
-|---|---|
-| `SHELL_DEBUG=backtrace-warnings` | Prints JS stack on `console.warn()` / `console.error()` |
-| `SHELL_DEBUG=backtrace-segfaults` | Prints JS stack before exit on fatal crash |
-| `SHELL_DEBUG=all` | Enables all debugging options |
+| Value                             | Effect                                                  |
+| --------------------------------- | ------------------------------------------------------- |
+| `SHELL_DEBUG=backtrace-warnings`  | Prints JS stack on `console.warn()` / `console.error()` |
+| `SHELL_DEBUG=backtrace-segfaults` | Prints JS stack before exit on fatal crash              |
+| `SHELL_DEBUG=all`                 | Enables all debugging options                           |
 
 Also useful: `G_MESSAGES_DEBUG=all` for verbose GLib output.
 
@@ -46,6 +46,7 @@ Press `Alt+F2`, enter `lg` to open Looking Glass.
 Run arbitrary JS in the running GNOME Shell process. Pre-imported: `GLib`, `GObject`, `Gio`, `Clutter`, `Meta`, `St`, `Shell`, `Main`.
 
 Built-in helpers:
+
 - `r(index)` — retrieve a previous return value by index
 - `inspect(x, y)` — get the `Clutter.Actor` at screen coordinates
 - `stage` — alias for `global.stage`
@@ -64,16 +65,19 @@ Use the target icon (⌖) to click on screen elements and inspect them.
 Start an isolated GNOME Shell in a window for rapid iteration:
 
 **GNOME 49+**:
+
 ```bash
 dbus-run-session -- gnome-shell --devkit --wayland
 ```
 
 **GNOME 48 and earlier**:
+
 ```bash
 dbus-run-session -- gnome-shell --nested --wayland
 ```
 
 Full script with debugging enabled:
+
 ```bash
 #!/bin/sh -e
 export G_MESSAGES_DEBUG=all
@@ -97,6 +101,7 @@ Wayland cannot restart while logged in. Log out and back in, or use a nested she
 ## GDB Debugging
 
 Start GNOME Shell under GDB:
+
 ```bash
 dbus-run-session -- gdb --args gnome-shell --devkit --wayland
 (gdb) run
@@ -105,20 +110,23 @@ dbus-run-session -- gdb --args gnome-shell --devkit --wayland
 ### Useful GDB commands
 
 Print the JavaScript call stack:
+
 ```
 (gdb) call (void)gjs_dumpstack()
 ```
 
 Break on warnings/criticals:
+
 ```
 (gdb) set env G_DEBUG=fatal-criticals
 (gdb) set env G_DEBUG=fatal-warnings
 ```
 
 Add a JS breakpoint programmatically in extension code:
+
 ```js
-import { System } from 'gi://Gjs';  // or resource:///org/gnome/gjs/modules/system.js
-System.breakpoint();  // triggers SIGTRAP halting the process
+import { System } from "gi://Gjs"; // or resource:///org/gnome/gjs/modules/system.js
+System.breakpoint(); // triggers SIGTRAP halting the process
 ```
 
 ## Anvil-Specific Workflow

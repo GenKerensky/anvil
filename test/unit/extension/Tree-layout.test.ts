@@ -7,12 +7,12 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import St from "gi://St";
 import { Tree, Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 
-const savedDisplay = global.display;
-const savedWindowGroup = global.window_group;
+const savedDisplay = (global as any).display;
+const savedWindowGroup = (global as any).window_group;
 
 afterAll(() => {
-  global.display = savedDisplay;
-  global.window_group = savedWindowGroup;
+  (global as any).display = savedDisplay;
+  (global as any).window_group = savedWindowGroup;
 });
 
 describe("Tree Layout Algorithms", () => {
@@ -20,7 +20,7 @@ describe("Tree Layout Algorithms", () => {
   let mockWindowManager: Record<string, any>;
 
   beforeEach(() => {
-    global.display = {
+    (global as any).display = {
       get_workspace_manager: vi.fn(() => ({
         get_n_workspaces: vi.fn(() => 1),
         get_workspace_by_index: vi.fn((i: number) => ({ index: () => i })),
@@ -36,7 +36,7 @@ describe("Tree Layout Algorithms", () => {
       get_n_monitors: vi.fn(() => 1),
     } as any;
 
-    global.window_group = {
+    (global as any).window_group = {
       contains: vi.fn(() => false),
       add_child: vi.fn(),
       remove_child: vi.fn(),
@@ -170,15 +170,15 @@ describe("Tree Layout Algorithms", () => {
       tree.processSplit(container, child1, params, 0);
       tree.processSplit(container, child2, params, 1);
 
-      expect(child1.rect.x).toBe(0);
-      expect(child1.rect.y).toBe(0);
-      expect(child1.rect.width).toBe(500);
-      expect(child1.rect.height).toBe(500);
+      expect(child1.rect!.x).toBe(0);
+      expect(child1.rect!.y).toBe(0);
+      expect(child1.rect!.width).toBe(500);
+      expect(child1.rect!.height).toBe(500);
 
-      expect(child2.rect.x).toBe(500);
-      expect(child2.rect.y).toBe(0);
-      expect(child2.rect.width).toBe(500);
-      expect(child2.rect.height).toBe(500);
+      expect(child2.rect!.x).toBe(500);
+      expect(child2.rect!.y).toBe(0);
+      expect(child2.rect!.width).toBe(500);
+      expect(child2.rect!.height).toBe(500);
     });
 
     it("should split three windows with custom sizes", () => {
@@ -196,17 +196,17 @@ describe("Tree Layout Algorithms", () => {
       tree.processSplit(container, child2, params, 1);
       tree.processSplit(container, child3, params, 2);
 
-      expect(child1.rect.x).toBe(100);
-      expect(child2.rect.x).toBe(400);
-      expect(child3.rect.x).toBe(900);
+      expect(child1.rect!.x).toBe(100);
+      expect(child2.rect!.x).toBe(400);
+      expect(child3.rect!.x).toBe(900);
 
-      expect(child1.rect.height).toBe(600);
-      expect(child2.rect.height).toBe(600);
-      expect(child3.rect.height).toBe(600);
+      expect(child1.rect!.height).toBe(600);
+      expect(child2.rect!.height).toBe(600);
+      expect(child3.rect!.height).toBe(600);
 
-      expect(child1.rect.width).toBe(300);
-      expect(child2.rect.width).toBe(500);
-      expect(child3.rect.width).toBe(400);
+      expect(child1.rect!.width).toBe(300);
+      expect(child2.rect!.width).toBe(500);
+      expect(child3.rect!.width).toBe(400);
     });
 
     it("should handle offset container position", () => {
@@ -219,8 +219,8 @@ describe("Tree Layout Algorithms", () => {
 
       tree.processSplit(container, child, params, 0);
 
-      expect(child.rect.x).toBe(200);
-      expect(child.rect.y).toBe(100);
+      expect(child.rect!.x).toBe(200);
+      expect(child.rect!.y).toBe(100);
     });
   });
 
@@ -238,15 +238,15 @@ describe("Tree Layout Algorithms", () => {
       tree.processSplit(container, child1, params, 0);
       tree.processSplit(container, child2, params, 1);
 
-      expect(child1.rect.x).toBe(0);
-      expect(child1.rect.y).toBe(0);
-      expect(child1.rect.width).toBe(1000);
-      expect(child1.rect.height).toBe(400);
+      expect(child1.rect!.x).toBe(0);
+      expect(child1.rect!.y).toBe(0);
+      expect(child1.rect!.width).toBe(1000);
+      expect(child1.rect!.height).toBe(400);
 
-      expect(child2.rect.x).toBe(0);
-      expect(child2.rect.y).toBe(400);
-      expect(child2.rect.width).toBe(1000);
-      expect(child2.rect.height).toBe(400);
+      expect(child2.rect!.x).toBe(0);
+      expect(child2.rect!.y).toBe(400);
+      expect(child2.rect!.width).toBe(1000);
+      expect(child2.rect!.height).toBe(400);
     });
 
     it("should split three windows vertically", () => {
@@ -264,13 +264,13 @@ describe("Tree Layout Algorithms", () => {
       tree.processSplit(container, child2, params, 1);
       tree.processSplit(container, child3, params, 2);
 
-      expect(child1.rect.y).toBe(0);
-      expect(child2.rect.y).toBe(300);
-      expect(child3.rect.y).toBe(600);
+      expect(child1.rect!.y).toBe(0);
+      expect(child2.rect!.y).toBe(300);
+      expect(child3.rect!.y).toBe(600);
 
-      expect(child1.rect.width).toBe(1000);
-      expect(child2.rect.width).toBe(1000);
-      expect(child3.rect.width).toBe(1000);
+      expect(child1.rect!.width).toBe(1000);
+      expect(child2.rect!.width).toBe(1000);
+      expect(child3.rect!.width).toBe(1000);
     });
   });
 
@@ -286,10 +286,10 @@ describe("Tree Layout Algorithms", () => {
 
       tree.processStacked(container, child, params, 0);
 
-      expect(child.rect.x).toBe(0);
-      expect(child.rect.y).toBe(0);
-      expect(child.rect.width).toBe(1000);
-      expect(child.rect.height).toBe(800);
+      expect(child.rect!.x).toBe(0);
+      expect(child.rect!.y).toBe(0);
+      expect(child.rect!.width).toBe(1000);
+      expect(child.rect!.height).toBe(800);
     });
 
     it("should stack multiple windows with tabs", () => {
@@ -310,18 +310,18 @@ describe("Tree Layout Algorithms", () => {
       tree.processStacked(container, child2, params, 1);
       tree.processStacked(container, child3, params, 2);
 
-      expect(child1.rect.y).toBe(0);
-      expect(child1.rect.height).toBe(800);
+      expect(child1.rect!.y).toBe(0);
+      expect(child1.rect!.height).toBe(800);
 
-      expect(child2.rect.y).toBe(stackHeight);
-      expect(child2.rect.height).toBe(800 - stackHeight);
+      expect(child2.rect!.y).toBe(stackHeight);
+      expect(child2.rect!.height).toBe(800 - stackHeight);
 
-      expect(child3.rect.y).toBe(stackHeight * 2);
-      expect(child3.rect.height).toBe(800 - stackHeight * 2);
+      expect(child3.rect!.y).toBe(stackHeight * 2);
+      expect(child3.rect!.height).toBe(800 - stackHeight * 2);
 
       [child1, child2, child3].forEach((child) => {
-        expect(child.rect.x).toBe(0);
-        expect(child.rect.width).toBe(1000);
+        expect(child.rect!.x).toBe(0);
+        expect(child.rect!.width).toBe(1000);
       });
     });
 
@@ -339,8 +339,8 @@ describe("Tree Layout Algorithms", () => {
 
       tree.processStacked(container, child, params, 0);
 
-      expect(child.rect.x).toBe(100);
-      expect(child.rect.y).toBe(50);
+      expect(child.rect!.x).toBe(100);
+      expect(child.rect!.y).toBe(50);
     });
   });
 
@@ -356,10 +356,10 @@ describe("Tree Layout Algorithms", () => {
 
       tree.processTabbed(container, child, params, 0);
 
-      expect(child.rect.x).toBe(0);
-      expect(child.rect.y).toBe(0);
-      expect(child.rect.width).toBe(1000);
-      expect(child.rect.height).toBe(800);
+      expect(child.rect!.x).toBe(0);
+      expect(child.rect!.y).toBe(0);
+      expect(child.rect!.width).toBe(1000);
+      expect(child.rect!.height).toBe(800);
     });
 
     it("should account for tab decoration height", () => {
@@ -377,11 +377,11 @@ describe("Tree Layout Algorithms", () => {
 
       tree.processTabbed(container, child, params, 0);
 
-      expect(child.rect.y).toBe(stackedHeight);
-      expect(child.rect.height).toBe(800 - stackedHeight);
+      expect(child.rect!.y).toBe(stackedHeight);
+      expect(child.rect!.height).toBe(800 - stackedHeight);
 
-      expect(child.rect.x).toBe(0);
-      expect(child.rect.width).toBe(1000);
+      expect(child.rect!.x).toBe(0);
+      expect(child.rect!.width).toBe(1000);
     });
 
     it("should show all tabs at same position", () => {
@@ -403,10 +403,10 @@ describe("Tree Layout Algorithms", () => {
       tree.processTabbed(container, child3, params, 2);
 
       [child1, child2, child3].forEach((child) => {
-        expect(child.rect.x).toBe(0);
-        expect(child.rect.y).toBe(stackedHeight);
-        expect(child.rect.width).toBe(1000);
-        expect(child.rect.height).toBe(800 - stackedHeight);
+        expect(child.rect!.x).toBe(0);
+        expect(child.rect!.y).toBe(stackedHeight);
+        expect(child.rect!.width).toBe(1000);
+        expect(child.rect!.height).toBe(800 - stackedHeight);
       });
     });
 
@@ -421,8 +421,8 @@ describe("Tree Layout Algorithms", () => {
 
       tree.processTabbed(container, child, params, 0);
 
-      expect(child.rect.x).toBe(200);
-      expect(child.rect.y).toBe(100);
+      expect(child.rect!.x).toBe(200);
+      expect(child.rect!.y).toBe(100);
     });
   });
 
@@ -502,10 +502,10 @@ describe("Tree Layout Algorithms", () => {
       tree.processSplit(container, child1, params, 0);
       tree.processSplit(container, child2, params, 1);
 
-      expect(child1.rect.width).toBe(720);
-      expect(child2.rect.width).toBe(480);
-      expect(child1.rect.x).toBe(0);
-      expect(child2.rect.x).toBe(720);
+      expect(child1.rect!.width).toBe(720);
+      expect(child2.rect!.width).toBe(480);
+      expect(child1.rect!.x).toBe(0);
+      expect(child2.rect!.x).toBe(720);
     });
   });
 });

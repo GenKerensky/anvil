@@ -14,7 +14,7 @@ import {
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-function setupFocusWindow(ctx, overrides = {}) {
+function setupFocusWindow(ctx: any, overrides: any = {}) {
   const metaWindow = createMockWindow({
     wm_class: "TestApp",
     title: "Test",
@@ -29,7 +29,7 @@ function setupFocusWindow(ctx, overrides = {}) {
 }
 
 describe("WindowManager - Resize", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture();
@@ -281,7 +281,7 @@ describe("WindowManager - Resize", () => {
   });
 
   describe("_handleResizing - percent update", () => {
-    function setupTwoWindows(ctx, win1Rect, win2Rect) {
+    function setupTwoWindows(ctx: any, win1Rect?: any, win2Rect?: any) {
       const r1 = win1Rect || { x: 0, y: 0, width: 960, height: 1080 };
       const r2 = win2Rect || { x: 960, y: 0, width: 960, height: 1080 };
 

@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.gjs-base.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "./dist/.types/e2e",
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "composite": true,
+    "types": ["jasmine"]
+  },
+  "include": [
+    "test/e2e/**/*.js",
+    "test/lib/shared-commands.js",
+    "test/types/gjs-test-globals.d.ts",
+    "test/types/gnome-shell-modules.d.ts"
+  ],
+  "exclude": ["test/e2e/.venv/**"]
+}

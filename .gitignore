@@ -13,4 +13,5 @@ test/e2e/.venv
 test/e2e/output
 __pycache__
 *.pyc
+dist/.types/
 coverage

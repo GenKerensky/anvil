@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.paths.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "skipLibCheck": true,
+    "strict": true,
+    "rootDir": ".",
+    "outDir": "./dist/.types/unit",
+    "declaration": true,
+    "declarationMap": true,
+    "emitDeclarationOnly": true,
+    "composite": true,
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*.d.ts", "test/unit/**/*.ts", "test/unit/**/*.d.ts"],
+  "exclude": ["node_modules", "dist"],
+  "references": [{ "path": "./tsconfig.src.json" }]
+}

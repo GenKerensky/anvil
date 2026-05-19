@@ -4,7 +4,6 @@
 
 import GLib from "gi://GLib";
 
-import { describe, it, assert } from "../lib/framework.js";
 import {
   launchApp,
   getWindowGeometries,
@@ -12,7 +11,17 @@ import {
   closeFocusedWindow,
   windowsOverlap,
   closeAllWindows,
-} from "../lib/commands.js";
+} from "../../lib/shared-commands.js";
+
+/** @param {number} ms @returns {Promise<void>} */
+function settle(ms) {
+  return new Promise(function (resolve) {
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, function () {
+      resolve(undefined);
+      return GLib.SOURCE_REMOVE;
+    });
+  });
+}
 
 describe("Window Operations", function () {
   it("Alt+F4 closes window and remaining windows re-tile", async function () {
@@ -21,20 +30,15 @@ describe("Window Operations", function () {
     await launchApp("org.gnome.Nautilus.desktop");
 
     const before = getWindowCount();
-    assert(before === 3, "Expected 3 windows, got " + before);
+    expect(before).toBe(3);
 
     closeFocusedWindow();
-    await new Promise(function (resolve) {
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1500, function () {
-        resolve();
-        return GLib.SOURCE_REMOVE;
-      });
-    });
+    await settle(1500);
 
     const count = getWindowCount();
-    assert(count === 2, "Expected 2 windows after close, got " + count);
+    expect(count).toBe(2);
 
     const wins = getWindowGeometries();
-    assert(!windowsOverlap(wins), "Windows overlap after re-tile");
+    expect(windowsOverlap(wins)).toBe(false);
   });
 });

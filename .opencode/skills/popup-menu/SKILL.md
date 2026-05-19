@@ -17,10 +17,10 @@ CSS, not GTK.
 ## Imports
 
 ```ts
-import St from 'gi://St';
-import Clutter from 'gi://Clutter';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import * as BoxPointer from 'resource:///org/gnome/shell/ui/boxpointer.js';
+import St from "gi://St";
+import Clutter from "gi://Clutter";
+import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
+import * as BoxPointer from "resource:///org/gnome/shell/ui/boxpointer.js";
 ```
 
 ## `PopupMenu.PopupMenu`
@@ -33,29 +33,29 @@ const menu = new PopupMenu.PopupMenu(sourceActor, 0.0, St.Side.TOP);
 //                                    ^actor     ^arrow align  ^arrow side
 ```
 
-| Method | Description |
-|--------|-------------|
-| `addAction(title, callback, icon?)` | Add a text item with callback. Returns the new item. |
-| `addSettingsAction(title, desktopFile)` | Add an item that opens a GNOME Settings panel. |
-| `addMenuItem(item, position?)` | Add a pre-built item (or section). |
-| `moveMenuItem(item, position)` | Reposition an existing item. |
-| `isEmpty()` | Returns `true` if menu has no items. |
-| `open(animate)` | Open the menu. Pass `true`/`false` or a `BoxPointer.PopupAnimation`. |
-| `close(animate)` | Close the menu. |
-| `removeAll()` | Remove and destroy all items. |
-| `toggle()` | Toggle open state. |
-| `destroy()` | Destroy menu and all items. |
+| Method                                  | Description                                                          |
+| --------------------------------------- | -------------------------------------------------------------------- |
+| `addAction(title, callback, icon?)`     | Add a text item with callback. Returns the new item.                 |
+| `addSettingsAction(title, desktopFile)` | Add an item that opens a GNOME Settings panel.                       |
+| `addMenuItem(item, position?)`          | Add a pre-built item (or section).                                   |
+| `moveMenuItem(item, position)`          | Reposition an existing item.                                         |
+| `isEmpty()`                             | Returns `true` if menu has no items.                                 |
+| `open(animate)`                         | Open the menu. Pass `true`/`false` or a `BoxPointer.PopupAnimation`. |
+| `close(animate)`                        | Close the menu.                                                      |
+| `removeAll()`                           | Remove and destroy all items.                                        |
+| `toggle()`                              | Toggle open state.                                                   |
+| `destroy()`                             | Destroy menu and all items.                                          |
 
 ### Animations
 
 From `BoxPointer.PopupAnimation`:
 
-| Constant | Effect |
-|----------|--------|
-| `NONE` | No animation |
-| `SLIDE` | Slide in/out |
-| `FADE` | Fade in/out |
-| `FULL` | Slide and fade |
+| Constant | Effect         |
+| -------- | -------------- |
+| `NONE`   | No animation   |
+| `SLIDE`  | Slide in/out   |
+| `FADE`   | Fade in/out    |
+| `FULL`   | Slide and fade |
 
 ```ts
 menu.open(BoxPointer.PopupAnimation.FULL);
@@ -64,12 +64,12 @@ menu.close(BoxPointer.PopupAnimation.NONE);
 
 ### Signals
 
-| Signal | Args | Fires when |
-|--------|------|------------|
-| `activate` | `(menu, menuItem)` | An item is activated |
-| `active-changed` | `(menu, menuItem)` | Active item changes |
-| `open-state-changed` | `(menu, open)` | Menu opens or closes |
-| `destroy` | `(menu)` | Menu is destroyed |
+| Signal               | Args               | Fires when           |
+| -------------------- | ------------------ | -------------------- |
+| `activate`           | `(menu, menuItem)` | An item is activated |
+| `active-changed`     | `(menu, menuItem)` | Active item changes  |
+| `open-state-changed` | `(menu, open)`     | Menu opens or closes |
+| `destroy`            | `(menu)`           | Menu is destroyed    |
 
 ## Menu Items
 
@@ -79,11 +79,11 @@ All item classes extend `PopupBaseMenuItem` (abstract, don't instantiate directl
 
 Small indicators before item content:
 
-| Ornament | Appearance |
-|----------|------------|
-| `NONE` | None |
-| `DOT` | Small dot (radio button) |
-| `CHECK` | Check mark |
+| Ornament | Appearance                          |
+| -------- | ----------------------------------- |
+| `NONE`   | None                                |
+| `DOT`    | Small dot (radio button)            |
+| `CHECK`  | Check mark                          |
 | `HIDDEN` | Hides ornament, lets content expand |
 
 ```ts
@@ -95,21 +95,20 @@ item.setOrnament(PopupMenu.Ornament.CHECK);
 Simple text label item.
 
 ```ts
-const item = new PopupMenu.PopupMenuItem('Item Label', {
-    active: false,    // selected/hovered
-    can_focus: true,
-    hover: true,      // respond to pointer
-    reactive: true,   // sensitive
-    style_class: 'my-menu-item',
+const item = new PopupMenu.PopupMenuItem("Item Label", {
+  active: false, // selected/hovered
+  can_focus: true,
+  hover: true, // respond to pointer
+  reactive: true, // sensitive
+  style_class: "my-menu-item",
 });
 
-item.connect('activate', (menuItem, event) => {
-    if (event.get_type() === Clutter.EventType.BUTTON_PRESS)
-        log('Pointer pressed!');
+item.connect("activate", (menuItem, event) => {
+  if (event.get_type() === Clutter.EventType.BUTTON_PRESS) log("Pointer pressed!");
 });
 
-item.label.text = 'New Label';  // update label
-item.sensitive = false;         // disable
+item.label.text = "New Label"; // update label
+item.sensitive = false; // disable
 ```
 
 ### `PopupImageMenuItem`
@@ -117,9 +116,9 @@ item.sensitive = false;         // disable
 Same as `PopupMenuItem` but with an icon before the label.
 
 ```ts
-const item = new PopupMenu.PopupImageMenuItem('Item Label', 'info-symbolic', {});
-item.setIcon('info-symbolic');      // change icon
-item.icon.icon_name = 'info-symbolic';  // equivalent
+const item = new PopupMenu.PopupImageMenuItem("Item Label", "info-symbolic", {});
+item.setIcon("info-symbolic"); // change icon
+item.icon.icon_name = "info-symbolic"; // equivalent
 ```
 
 ### `PopupSwitchMenuItem`
@@ -127,15 +126,15 @@ item.icon.icon_name = 'info-symbolic';  // equivalent
 Label + a toggle switch on the right. Emits `toggled` signal.
 
 ```ts
-const item = new PopupMenu.PopupSwitchMenuItem('Item Label', true, {});
+const item = new PopupMenu.PopupSwitchMenuItem("Item Label", true, {});
 //                                                        ^initial state
 
-item.connect('toggled', (menuItem, state) => {
-    menuItem.setStatusText(state ? 'On' : 'Off');
+item.connect("toggled", (menuItem, state) => {
+  menuItem.setStatusText(state ? "On" : "Off");
 });
 
-item.toggle();                    // toggle state
-item.setToggleState(false);     // set state directly
+item.toggle(); // toggle state
+item.setToggleState(false); // set state directly
 ```
 
 ### `PopupSubMenuMenuItem`
@@ -143,10 +142,10 @@ item.setToggleState(false);     // set state directly
 Item that opens a submenu (with expander arrow).
 
 ```ts
-const subItem = new PopupMenu.PopupSubMenuMenuItem('Sub Menu', true);
-subItem.icon.icon_name = 'info-symbolic';
-subItem.menu.addAction(_('Sub Item 1'), () => log('activated'));
-subItem.menu.addAction(_('Sub Item 2'), () => log('activated'));
+const subItem = new PopupMenu.PopupSubMenuMenuItem("Sub Menu", true);
+subItem.icon.icon_name = "info-symbolic";
+subItem.menu.addAction(_("Sub Item 1"), () => log("activated"));
+subItem.menu.addAction(_("Sub Item 2"), () => log("activated"));
 ```
 
 ### `PopupSeparatorMenuItem`
@@ -154,8 +153,8 @@ subItem.menu.addAction(_('Sub Item 2'), () => log('activated'));
 Visual separator with optional label.
 
 ```ts
-const sep = new PopupMenu.PopupSeparatorMenuItem('Optional Label');
-sep.label.text = 'New Label';
+const sep = new PopupMenu.PopupSeparatorMenuItem("Optional Label");
+sep.label.text = "New Label";
 ```
 
 ### `PopupMenuSection`
@@ -164,8 +163,8 @@ A menu that acts as an item — used to group items within a parent menu.
 
 ```ts
 const section = new PopupMenu.PopupMenuSection();
-section.addAction(_('Grouped Item 1'), () => {});
-section.addAction(_('Grouped Item 2'), () => {});
+section.addAction(_("Grouped Item 1"), () => {});
+section.addAction(_("Grouped Item 2"), () => {});
 menu.addMenuItem(section);
 ```
 

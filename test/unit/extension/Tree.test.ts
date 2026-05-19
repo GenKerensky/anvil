@@ -7,12 +7,12 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import St from "gi://St";
 import { Tree, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 
-const savedDisplay = global.display;
-const savedWindowGroup = global.window_group;
+const savedDisplay = (global as any).display;
+const savedWindowGroup = (global as any).window_group;
 
 afterAll(() => {
-  global.display = savedDisplay;
-  global.window_group = savedWindowGroup;
+  (global as any).display = savedDisplay;
+  (global as any).window_group = savedWindowGroup;
 });
 
 describe("Tree", () => {
@@ -21,12 +21,12 @@ describe("Tree", () => {
   let mockWorkspaceManager: Record<string, any>;
 
   beforeEach(() => {
-    global.display = {
+    (global as any).display = {
       get_workspace_manager: vi.fn(),
       get_n_monitors: vi.fn(() => 1),
     } as any;
 
-    global.window_group = {
+    (global as any).window_group = {
       contains: vi.fn(() => false),
       add_child: vi.fn(),
       remove_child: vi.fn(),
@@ -39,7 +39,7 @@ describe("Tree", () => {
       })),
     };
 
-    global.display.get_workspace_manager.mockReturnValue(mockWorkspaceManager);
+    (global as any).display.get_workspace_manager.mockReturnValue(mockWorkspaceManager);
 
     mockWindowManager = {
       ext: {
@@ -227,7 +227,7 @@ describe("Tree", () => {
 
     it("should create monitors for workspace", () => {
       mockWorkspaceManager.get_n_workspaces.mockReturnValue(2);
-      global.display.get_n_monitors.mockReturnValue(2);
+      (global as any).display.get_n_monitors.mockReturnValue(2);
 
       tree.addWorkspace(1);
       const workspace = tree.findNode("ws1");

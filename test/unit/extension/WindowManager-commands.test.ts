@@ -16,7 +16,7 @@ import {
 } from "../mocks/helpers/index.js";
 
 describe("WindowManager - Commands", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture();

@@ -117,7 +117,7 @@ test-integration: dist
 		echo "Container image not found. Building..."; \
 		bash test/integration/build-container.sh $(FEDORA_VERSION); \
 	fi
-	bash test/integration/run-tests.sh -v $(FEDORA_VERSION)
+	python3 test/integration/run.py -v $(FEDORA_VERSION)
 
 # Build Integration container images for all supported Fedora versions
 test-integration-build-all:
@@ -127,9 +127,9 @@ test-integration-build-all:
 
 # Run Integration tests across all supported Fedora versions
 test-integration-all: dist
-	bash test/integration/run-tests.sh -v 42
-	bash test/integration/run-tests.sh -v 43
-	bash test/integration/run-tests.sh -v 44
+	python3 test/integration/run.py -v 42
+	python3 test/integration/run.py -v 43
+	python3 test/integration/run.py -v 44
 
 # Backward-compat aliases for old test-e2e targets
 test-e2e-container: test-integration

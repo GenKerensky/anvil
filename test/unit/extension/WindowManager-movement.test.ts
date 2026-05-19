@@ -16,7 +16,7 @@ import {
 } from "../mocks/helpers/index.js";
 
 describe("WindowManager - Movement", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture();
@@ -93,7 +93,7 @@ describe("WindowManager - Movement", () => {
       wm().moveCenter(metaWindow);
 
       expect(moveSpy).toHaveBeenCalledTimes(1);
-      const args = moveSpy.mock.calls[0];
+      const args = moveSpy.mock.calls[0] as any[];
       expect(args[0]).toBe(metaWindow);
       expect(typeof args[1].x).toBe("number");
       expect(typeof args[1].y).toBe("number");

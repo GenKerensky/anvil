@@ -55,23 +55,23 @@ python3 -m dbusmock \
 sleep 1
 
 # Enable the accessibility toolkit so GTK/GNOME Shell export AT-SPI trees
-# for Dogtail-based UI testing.
+# for gi://Atspi-based UI testing in the Jasmine preference specs.
 gsettings set org.gnome.desktop.interface toolkit-accessibility true 2>/dev/null || true
 
 # Start the AT-SPI bus launcher so the accessibility registry is available.
-# Without this, the gnome-shell a11y bridge will not initialize and Dogtail
-# will see an empty tree.  --a11y=1 forces accessibility enablement.
+# Without this, the gnome-shell a11y bridge will not initialize and
+# Atspi.get_desktop(0) will return an empty tree.  --a11y=1 forces enablement.
 /usr/libexec/at-spi-bus-launcher --launch-immediately --a11y=1 2>/dev/null &
 sleep 2
 
-# Point GSettings to the extension schemas so the automation agent can create
+# Point GSettings to the extension schemas so the automation runner can create
 # a Gio.Settings for the Anvil schema (needed for test-mode).
 export GSETTINGS_SCHEMA_DIR="/home/gnomeshell/.local/share/gnome-shell/extensions/anvil@GenKerensky.github.com/schemas"
 
 # Check for automation script (written by run-tests.sh before restart)
 if [ -f /tmp/anvil-automation-script ] && [ -f "$(cat /tmp/anvil-automation-script)" ]; then
     AUTOMATION_SCRIPT_PATH="$(cat /tmp/anvil-automation-script)"
-    exec gnome-shell --headless --wayland --automation-script "${AUTOMATION_SCRIPT_PATH}"
+    exec gnome-shell --headless --wayland --virtual-monitor 1920x1080 --automation-script "${AUTOMATION_SCRIPT_PATH}"
 else
-    exec gnome-shell --headless --wayland
+    exec gnome-shell --headless --wayland --virtual-monitor 1920x1080
 fi

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-05-17 04:41-0400\n"
+"POT-Creation-Date: 2026-05-17 04:53-0400\n"
 "PO-Revision-Date: 2025-08-22 12:00+0300\n"
 "Last-Translator: Mucahit Sahin <mucahitsahin786@gmail.com>\n"
 "Language-Team: Turkish\n"
@@ -39,7 +39,7 @@ msgstr "Odak İpucu Kenarlığını Göster"
 msgid "Move Pointer with the Focus"
 msgstr "İmleci Odakla Birlikte Taşı"
 
-#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:144
+#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:146
 msgid "Settings"
 msgstr "Ayarlar"
 

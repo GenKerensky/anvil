@@ -4,14 +4,42 @@
 
 import GLib from "gi://GLib";
 
-import { describe, it, assert, assertApprox } from "../lib/framework.js";
 import {
   launchApp,
   getWindowGeometries,
   getFocusedWindowTitle,
   sendKeyCombo,
   closeAllWindows,
-} from "../lib/commands.js";
+} from "../../lib/shared-commands.js";
+
+/** @param {number} actual @param {number} expected @param {number} tolerance @param {string} [message] */
+function assertApprox(actual, expected, tolerance, message) {
+  const diff = Math.abs(actual - expected);
+  const max = Math.max(Math.abs(actual), Math.abs(expected), 1);
+  const ratio = diff / max;
+  if (ratio >= tolerance) {
+    throw new Error(
+      (message || "Values not approximately equal") +
+        ": got " +
+        actual +
+        ", expected ~" +
+        expected +
+        " (diff " +
+        (ratio * 100).toFixed(1) +
+        "%)"
+    );
+  }
+}
+
+/** @param {number} ms @returns {Promise<void>} */
+function settle(ms) {
+  return new Promise(function (resolve) {
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, ms, function () {
+      resolve(undefined);
+      return GLib.SOURCE_REMOVE;
+    });
+  });
+}
 
 describe("Keyboard Shortcuts", function () {
   it("Super+H changes split orientation", async function () {
@@ -19,26 +47,21 @@ describe("Keyboard Shortcuts", function () {
     await launchApp("org.gnome.Nautilus.desktop");
 
     const before = getWindowGeometries();
-    assert(before.length >= 2, "Need >= 2 windows");
+    expect(before.length).toBeGreaterThanOrEqual(2);
     const a = before[0];
     const b = before[1];
     assertApprox(a.y, b.y, 4, "Windows not at same y initially");
-    assert(a.x !== b.x, "Windows at same x — not side by side");
+    expect(a.x).not.toBe(b.x);
 
     sendKeyCombo("Super+H");
-    await new Promise(function (resolve) {
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, function () {
-        resolve();
-        return GLib.SOURCE_REMOVE;
-      });
-    });
+    await settle(800);
 
     const after = getWindowGeometries();
-    assert(after.length >= 2, "Need >= 2 windows after toggle");
+    expect(after.length).toBeGreaterThanOrEqual(2);
     const a2 = after[0];
     const b2 = after[1];
     assertApprox(a2.x, b2.x, 4, "Windows not at same x after toggle");
-    assert(a2.y !== b2.y, "Windows at same y — not stacked");
+    expect(a2.y).not.toBe(b2.y);
   });
 
   it("Super+J moves focus to next window", async function () {
@@ -46,21 +69,13 @@ describe("Keyboard Shortcuts", function () {
     await launchApp("org.gnome.Nautilus.desktop");
 
     const wins = getWindowGeometries();
-    assert(wins.length >= 2, "Need >= 2 windows");
+    expect(wins.length).toBeGreaterThanOrEqual(2);
 
     sendKeyCombo("Super+J");
-    await new Promise(function (resolve) {
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 600, function () {
-        resolve();
-        return GLib.SOURCE_REMOVE;
-      });
-    });
+    await settle(600);
 
     const title = getFocusedWindowTitle();
-    assert(
-      title === wins[1].title,
-      "Expected focus on '" + wins[1].title + "', got '" + title + "'"
-    );
+    expect(title).toBe(wins[1].title);
   });
 
   it("Super+C toggles float on focused window", async function () {
@@ -68,18 +83,13 @@ describe("Keyboard Shortcuts", function () {
     await launchApp("org.gnome.Nautilus.desktop");
 
     const before = getWindowGeometries();
-    assert(before.length >= 1, "Need >= 1 window");
+    expect(before.length).toBeGreaterThanOrEqual(1);
 
     sendKeyCombo("Super+C");
-    await new Promise(function (resolve) {
-      GLib.timeout_add(GLib.PRIORITY_DEFAULT, 800, function () {
-        resolve();
-        return GLib.SOURCE_REMOVE;
-      });
-    });
+    await settle(800);
 
     const after = getWindowGeometries();
-    assert(after.length >= 1, "Need >= 1 window after float");
+    expect(after.length).toBeGreaterThanOrEqual(1);
     let changed = false;
     for (let i = 0; i < Math.min(before.length, after.length); i++) {
       if (
@@ -92,6 +102,6 @@ describe("Keyboard Shortcuts", function () {
         break;
       }
     }
-    assert(changed, "Window positions unchanged after Super+C");
+    expect(changed).toBe(true);
   });
 });

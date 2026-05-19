@@ -16,7 +16,7 @@ import {
 } from "../mocks/helpers/index.js";
 
 describe("WindowManager - Workspace", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture({

@@ -18,7 +18,7 @@ import {
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 describe("WindowManager - Focus", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture({ settings: { "focus-on-hover-enabled": true } });
@@ -57,33 +57,36 @@ describe("WindowManager - Focus", () => {
     it("should not skip focus for normal window types", () => {
       const normal = createMockWindow({ window_type: Meta.WindowType.NORMAL });
       ctx.display.get_focus_window.mockReturnValue(normal);
-      global.get_window_actors.mockReturnValue([]);
+      (global as any).get_window_actors.mockReturnValue([]);
       expect(wm()._focusWindowUnderPointer()).toBe(true);
     });
   });
 
   describe("_getMetaWindowAtPointer", () => {
     it("should return null when no window actors exist", () => {
-      global.get_window_actors.mockReturnValue([]);
+      (global as any).get_window_actors.mockReturnValue([]);
       expect(wm()._getMetaWindowAtPointer([100, 100])).toBeNull();
     });
 
     it("should return metaWindow when pointer is inside window", () => {
       const window = createMockWindow({ rect: { x: 0, y: 0, width: 200, height: 200 } });
-      global.get_window_actors.mockReturnValue([{ meta_window: window }]);
+      (global as any).get_window_actors.mockReturnValue([{ meta_window: window }]);
       expect(wm()._getMetaWindowAtPointer([100, 100])).toBe(window);
     });
 
     it("should return null when pointer is outside all windows", () => {
       const window = createMockWindow({ rect: { x: 0, y: 0, width: 100, height: 100 } });
-      global.get_window_actors.mockReturnValue([{ meta_window: window }]);
+      (global as any).get_window_actors.mockReturnValue([{ meta_window: window }]);
       expect(wm()._getMetaWindowAtPointer([500, 500])).toBeNull();
     });
 
     it("should return topmost window when multiple windows overlap", () => {
       const bottom = createMockWindow({ rect: { x: 0, y: 0, width: 400, height: 400 }, id: 1 });
       const top = createMockWindow({ rect: { x: 0, y: 0, width: 400, height: 400 }, id: 2 });
-      global.get_window_actors.mockReturnValue([{ meta_window: bottom }, { meta_window: top }]);
+      (global as any).get_window_actors.mockReturnValue([
+        { meta_window: bottom },
+        { meta_window: top },
+      ]);
       expect(wm()._getMetaWindowAtPointer([100, 100])).toBe(top);
     });
   });
@@ -99,7 +102,7 @@ describe("WindowManager - Focus", () => {
       const nodeWindow = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       wm().sortedWindows = ctx.tree
         .getNodeByType(NODE_TYPES.WINDOW)
-        .map((n) => n.nodeValue as Meta.Window);
+        .map((n: any) => n.nodeValue as Meta.Window);
 
       const found = wm()._findNodeWindowAtPointer(metaWindow, [100, 100]);
       expect(found).toBe(nodeWindow);
@@ -253,7 +256,7 @@ describe("WindowManager - Focus", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       // Place pointer outside the window so canMovePointerInsideNodeWindow returns true
-      global.get_pointer.mockReturnValue([500, 500, 0]);
+      (global as any).get_pointer.mockReturnValue([500, 500, 0]);
 
       const warpSpy = vi.spyOn(wm(), "warpPointerToNodeWindow");
 
@@ -281,7 +284,7 @@ describe("WindowManager - Focus", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       // Place pointer outside the window so canMovePointerInsideNodeWindow returns true
-      global.get_pointer.mockReturnValue([500, 500, 0]);
+      (global as any).get_pointer.mockReturnValue([500, 500, 0]);
 
       const warpSpy = vi.spyOn(wm(), "warpPointerToNodeWindow");
 
@@ -308,7 +311,7 @@ describe("WindowManager - Focus", () => {
       const metaWindow = createMockWindow({ rect: { x: 0, y: 0, width: 200, height: 200 } });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      global.get_pointer.mockReturnValue([100, 100, 0]);
+      (global as any).get_pointer.mockReturnValue([100, 100, 0]);
 
       expect(wm().canMovePointerInsideNodeWindow(node)).toBe(false);
     });
@@ -320,7 +323,7 @@ describe("WindowManager - Focus", () => {
       });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      global.get_pointer.mockReturnValue([500, 500, 0]);
+      (global as any).get_pointer.mockReturnValue([500, 500, 0]);
 
       expect(wm().canMovePointerInsideNodeWindow(node)).toBe(false);
     });
@@ -329,7 +332,7 @@ describe("WindowManager - Focus", () => {
       const metaWindow = createMockWindow({ rect: { x: 0, y: 0, width: 200, height: 200 } });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      global.get_pointer.mockReturnValue([500, 500, 0]);
+      (global as any).get_pointer.mockReturnValue([500, 500, 0]);
       Main.overview.visible = true;
 
       expect(wm().canMovePointerInsideNodeWindow(node)).toBe(false);
@@ -342,7 +345,7 @@ describe("WindowManager - Focus", () => {
       const metaWindow = createMockWindow({ rect: { x: 0, y: 0, width: 200, height: 200 } });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      global.get_pointer.mockReturnValue([50, 60, 0]);
+      (global as any).get_pointer.mockReturnValue([50, 60, 0]);
 
       wm().storePointerLastPosition(node);
 
@@ -353,7 +356,7 @@ describe("WindowManager - Focus", () => {
       const metaWindow = createMockWindow({ rect: { x: 0, y: 0, width: 100, height: 100 } });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      global.get_pointer.mockReturnValue([500, 500, 0]);
+      (global as any).get_pointer.mockReturnValue([500, 500, 0]);
 
       wm().storePointerLastPosition(node);
 
@@ -405,7 +408,7 @@ describe("WindowManager - Focus", () => {
 
       // Reset warp_pointer calls accumulated from other tests
       const seat = Clutter.get_default_backend().get_default_seat();
-      seat.warp_pointer.mockClear();
+      (seat as any).warp_pointer.mockClear();
 
       wm().refocusPointerMonitor();
 

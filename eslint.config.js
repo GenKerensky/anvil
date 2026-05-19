@@ -40,7 +40,7 @@ export default [
     },
   },
   {
-    files: ["test/**/*.{js,ts}"],
+    files: ["test/unit/**/*.{js,ts}"],
     plugins: { vitest },
     languageOptions: {
       globals: vitest.environments.env.globals,
@@ -51,6 +51,70 @@ export default [
       "@typescript-eslint/no-unused-vars": "off",
       "vitest/no-disabled-tests": "warn",
       "vitest/no-focused-tests": "error",
+    },
+  },
+  {
+    files: ["test/e2e/**/*.js"],
+    languageOptions: {
+      globals: {
+        describe: "readonly",
+        fdescribe: "readonly",
+        xdescribe: "readonly",
+        it: "readonly",
+        fit: "readonly",
+        xit: "readonly",
+        expect: "readonly",
+        beforeAll: "readonly",
+        afterAll: "readonly",
+        beforeEach: "readonly",
+        afterEach: "readonly",
+        pending: "readonly",
+        spyOn: "readonly",
+        spyOnProperty: "readonly",
+        jasmine: "readonly",
+      },
+    },
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "fit", message: "Focused jasmine test (fit) — remove before committing" },
+        {
+          name: "fdescribe",
+          message: "Focused jasmine suite (fdescribe) — remove before committing",
+        },
+      ],
+    },
+  },
+  {
+    files: ["test/integration/specs/**/*.js"],
+    languageOptions: {
+      globals: {
+        describe: "readonly",
+        fdescribe: "readonly",
+        xdescribe: "readonly",
+        it: "readonly",
+        fit: "readonly",
+        xit: "readonly",
+        expect: "readonly",
+        beforeAll: "readonly",
+        afterAll: "readonly",
+        beforeEach: "readonly",
+        afterEach: "readonly",
+        pending: "readonly",
+        spyOn: "readonly",
+        spyOnProperty: "readonly",
+        jasmine: "readonly",
+      },
+    },
+    rules: {
+      "no-restricted-globals": [
+        "error",
+        { name: "fit", message: "Focused jasmine test (fit) — remove before committing" },
+        {
+          name: "fdescribe",
+          message: "Focused jasmine suite (fdescribe) — remove before committing",
+        },
+      ],
     },
   },
 ];

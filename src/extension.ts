@@ -88,6 +88,19 @@ export default class AnvilExtension extends Extension {
     Logger.init(this.settings);
     Logger.info("enable");
 
+    // Always export extWm + settings for E2E test access (used by test/e2e/lib/commands.js)
+    // In GNOME 50+, Main.extensionManager.lookup() returns a proxy that only
+    // exposes base Extension properties — custom fields and methods (getSettings)
+    // are not forwarded. Expose them on global to bypass the proxy.
+    {
+      const g = global as unknown as {
+        __anvil_extWm?: WindowManager | null;
+        __anvil_settings?: Gio.Settings | null;
+      };
+      g.__anvil_extWm = null;
+      g.__anvil_settings = this.settings;
+    }
+
     if (this.settings.get_boolean("test-mode")) {
       const g = global as unknown as {
         context: { unsafe_mode: boolean };
@@ -126,6 +139,10 @@ export default class AnvilExtension extends Extension {
     this.configMgr = new ConfigManager(this as { dir: Gio.File });
     this.theme = new ExtensionThemeManager(this);
     this.extWm = new WindowManager(this);
+    {
+      const g = global as unknown as { __anvil_extWm?: WindowManager | null };
+      g.__anvil_extWm = this.extWm;
+    }
     this.keybindings = new Keybindings(this);
 
     this._onSessionModeChanged(Main.sessionMode);
@@ -143,6 +160,15 @@ export default class AnvilExtension extends Extension {
     // through screen lock to preserve tree/window state during the unlock
     // transition. Keybindings are disconnected in _onSessionModeChanged
     // when entering unlock-dialog mode, and reconnected when returning to user mode.
+
+    {
+      const g = global as unknown as {
+        __anvil_extWm?: WindowManager | null;
+        __anvil_settings?: Gio.Settings | null;
+      };
+      g.__anvil_extWm = null;
+      g.__anvil_settings = null;
+    }
 
     const g = global as unknown as { __anvil_test_state: unknown };
     if (g.__anvil_test_state === this) {

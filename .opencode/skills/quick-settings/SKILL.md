@@ -14,12 +14,12 @@ individual panel buttons.
 ## Imports
 
 ```ts
-import Gio from 'gi://Gio';
-import St from 'gi://St';
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
-import * as QuickSettings from 'resource:///org/gnome/shell/ui/quickSettings.js';
-import { gettext as _ } from 'resource:///org/gnome/shell/extensions/extension.js';
+import Gio from "gi://Gio";
+import St from "gi://St";
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import * as PopupMenu from "resource:///org/gnome/shell/ui/popupMenu.js";
+import * as QuickSettings from "resource:///org/gnome/shell/ui/quickSettings.js";
+import { gettext as _ } from "resource:///org/gnome/shell/extensions/extension.js";
 ```
 
 ## SystemIndicator
@@ -29,31 +29,35 @@ It manages the list of quick settings items and can optionally display an icon.
 
 ```ts
 const MyIndicator = GObject.registerClass(
-class MyIndicator extends QuickSettings.SystemIndicator {
+  class MyIndicator extends QuickSettings.SystemIndicator {
     _indicator: St.Icon;
 
     constructor(extension: AnvilExtension) {
-        super();
+      super();
 
-        // Create an icon (optional — skip if you only want items, no icon)
-        this._indicator = this._addIndicator();
-        this._indicator.icon_name = 'selection-mode-symbolic';
+      // Create an icon (optional — skip if you only want items, no icon)
+      this._indicator = this._addIndicator();
+      this._indicator.icon_name = "selection-mode-symbolic";
 
-        // Show/hide based on a setting
-        extension.settings.bind('feature-enabled',
-            this._indicator, 'visible',
-            Gio.SettingsBindFlags.DEFAULT);
+      // Show/hide based on a setting
+      extension.settings.bind(
+        "feature-enabled",
+        this._indicator,
+        "visible",
+        Gio.SettingsBindFlags.DEFAULT
+      );
 
-        // Add items to the quick settings grid
-        this.quickSettingsItems.push(new MyToggle(extension));
-        this.quickSettingsItems.push(new MyMenuToggle(extension));
+      // Add items to the quick settings grid
+      this.quickSettingsItems.push(new MyToggle(extension));
+      this.quickSettingsItems.push(new MyMenuToggle(extension));
     }
 
     destroy() {
-        this.quickSettingsItems.forEach(item => item.destroy());
-        super.destroy();
+      this.quickSettingsItems.forEach((item) => item.destroy());
+      super.destroy();
     }
-});
+  }
+);
 ```
 
 ### Registration
@@ -78,21 +82,20 @@ The most basic item — a simple toggle button with icon, title, and subtitle.
 
 ```ts
 const MyToggle = GObject.registerClass(
-class MyToggle extends QuickSettings.QuickToggle {
+  class MyToggle extends QuickSettings.QuickToggle {
     constructor(extension: AnvilExtension) {
-        super({
-            title: _('My Feature'),
-            subtitle: _('Enable or disable my feature'),
-            iconName: 'selection-mode-symbolic',
-            toggleMode: true,
-        });
+      super({
+        title: _("My Feature"),
+        subtitle: _("Enable or disable my feature"),
+        iconName: "selection-mode-symbolic",
+        toggleMode: true,
+      });
 
-        // Bind to GSettings — checked state tracks the setting
-        extension.settings.bind('feature-enabled',
-            this, 'checked',
-            Gio.SettingsBindFlags.DEFAULT);
+      // Bind to GSettings — checked state tracks the setting
+      extension.settings.bind("feature-enabled", this, "checked", Gio.SettingsBindFlags.DEFAULT);
     }
-});
+  }
+);
 ```
 
 ## QuickMenuToggle
@@ -102,42 +105,39 @@ settings or actions.
 
 ```ts
 const MyMenuToggle = GObject.registerClass(
-class MyMenuToggle extends QuickSettings.QuickMenuToggle {
+  class MyMenuToggle extends QuickSettings.QuickMenuToggle {
     constructor(extension: AnvilExtension) {
-        super({
-            title: _('My Feature'),
-            subtitle: _('With extra options'),
-            iconName: 'selection-mode-symbolic',
-            toggleMode: true,
-        });
+      super({
+        title: _("My Feature"),
+        subtitle: _("With extra options"),
+        iconName: "selection-mode-symbolic",
+        toggleMode: true,
+      });
 
-        // Bind the main toggle
-        extension.settings.bind('feature-enabled',
-            this, 'checked',
-            Gio.SettingsBindFlags.DEFAULT);
+      // Bind the main toggle
+      extension.settings.bind("feature-enabled", this, "checked", Gio.SettingsBindFlags.DEFAULT);
 
-        // Set a header with icon, title, and optional subtitle
-        this.menu.setHeader('selection-mode-symbolic',
-            _('My Feature'), _('Optional Subtitle'));
+      // Set a header with icon, title, and optional subtitle
+      this.menu.setHeader("selection-mode-symbolic", _("My Feature"), _("Optional Subtitle"));
 
-        // Add a suffix to the header (e.g. warning icon)
-        const suffix = new St.Icon({ iconName: 'dialog-warning-symbolic' });
-        this.menu.addHeaderSuffix(suffix);
+      // Add a suffix to the header (e.g. warning icon)
+      const suffix = new St.Icon({ iconName: "dialog-warning-symbolic" });
+      this.menu.addHeaderSuffix(suffix);
 
-        // Add a section of menu items
-        const section = new PopupMenu.PopupMenuSection();
-        section.addAction(_('Option 1'), () => log('activated'));
-        section.addAction(_('Option 2'), () => log('activated'));
-        this.menu.addMenuItem(section);
+      // Add a section of menu items
+      const section = new PopupMenu.PopupMenuSection();
+      section.addAction(_("Option 1"), () => log("activated"));
+      section.addAction(_("Option 2"), () => log("activated"));
+      this.menu.addMenuItem(section);
 
-        // Add a settings entry (with lock screen gating)
-        this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
-        const settingsItem = this.menu.addAction(_('Settings'),
-            () => extension.openPreferences());
-        settingsItem.visible = Main.sessionMode.allowSettings;
-        (this.menu as any)._settingsActions[extension.uuid] = settingsItem;
+      // Add a settings entry (with lock screen gating)
+      this.menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+      const settingsItem = this.menu.addAction(_("Settings"), () => extension.openPreferences());
+      settingsItem.visible = Main.sessionMode.allowSettings;
+      (this.menu as any)._settingsActions[extension.uuid] = settingsItem;
     }
-});
+  }
+);
 ```
 
 ## QuickSlider
@@ -146,28 +146,28 @@ A slider (like brightness or volume). Usually spans two columns.
 
 ```ts
 const MySlider = GObject.registerClass(
-class MySlider extends QuickSettings.QuickSlider {
+  class MySlider extends QuickSettings.QuickSlider {
     constructor(extension: AnvilExtension) {
-        super({
-            iconName: 'selection-mode-symbolic',
-            iconLabel: _('Accessible name for the icon'),
-        });
+      super({
+        iconName: "selection-mode-symbolic",
+        iconLabel: _("Accessible name for the icon"),
+      });
 
-        // Make the icon clickable (e.g. for mute/unmute)
-        this.iconReactive = true;
-        this.connect('icon-clicked', () => log('Slider icon clicked!'));
+      // Make the icon clickable (e.g. for mute/unmute)
+      this.iconReactive = true;
+      this.connect("icon-clicked", () => log("Slider icon clicked!"));
 
-        // Watch slider value changes
-        this.slider.accessible_name = _('My Slider');
-        this._sliderChangedId = this.slider.connect('notify::value',
-            () => this._onSliderChanged());
+      // Watch slider value changes
+      this.slider.accessible_name = _("My Slider");
+      this._sliderChangedId = this.slider.connect("notify::value", () => this._onSliderChanged());
     }
 
     _onSliderChanged() {
-        const percent = Math.floor(this.slider.value * 100);
-        extension.settings.set_uint('slider-value', percent);
+      const percent = Math.floor(this.slider.value * 100);
+      extension.settings.set_uint("slider-value", percent);
     }
-});
+  }
+);
 ```
 
 Add to the indicator spanning 2 columns (parameter 2):
@@ -181,7 +181,7 @@ temporarily to avoid feedback loops:
 
 ```ts
 this.slider.block_signal_handler(this._sliderChangedId);
-this.slider.value = this._settings.get_uint('slider-value') / 100.0;
+this.slider.value = this._settings.get_uint("slider-value") / 100.0;
 this.slider.unblock_signal_handler(this._sliderChangedId);
 ```
 
@@ -192,17 +192,18 @@ Settings buttons). Use sparingly — space is limited.
 
 ```ts
 const MyButton = GObject.registerClass(
-class MyButton extends QuickSettings.QuickSettingsItem {
+  class MyButton extends QuickSettings.QuickSettingsItem {
     constructor() {
-        super({
-            style_class: 'icon-button',
-            can_focus: true,
-            icon_name: 'selection-mode-symbolic',
-            accessible_name: _('My Action'),
-        });
-        this.connect('clicked', () => log('activated'));
+      super({
+        style_class: "icon-button",
+        can_focus: true,
+        icon_name: "selection-mode-symbolic",
+        accessible_name: _("My Action"),
+      });
+      this.connect("clicked", () => log("activated"));
     }
-});
+  }
+);
 ```
 
 Action buttons are added manually to the existing action area:

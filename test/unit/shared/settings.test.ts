@@ -15,11 +15,11 @@ const sampleWindowConfig = {
 function createMockDir(path = "/mock/extension") {
   return {
     get_path: () => path,
-  };
+  } as any;
 }
 
 function createMockFile(path: string, options: Record<string, any> = {}) {
-  const file = Gio.File.new_for_path(path);
+  const file: any = Gio.File.new_for_path(path);
 
   if (options.exists !== undefined) {
     file.query_exists = vi.fn(() => options.exists);
@@ -56,7 +56,7 @@ describe("production constant", () => {
 
 describe("ConfigManager", () => {
   let configManager: ConfigManager;
-  let mockDir: { get_path: () => string };
+  let mockDir: any;
 
   beforeEach(() => {
     mockDir = createMockDir("/test/extension/path");
@@ -97,8 +97,8 @@ describe("ConfigManager", () => {
 
     it("should look for stylesheet.css in extension path", () => {
       const file = configManager.defaultStylesheetFile;
-      expect(file.get_path()).toContain("stylesheet.css");
-      expect(file.get_path()).toContain(configManager.extensionPath);
+      expect(file!.get_path()).toContain("stylesheet.css");
+      expect(file!.get_path()).toContain(configManager.extensionPath);
     });
   });
 
@@ -117,8 +117,8 @@ describe("ConfigManager", () => {
 
     it("should look for windows.json in config directory", () => {
       const file = configManager.defaultWindowConfigFile;
-      expect(file.get_path()).toContain("windows.json");
-      expect(file.get_path()).toContain("config");
+      expect(file!.get_path()).toContain("windows.json");
+      expect(file!.get_path()).toContain("config");
     });
   });
 
@@ -140,12 +140,12 @@ describe("ConfigManager", () => {
     });
 
     it("should return null when custom file does not exist and dir creation fails", () => {
-      const defaultImpl = Gio.File.new_for_path.getMockImplementation();
+      const defaultImpl = (Gio.File.new_for_path as any).getMockImplementation();
       let callCount = 0;
 
-      Gio.File.new_for_path.mockImplementation((path: string) => {
+      (Gio.File.new_for_path as any).mockImplementation((path: string) => {
         callCount++;
-        const file = defaultImpl!(path);
+        const file = defaultImpl!(path) as any;
         if (callCount === 1) {
           file.query_exists = vi.fn(() => false);
         }
@@ -159,8 +159,8 @@ describe("ConfigManager", () => {
       const result = configManager.loadFile("/custom", "file.json", null);
       expect(result).toBeNull();
 
-      Gio.File.new_for_path.mockReset();
-      if (defaultImpl) Gio.File.new_for_path.mockImplementation(defaultImpl);
+      (Gio.File.new_for_path as any).mockReset();
+      if (defaultImpl) (Gio.File.new_for_path as any).mockImplementation(defaultImpl);
     });
 
     it("should create directory and file when neither exists", () => {
@@ -173,9 +173,9 @@ describe("ConfigManager", () => {
         contents: '{"test": true}',
       });
 
-      const defaultImpl = Gio.File.new_for_path.getMockImplementation();
-      Gio.File.new_for_path.mockImplementation((path: string) => {
-        const file = defaultImpl!(path);
+      const defaultImpl = (Gio.File.new_for_path as any).getMockImplementation();
+      (Gio.File.new_for_path as any).mockImplementation((path: string) => {
+        const file = defaultImpl!(path) as any;
         if (path.endsWith("/custom/file.json")) {
           file.query_exists = vi.fn(() => false);
           file.create = vi.fn(() => mockStream);
@@ -191,8 +191,8 @@ describe("ConfigManager", () => {
 
       expect(mockStream.write_all).toHaveBeenCalled();
 
-      Gio.File.new_for_path.mockReset();
-      if (defaultImpl) Gio.File.new_for_path.mockImplementation(defaultImpl);
+      (Gio.File.new_for_path as any).mockReset();
+      if (defaultImpl) (Gio.File.new_for_path as any).mockImplementation(defaultImpl);
     });
   });
 
@@ -316,10 +316,10 @@ describe("ConfigManager", () => {
         configurable: true,
       });
 
-      configManager.windowProps = sampleWindowConfig;
+      configManager.windowProps = sampleWindowConfig as any;
 
       expect(mockFile.replace_contents).toHaveBeenCalled();
-      const writtenContents = mockFile.replace_contents.mock.calls[0][0];
+      const writtenContents = (mockFile.replace_contents as any).mock.calls[0][0];
       expect(JSON.parse(writtenContents)).toEqual(sampleWindowConfig);
     });
 
@@ -334,9 +334,9 @@ describe("ConfigManager", () => {
         configurable: true,
       });
 
-      configManager.windowProps = { test: true };
+      configManager.windowProps = { test: true } as any;
 
-      const writtenContents = mockFile.replace_contents.mock.calls[0][0];
+      const writtenContents = (mockFile.replace_contents as any).mock.calls[0][0];
       expect(writtenContents).toContain("    ");
     });
 
@@ -355,7 +355,7 @@ describe("ConfigManager", () => {
         configurable: true,
       });
 
-      configManager.windowProps = sampleWindowConfig;
+      configManager.windowProps = sampleWindowConfig as any;
 
       expect(mockDefaultFile.replace_contents).toHaveBeenCalled();
     });
@@ -399,10 +399,10 @@ describe("ConfigManager integration scenarios", () => {
   it("should handle missing default files gracefully", () => {
     const mockDir = createMockDir("/test/extension");
     const cm = new ConfigManager({ dir: mockDir });
-    const defaultImpl = Gio.File.new_for_path.getMockImplementation();
+    const defaultImpl = (Gio.File.new_for_path as any).getMockImplementation();
 
-    Gio.File.new_for_path.mockImplementation((path: string) => {
-      const file = defaultImpl!(path);
+    (Gio.File.new_for_path as any).mockImplementation((path: string) => {
+      const file = defaultImpl!(path) as any;
       file.query_exists = vi.fn(() => false);
       return file;
     });
@@ -413,6 +413,6 @@ describe("ConfigManager integration scenarios", () => {
     const windowConfig = cm.defaultWindowConfigFile;
     expect(windowConfig).toBeNull();
 
-    Gio.File.new_for_path.mockReset();
+    (Gio.File.new_for_path as any).mockReset();
   });
 });

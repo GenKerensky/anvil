@@ -6,6 +6,54 @@
 
 import { describe, it, expect } from "vitest";
 import { parse, stringify, addParent, Compiler } from "../../../src/lib/css/index.js";
+import type {
+  Rule,
+  Comment,
+  AtRule,
+  Declaration,
+  Media,
+  KeyFrames,
+  Import,
+  Supports,
+  FontFace,
+  Page,
+} from "../../../src/lib/css/types.js";
+
+function asRule(node: Rule | Comment | AtRule): Rule {
+  return node as Rule;
+}
+
+function asComment(node: Rule | Comment | AtRule): Comment {
+  return node as Comment;
+}
+
+function asDeclaration(node: Declaration | Comment): Declaration {
+  return node as Declaration;
+}
+
+function asMedia(node: Rule | Comment | AtRule): Media {
+  return node as Media;
+}
+
+function asKeyframes(node: Rule | Comment | AtRule): KeyFrames {
+  return node as KeyFrames;
+}
+
+function asImport(node: Rule | Comment | AtRule): Import {
+  return node as Import;
+}
+
+function asSupports(node: Rule | Comment | AtRule): Supports {
+  return node as Supports;
+}
+
+function asFontFace(node: Rule | Comment | AtRule): FontFace {
+  return node as FontFace;
+}
+
+function asPage(node: Rule | Comment | AtRule): Page {
+  return node as Page;
+}
 
 describe("CSS Parser", () => {
   describe("parse - basic selectors", () => {
@@ -14,68 +62,70 @@ describe("CSS Parser", () => {
       expect(ast.type).toBe("stylesheet");
       expect(ast.stylesheet.rules).toHaveLength(1);
       expect(ast.stylesheet.rules[0].type).toBe("rule");
-      expect(ast.stylesheet.rules[0].selectors).toEqual([".foo"]);
+      expect(asRule(ast.stylesheet.rules[0]).selectors).toEqual([".foo"]);
     });
 
     it("should parse an ID selector", () => {
       const ast = parse("#bar { margin: 0; }");
-      expect(ast.stylesheet.rules[0].selectors).toEqual(["#bar"]);
+      expect(asRule(ast.stylesheet.rules[0]).selectors).toEqual(["#bar"]);
     });
 
     it("should parse element selector", () => {
       const ast = parse("div { display: block; }");
-      expect(ast.stylesheet.rules[0].selectors).toEqual(["div"]);
+      expect(asRule(ast.stylesheet.rules[0]).selectors).toEqual(["div"]);
     });
 
     it("should parse multiple selectors", () => {
       const ast = parse(".a, .b { color: blue; }");
-      expect(ast.stylesheet.rules[0].selectors).toEqual([".a", ".b"]);
+      expect(asRule(ast.stylesheet.rules[0]).selectors).toEqual([".a", ".b"]);
     });
 
     it("should parse attribute selectors", () => {
       const ast = parse('input[type="text"] { border: 1px; }');
-      expect(ast.stylesheet.rules[0].selectors).toEqual(['input[type="text"]']);
+      expect(asRule(ast.stylesheet.rules[0]).selectors).toEqual(['input[type="text"]']);
     });
 
     it("should parse pseudo-class selectors", () => {
       const ast = parse("a:hover { text-decoration: underline; }");
-      expect(ast.stylesheet.rules[0].selectors).toEqual(["a:hover"]);
+      expect(asRule(ast.stylesheet.rules[0]).selectors).toEqual(["a:hover"]);
     });
   });
 
   describe("parse - declarations", () => {
     it("should parse property and value", () => {
       const ast = parse("a { color: red; }");
-      const decl = ast.stylesheet.rules[0].declarations[0];
+      const decl = asDeclaration(asRule(ast.stylesheet.rules[0]).declarations![0]);
       expect(decl.property).toBe("color");
       expect(decl.value).toBe("red");
     });
 
     it("should parse multiple declarations", () => {
       const ast = parse("a { color: red; margin: 10px; }");
-      expect(ast.stylesheet.rules[0].declarations).toHaveLength(2);
+      expect(asRule(ast.stylesheet.rules[0]).declarations!).toHaveLength(2);
     });
 
     it("should parse numeric values with units", () => {
       const ast = parse("a { width: 100px; height: 50%; }");
-      expect(ast.stylesheet.rules[0].declarations[0].value).toBe("100px");
-      expect(ast.stylesheet.rules[0].declarations[1].value).toBe("50%");
+      expect(asDeclaration(asRule(ast.stylesheet.rules[0]).declarations![0]).value).toBe("100px");
+      expect(asDeclaration(asRule(ast.stylesheet.rules[0]).declarations![1]).value).toBe("50%");
     });
 
     it("should parse shorthand properties", () => {
       const ast = parse("a { background: url(bg.png) no-repeat center; }");
-      expect(ast.stylesheet.rules[0].declarations[0].value).toBe("url(bg.png) no-repeat center");
+      expect(asDeclaration(asRule(ast.stylesheet.rules[0]).declarations![0]).value).toBe(
+        "url(bg.png) no-repeat center"
+      );
     });
 
     it("should parse quoted string values", () => {
       const ast = parse('a { font-family: "Helvetica Neue", sans-serif; }');
-      const val = ast.stylesheet.rules[0].declarations[0].value;
+      const val = asDeclaration(asRule(ast.stylesheet.rules[0]).declarations![0]).value;
       expect(val).toContain("Helvetica Neue");
     });
 
     it("should parse CSS custom properties", () => {
       const ast = parse(":root { --main-color: #333; }");
-      const decl = ast.stylesheet.rules[0].declarations[0];
+      const decl = asDeclaration(asRule(ast.stylesheet.rules[0]).declarations![0]);
       expect(decl.property).toBe("--main-color");
     });
   });
@@ -85,7 +135,7 @@ describe("CSS Parser", () => {
       const ast = parse("/* header */ a { color: red; }");
       expect(ast.stylesheet.rules).toHaveLength(2);
       expect(ast.stylesheet.rules[0].type).toBe("comment");
-      expect(ast.stylesheet.rules[0].comment).toBe(" header ");
+      expect(asComment(ast.stylesheet.rules[0]).comment).toBe(" header ");
     });
 
     it("should parse empty comments and treat as comment node", () => {
@@ -100,25 +150,25 @@ describe("CSS Parser", () => {
     it("should parse @media rule with screen", () => {
       const ast = parse("@media screen { .foo { color: red; } }");
       expect(ast.stylesheet.rules[0].type).toBe("media");
-      expect(ast.stylesheet.rules[0].media).toBe("screen");
-      expect(ast.stylesheet.rules[0].rules).toHaveLength(1);
+      expect(asMedia(ast.stylesheet.rules[0]).media).toBe("screen");
+      expect(asMedia(ast.stylesheet.rules[0]).rules).toHaveLength(1);
     });
 
     it("should parse @media with min-width", () => {
       const ast = parse("@media (min-width: 768px) { .foo { width: 50%; } }");
-      expect(ast.stylesheet.rules[0].media).toBe("(min-width: 768px)");
+      expect(asMedia(ast.stylesheet.rules[0]).media).toBe("(min-width: 768px)");
     });
 
     it("should parse nested rules inside @media", () => {
       const ast = parse("@media print { body { font-size: 12pt; } .no-print { display: none; } }");
-      expect(ast.stylesheet.rules[0].rules).toHaveLength(2);
+      expect(asMedia(ast.stylesheet.rules[0]).rules).toHaveLength(2);
     });
   });
 
   describe("parse - @keyframes", () => {
     it("should parse @keyframes with from/to", () => {
       const ast = parse("@keyframes slide { from { left: 0; } to { left: 100px; } }");
-      const kf = ast.stylesheet.rules[0];
+      const kf = asKeyframes(ast.stylesheet.rules[0]);
       expect(kf.type).toBe("keyframes");
       expect(kf.name).toBe("slide");
       expect(kf.keyframes).toHaveLength(2);
@@ -128,21 +178,21 @@ describe("CSS Parser", () => {
       const ast = parse(
         "@keyframes fade { 0% { opacity: 0; } 50% { opacity: 0.5; } 100% { opacity: 1; } }"
       );
-      expect(ast.stylesheet.rules[0].keyframes).toHaveLength(3);
+      expect(asKeyframes(ast.stylesheet.rules[0]).keyframes).toHaveLength(3);
     });
 
     it("should parse vendor-prefixed @keyframes", () => {
       const ast = parse("@-webkit-keyframes spin { to { transform: rotate(360deg); } }");
-      expect(ast.stylesheet.rules[0].vendor).toBe("-webkit-");
+      expect(asKeyframes(ast.stylesheet.rules[0]).vendor).toBe("-webkit-");
     });
   });
 
   describe("parse - @font-face", () => {
     it("should parse @font-face rule", () => {
       const ast = parse("@font-face { font-family: 'MyFont'; src: url(myfont.woff2); }");
-      const ff = ast.stylesheet.rules[0];
+      const ff = asFontFace(ast.stylesheet.rules[0]);
       expect(ff.type).toBe("font-face");
-      expect(ff.declarations).toHaveLength(2);
+      expect(ff.declarations!).toHaveLength(2);
     });
   });
 
@@ -150,7 +200,7 @@ describe("CSS Parser", () => {
     it("should parse @import rule", () => {
       const ast = parse('@import url("style.css");');
       expect(ast.stylesheet.rules[0].type).toBe("import");
-      expect(ast.stylesheet.rules[0].import).toContain("style.css");
+      expect(asImport(ast.stylesheet.rules[0]).import).toContain("style.css");
     });
   });
 
@@ -158,7 +208,7 @@ describe("CSS Parser", () => {
     it("should parse @supports rule", () => {
       const ast = parse("@supports (display: grid) { .grid { display: grid; } }");
       expect(ast.stylesheet.rules[0].type).toBe("supports");
-      expect(ast.stylesheet.rules[0].supports).toBe("(display: grid)");
+      expect(asSupports(ast.stylesheet.rules[0]).supports).toBe("(display: grid)");
     });
   });
 
@@ -222,7 +272,7 @@ describe("CSS Parser", () => {
       expect(rule.parent).toBeDefined();
       // Parent is the stylesheet-level node (type: "stylesheet"),
       // not the .stylesheet property sub-object
-      expect(rule.parent.type).toBe("stylesheet");
+      expect(rule.parent!.type).toBe("stylesheet");
     });
   });
 

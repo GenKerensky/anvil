@@ -16,7 +16,7 @@ import {
 } from "./mocks/helpers/index.js";
 
 describe("Integration - Window Operations", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture({
@@ -39,7 +39,7 @@ describe("Integration - Window Operations", () => {
     return { metaWindow, node };
   }
 
-  function setFocus(metaWindow) {
+  function setFocus(metaWindow: any) {
     ctx.display.get_focus_window.mockReturnValue(metaWindow);
   }
 

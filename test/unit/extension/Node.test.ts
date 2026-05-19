@@ -210,7 +210,7 @@ describe("Node", () => {
     });
 
     it("should return null for null node", () => {
-      const result = parent.appendChild(null);
+      const result = parent.appendChild(null as any);
 
       expect(result).toBeNull();
       expect(parent.childNodes).toHaveLength(0);
@@ -329,7 +329,7 @@ describe("Node", () => {
     });
 
     it("should return null if newNode is null", () => {
-      const result = parent.insertBefore(null, child1);
+      const result = parent.insertBefore(null as any, child1);
 
       expect(result).toBeNull();
     });
@@ -481,7 +481,7 @@ describe("Node", () => {
     });
 
     it("should return false for null", () => {
-      expect(root.contains(null)).toBe(false);
+      expect(root.contains(null as any)).toBe(false);
     });
   });
 

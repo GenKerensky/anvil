@@ -11,12 +11,12 @@ Step-by-step workflow for upgrading this extension to support a new GNOME Shell 
 
 ## Version Mapping
 
-| Fedora | GNOME Shell | Status |
-|--------|-------------|--------|
+| Fedora | GNOME Shell | Status       |
+| ------ | ----------- | ------------ |
 | 42     | 48          | ✅ Supported |
 | 43     | 49          | ✅ Supported |
-| 44     | 50          | ✅ Primary |
-| 45     | 51          | Target next |
+| 44     | 50          | ✅ Primary   |
+| 45     | 51          | Target next  |
 
 Fedora major version = GNOME Shell major version - 6 (e.g. Fedora 45 → GNOME 51).
 
@@ -33,6 +33,7 @@ https://gjs.guide/extensions/upgrading/gnome-shell-<major version>.html
 ```
 
 Example for GNOME Shell 51:
+
 ```
 https://gjs.guide/extensions/upgrading/gnome-shell-51.html
 ```
@@ -56,19 +57,19 @@ The project uses `@girs/*` npm packages for type definitions that mirror the GJS
 
 Read `package.json` devDependencies. Key packages to update:
 
-| Package | Current Pattern | Target Pattern |
-|---------|----------------|----------------|
-| `@girs/gnome-shell` | `^50.0.0` | `^<target>.0.0` |
-| `@girs/clutter-18` | `^18.0.0-4.0.0-rc.15` | `^<target-clutter>.0.0-4.0.0-rc.15` |
-| `@girs/gio-2.0` | `^2.88.0-4.0.0-rc.15` | Check latest compatible |
-| `@girs/glib-2.0` | `^2.88.0-4.0.0-rc.15` | Check latest compatible |
-| `@girs/gobject-2.0` | `^2.88.0-4.0.0-rc.15` | Check latest compatible |
-| `@girs/meta-18` | `^18.0.0-4.0.0-rc.15` | `^<target-meta>.0.0-4.0.0-rc.15` |
-| `@girs/st-18` | `^18.0.0-4.0.0-rc.15` | `^<target-st>.0.0-4.0.0-rc.15` |
-| `@girs/gtk-4.0` | `^4.23.0-4.0.0-rc.15` | Check latest compatible |
-| `@girs/gdk-4.0` | `^4.0.0-4.0.0-rc.15` | Check latest compatible |
-| `@girs/adw-1` | `^1.10.0-4.0.0-rc.15` | Check latest compatible |
-| `@girs/gjs` | `^4.0.0-rc.15` | Check latest compatible |
+| Package             | Current Pattern       | Target Pattern                      |
+| ------------------- | --------------------- | ----------------------------------- |
+| `@girs/gnome-shell` | `^50.0.0`             | `^<target>.0.0`                     |
+| `@girs/clutter-18`  | `^18.0.0-4.0.0-rc.15` | `^<target-clutter>.0.0-4.0.0-rc.15` |
+| `@girs/gio-2.0`     | `^2.88.0-4.0.0-rc.15` | Check latest compatible             |
+| `@girs/glib-2.0`    | `^2.88.0-4.0.0-rc.15` | Check latest compatible             |
+| `@girs/gobject-2.0` | `^2.88.0-4.0.0-rc.15` | Check latest compatible             |
+| `@girs/meta-18`     | `^18.0.0-4.0.0-rc.15` | `^<target-meta>.0.0-4.0.0-rc.15`    |
+| `@girs/st-18`       | `^18.0.0-4.0.0-rc.15` | `^<target-st>.0.0-4.0.0-rc.15`      |
+| `@girs/gtk-4.0`     | `^4.23.0-4.0.0-rc.15` | Check latest compatible             |
+| `@girs/gdk-4.0`     | `^4.0.0-4.0.0-rc.15`  | Check latest compatible             |
+| `@girs/adw-1`       | `^1.10.0-4.0.0-rc.15` | Check latest compatible             |
+| `@girs/gjs`         | `^4.0.0-rc.15`        | Check latest compatible             |
 
 ### How to find the correct versions
 
@@ -87,6 +88,7 @@ Read `package.json` devDependencies. Key packages to update:
 ### Update packages
 
 After determining the correct versions, update `package.json` and install:
+
 ```bash
 npm install --save-dev @girs/gnome-shell@^<target>.0.0 @girs/clutter-18@^<mutter>.0.0-4.0.0-rc.15 @girs/meta-18@^<mutter>.0.0-4.0.0-rc.15 @girs/st-18@^<mutter>.0.0-4.0.0-rc.15
 # ... and other packages as needed
@@ -98,6 +100,7 @@ npm install
 Check `vitest.config.js` — the `resolve.alias` mappings must match the import paths used in the source code. If GNOME renamed/reorganized modules (e.g. `gi://Meta` → `gi://Meta18`), update both the source imports and the vitest aliases.
 
 Current aliases in `vitest.config.js`:
+
 ```
 gi://GObject, gi://Gio, gi://GLib, gi://Meta, gi://St, gi://Clutter, gi://Shell
 ```
@@ -126,6 +129,7 @@ Check if any of these packages changed in the target Fedora version:
 - **Init/sudo**: `sudo`, `systemd`, `systemd-udev`
 
 To check for package renames/removals:
+
 ```bash
 # Check if a package exists in the target Fedora
 podman run --rm fedora:<target> dnf list <package> 2>/dev/null || echo "NOT FOUND"
@@ -136,14 +140,17 @@ podman run --rm fedora:<target> dnf provides <file-or-provides>
 ### Python packages
 
 The `behave-html-pretty-formatter` is installed via pip3:
+
 ```dockerfile
 RUN pip3 install behave-html-pretty-formatter
 ```
+
 Check if the target Fedora's Python version changed (e.g. python3 → python3.13), which would affect pip paths.
 
 ### systemd unit check
 
 The systemd unit `gnome-headless.service` references specific paths and env vars. Between GNOME releases, environment variables like `GNOME_SHELL_SESSION_MODE`, `MUTTER_DEBUG_DUMMY_MODE_SPECS`, or `GJS_DEBUG_OUTPUT` may change behavior. Check the GNOME Shell CI config for the target version:
+
 ```
 https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/gnome-<major>/.gitlab-ci.yml
 ```
@@ -151,6 +158,7 @@ https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/gnome-<major>/.gitlab-ci.yml
 ### D-Bus mock stubs
 
 `start-session.sh` launches python-dbusmock stubs for services GNOME Shell expects. New GNOME Shell versions may require additional D-Bus services. If the container build succeeds but GNOME Shell fails to start, check the journal:
+
 ```bash
 podman exec <container> journalctl -u gnome-headless.service --no-pager
 ```
@@ -168,6 +176,7 @@ In addition to version-specific changes, review these areas that commonly break:
 ### Import paths
 
 Check that all GJS imports resolve correctly:
+
 - `gi://Gio`, `gi://St`, `gi://Clutter`, `gi://Meta`, `gi://Shell`, `gi://GLib`, `gi://GObject`
 - `resource:///org/gnome/shell/...` paths
 - `resource:///org/gnome/gjs/...` paths
@@ -176,6 +185,7 @@ Check that all GJS imports resolve correctly:
 ### Extension lifecycle
 
 Verify `extension.ts` follows the correct lifecycle:
+
 - `constructor(metadata)` — translations only, no signal connections
 - `enable()` — create UI, connect signals, modify Shell
 - `disable()` — **must undo everything** from `enable()` (disconnect signals, destroy UI)
@@ -183,26 +193,25 @@ Verify `extension.ts` follows the correct lifecycle:
 ### Feature detection
 
 For APIs that differ between versions, use feature detection:
+
 ```js
-if (someMethod)
-    someMethod();
-else
-    fallbackMethod();
+if (someMethod) someMethod();
+else fallbackMethod();
 ```
 
 Or version detection:
+
 ```js
-const {PACKAGE_VERSION} = imports.misc.config;
-const [major] = PACKAGE_VERSION.split('.').map(Number);
-if (major >= 51)
-    doNewWay();
-else
-    doOldWay();
+const { PACKAGE_VERSION } = imports.misc.config;
+const [major] = PACKAGE_VERSION.split(".").map(Number);
+if (major >= 51) doNewWay();
+else doOldWay();
 ```
 
 ### Reference: Updates and Breakage
 
 Extensions break because they monkey-patch internal GNOME Shell code. The more invasive the patching, the more likely breakage. Before upgrading:
+
 - Identify all places the extension overrides or wraps Shell/Mutter internals
 - Prefer stable GNOME Platform APIs (GLib, GObject, GIO) over Shell internals
 - Use ESLint and TypeScript checking (`npm run lint`, `npm run typecheck`)
@@ -210,6 +219,7 @@ Extensions break because they monkey-patch internal GNOME Shell code. The more i
 ### Reference: Targeting Older GNOME
 
 When targeting a new version while keeping support for older versions:
+
 - Use feature/version detection (not hard if/else branches on every call)
 - `metadata.json` `shell-version` array lists ALL supported versions
 - GTK version can be checked at runtime with `Gtk.get_major_version()`
@@ -233,6 +243,7 @@ Verify `npm run typecheck` and `npm run lint` pass.
 ```
 
 For Fedora 45 (GNOME 51):
+
 ```bash
 ./test/e2e/build-container.sh 45
 ```
@@ -246,6 +257,7 @@ make test-e2e FEDORA_VERSION=<fedora version>
 ```
 
 Or equivalently:
+
 ```bash
 ./test/integration/run-tests.sh -v <fedora version>
 ```

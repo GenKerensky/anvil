@@ -82,11 +82,11 @@ npx vitest run --coverage
 
 ### 4. E2E Tests (all Fedora/GNOME versions)
 
-| Fedora | GNOME Shell | Status |
-|--------|-------------|--------|
+| Fedora | GNOME Shell | Status         |
+| ------ | ----------- | -------------- |
 | 44     | 50          | Primary target |
-| 43     | 49          | Supported |
-| 42     | 48          | Supported |
+| 43     | 49          | Supported      |
+| 42     | 48          | Supported      |
 
 ```bash
 # All three versions (sequential):
@@ -105,6 +105,7 @@ make test-e2e-build-all
 ```
 
 E2E tests cover:
+
 - D-Bus API: extension enable/disable, error states
 - GSettings: value read/write, layout mode toggles, window effects
 - AT-SPI: preferences dialog widget tree, role names, switch states, tab navigation
@@ -119,6 +120,7 @@ make dist    # Build → .zip artifact
 ```
 
 The `.zip` is what gets uploaded to extensions.gnome.org. Verify:
+
 - `metadata.json` is present and well-formed
 - No unnecessary files (build scripts, `.po`, `.pot` files — see below)
 - All translated `.mo` files are staged under `locale/<lang>/LC_MESSAGES/anvil.mo`
@@ -172,6 +174,7 @@ Go through each item. Every **MUST** rule is a hard requirement for approval.
 ### Zip File Contents
 
 The `.zip` built by `make dist` should NOT include:
+
 - [ ] Build scripts (Makefile, scripts in `test/`)
 - [ ] `.po` and `.pot` files (only compiled `.mo` files are needed)
 - [ ] Unused icons, images, or media
@@ -247,6 +250,7 @@ make dev              # Build and install for dev
 ```
 
 Verify:
+
 - [ ] Extension appears in GNOME Extensions app
 - [ ] Enable/disable works without errors in `journalctl -f -o cat /usr/bin/gnome-shell`
 - [ ] Preferences window opens and all settings work

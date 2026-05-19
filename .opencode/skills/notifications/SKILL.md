@@ -14,9 +14,9 @@ to post notifications directly.
 ## Imports
 
 ```ts
-import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import * as MessageTray from 'resource:///org/gnome/shell/ui/messageTray.js';
-import Gio from 'gi://Gio';
+import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import * as MessageTray from "resource:///org/gnome/shell/ui/messageTray.js";
+import Gio from "gi://Gio";
 ```
 
 ## Simple Notifications
@@ -25,17 +25,18 @@ For quick one-liners without source management:
 
 ```ts
 // Basic notification
-Main.notify('Title', 'Notification body text');
+Main.notify("Title", "Notification body text");
 
 // Error notification — also logs as a warning to the journal
 try {
-    throw Error('File not found');
+  throw Error("File not found");
 } catch (e) {
-    Main.notifyError('Failed', e.message);
+  Main.notifyError("Failed", e.message);
 }
 ```
 
 The logged warning appears as:
+
 ```
 GNOME Shell-Message: 00:00:00.000: error: Failed: File not found
 ```
@@ -46,22 +47,22 @@ Full-featured notification with source, urgency, actions, and destroy reasons.
 
 ```ts
 const notification = new MessageTray.Notification({
-    source: someSource,                           // MessageTray.Source
-    title: _('Custom Notification'),
-    body: _('This notification uses a custom source'),
-    gicon: new Gio.ThemedIcon({ name: 'dialog-warning' }),  // Gio.Icon
-    iconName: 'dialog-warning',                   // themed icon name
-    urgency: MessageTray.Urgency.NORMAL,
+  source: someSource, // MessageTray.Source
+  title: _("Custom Notification"),
+  body: _("This notification uses a custom source"),
+  gicon: new Gio.ThemedIcon({ name: "dialog-warning" }), // Gio.Icon
+  iconName: "dialog-warning", // themed icon name
+  urgency: MessageTray.Urgency.NORMAL,
 });
 ```
 
 ### Urgency Levels
 
-| Level | Behavior |
-|-------|----------|
-| `LOW` | Shown in tray only, no popup |
-| `NORMAL` | Popup unless policy forbids it |
-| `HIGH` | Popup unless policy forbids it |
+| Level      | Behavior                                            |
+| ---------- | --------------------------------------------------- |
+| `LOW`      | Shown in tray only, no popup                        |
+| `NORMAL`   | Popup unless policy forbids it                      |
+| `HIGH`     | Popup unless policy forbids it                      |
 | `CRITICAL` | Always shown expanded, must be acknowledged by user |
 
 ### Actions
@@ -69,19 +70,19 @@ const notification = new MessageTray.Notification({
 Every notification has a default action (fired when clicked):
 
 ```ts
-notification.connect('activated', (_notification) => {
-    log(`${notification.title}: notification activated`);
+notification.connect("activated", (_notification) => {
+  log(`${notification.title}: notification activated`);
 });
 ```
 
 Up to 3 action buttons:
 
 ```ts
-notification.addAction(_('Close'), () => {
-    log('"Close" button activated');
+notification.addAction(_("Close"), () => {
+  log('"Close" button activated');
 });
 
-notification.clearActions();  // remove all
+notification.clearActions(); // remove all
 ```
 
 ### Destroy Reasons
@@ -89,18 +90,18 @@ notification.clearActions();  // remove all
 Connect to the `destroy` signal to know why a notification was removed:
 
 ```ts
-notification.connect('destroy', (_notification, reason) => {
-    if (reason === MessageTray.NotificationDestroyedReason.DISMISSED)
-        log('User closed the notification');
+notification.connect("destroy", (_notification, reason) => {
+  if (reason === MessageTray.NotificationDestroyedReason.DISMISSED)
+    log("User closed the notification");
 });
 ```
 
-| Reason | Meaning |
-|--------|---------|
-| `EXPIRED` | Dismissed without user acknowledgment |
-| `DISMISSED` | Closed by the user |
-| `SOURCE_CLOSED` | Closed by its source |
-| `REPLACED` | Replaced by a newer version |
+| Reason          | Meaning                               |
+| --------------- | ------------------------------------- |
+| `EXPIRED`       | Dismissed without user acknowledgment |
+| `DISMISSED`     | Closed by the user                    |
+| `SOURCE_CLOSED` | Closed by its source                  |
+| `REPLACED`      | Replaced by a newer version           |
 
 ## Custom Sources
 
@@ -111,18 +112,20 @@ Create a `MessageTray.Source` for grouping notifications under a custom origin
 let _source: MessageTray.Source | null = null;
 
 function getSource(): MessageTray.Source {
-    if (!_source) {
-        _source = new MessageTray.Source({
-            title: _('My Extension'),
-            icon: new Gio.ThemedIcon({ name: 'dialog-information' }),
-            iconName: 'dialog-information',
-            policy: new MyNotificationPolicy(),
-        });
+  if (!_source) {
+    _source = new MessageTray.Source({
+      title: _("My Extension"),
+      icon: new Gio.ThemedIcon({ name: "dialog-information" }),
+      iconName: "dialog-information",
+      policy: new MyNotificationPolicy(),
+    });
 
-        _source.connect('destroy', () => { _source = null; });
-        Main.messageTray.add(_source);
-    }
-    return _source;
+    _source.connect("destroy", () => {
+      _source = null;
+    });
+    Main.messageTray.add(_source);
+  }
+  return _source;
 }
 ```
 
@@ -130,11 +133,13 @@ To post from the custom source:
 
 ```ts
 const source = getSource();
-source.addNotification(new MessageTray.Notification({
+source.addNotification(
+  new MessageTray.Notification({
     source,
-    title: _('Alert'),
-    body: _('Something happened'),
-}));
+    title: _("Alert"),
+    body: _("Something happened"),
+  })
+);
 ```
 
 ### Notification Policies
@@ -144,14 +149,27 @@ Control how and when notifications appear by subclassing
 
 ```ts
 const MyNotificationPolicy = GObject.registerClass(
-class MyNotificationPolicy extends MessageTray.NotificationPolicy {
-    get enable() { return true; }           // show notifications
-    get enableSound() { return true; }      // play sound
-    get showBanners() { return true; }      // popup outside tray
-    get forceExpanded() { return false; }   // always show full banner
-    get showInLockScreen() { return false; } // show on lock screen
-    get detailsInLockScreen() { return false; } // show content on lock screen
-});
+  class MyNotificationPolicy extends MessageTray.NotificationPolicy {
+    get enable() {
+      return true;
+    } // show notifications
+    get enableSound() {
+      return true;
+    } // play sound
+    get showBanners() {
+      return true;
+    } // popup outside tray
+    get forceExpanded() {
+      return false;
+    } // always show full banner
+    get showInLockScreen() {
+      return false;
+    } // show on lock screen
+    get detailsInLockScreen() {
+      return false;
+    } // show content on lock screen
+  }
+);
 ```
 
 The default policy `MessageTray.NotificationGenericPolicy` follows desktop settings.
@@ -163,9 +181,9 @@ For notifications that should appear to come from the system:
 ```ts
 const systemSource = MessageTray.getSystemSource();
 const notif = new MessageTray.Notification({
-    source: systemSource,
-    title: 'System Notification',
-    body: 'This appears to come from the system',
+  source: systemSource,
+  title: "System Notification",
+  body: "This appears to come from the system",
 });
 systemSource.addNotification(notif);
 ```

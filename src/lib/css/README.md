@@ -3,21 +3,17 @@
 API to work with CSS code and files and update the extension's stylesheet.css
 
 ## CSS Parser from ReworkCSS
+
 Credits: https://github.com/reworkcss/css
 Modified to work in GNOME-Shell by Anvil (forked from Forge)
 
 ### Usage
 
 ```js
-import {
-  parse,
-  stringify,
-  write,
-  load,
-} from './css/index.js';
+import { parse, stringify, write, load } from "./css/index.js";
 
 // Raw APIs from ReworkCSS
-let obj = parse('body { font-size: 12px; }');
+let obj = parse("body { font-size: 12px; }");
 let code = stringify(obj);
 
 // Convenience
@@ -25,7 +21,6 @@ write(code, "/path/to/stylesheet.css");
 let ast = load("/path/to/stylesheet.css");
 
 // ... Do something with AST ...
-
 ```
 
 ### Example
@@ -48,9 +43,7 @@ Parse tree:
     "rules": [
       {
         "type": "rule",
-        "selectors": [
-          "body"
-        ],
+        "selectors": ["body"],
         "declarations": [
           {
             "type": "declaration",

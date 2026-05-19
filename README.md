@@ -30,9 +30,9 @@ Direct installation of Anvil requires building from source for now. The upstream
 packages listed below are for the original Forge extension and are provided for reference:
 
 - Build Anvil yourself via `make install` or `make dev`.
-- Upstream Forge: [GNOME extensions website](https://extensions.gnome.org/extension/4481/forge/) *(Forge, not Anvil)*
-- Upstream Forge: [AUR Package](https://aur.archlinux.org/packages/gnome-shell-extension-forge) — thanks to [@Radeox](https://github.com/Radeox) *(Forge, not Anvil)*
-- Upstream Forge: [Fedora Package](https://packages.fedoraproject.org/pkgs/gnome-shell-extension-forge/gnome-shell-extension-forge/) — thanks to [@carlwgeorge](https://github.com/carlwgeorge) *(Forge, not Anvil)*
+- Upstream Forge: [GNOME extensions website](https://extensions.gnome.org/extension/4481/forge/) _(Forge, not Anvil)_
+- Upstream Forge: [AUR Package](https://aur.archlinux.org/packages/gnome-shell-extension-forge) — thanks to [@Radeox](https://github.com/Radeox) _(Forge, not Anvil)_
+- Upstream Forge: [Fedora Package](https://packages.fedoraproject.org/pkgs/gnome-shell-extension-forge/gnome-shell-extension-forge/) — thanks to [@carlwgeorge](https://github.com/carlwgeorge) _(Forge, not Anvil)_
 
 ![image](https://user-images.githubusercontent.com/348125/146386593-8f53ea8b-2cf3-4d44-a613-bbcaf89f9d4a.png)
 
@@ -40,48 +40,48 @@ packages listed below are for the original Forge extension and are provided for 
 
 See the acceptable key combinations on the [wiki](https://github.com/forge-ext/forge/wiki/Keyboard-Shortcuts)
 
-| Action | Shortcut |
-| --- | --- |
-| Increase active window size left | `<Ctrl> + <Super> + y` |
-| Decrease active window size left | `<Ctrl> + <Shift> + <Super> + o` |
-| Increase active window size bottom | `<Ctrl> + <Super> + u` |
-| Decrease active window size bottom | `<Ctrl> + <Shift> + <Super> + i` |
-| Increase active window size top | `<Ctrl> + <Super> + i` |
-| Decrease active window size top | `<Ctrl> + <Shift> + <Super> + u` |
-| Increase active window size right | `<Ctrl> + <Super> + o` |
-| Decrease active window size right | `<Ctrl> + <Shift> + <Super> + y` |
-| Open preferences | `<Super> + period` |
-| Toggle tiling mode |`<Super> + w` |
-| Focus left | `<Super> + h` |
-| Focus right | `<Super> + l` |
-| Focus up | `<Super> + k` |
-| Focus down | `<Super> + j` |
-| Swap current window with last active | `<Super> + Return` |
-| Swap active window left | `<Ctrl> + <Super> + h` |
-| Swap active window right | `<Ctrl> + <Super> + l` |
-| Swap active window up | `<Ctrl> + <Super> + k` |
-| Swap active window down | `<Ctrl> + <Super> + j` |
-| Move active window left | `<Shift> + <Super> + h` |
-| Move active window right | `<Shift> + <Super> + l` |
-| Move active window up | `<Shift> + <Super> + k` |
-| Move active window down | `<Shift> + <Super> + j` |
-| Split container horizontally | `<Super> + z` |
-| Split container vertically | `<Super> + v` |
-| Toggle split container | `<Super> + g` |
-| Gap increase | `<Ctrl> + <Super> + Plus` |
-| Gap decrease | `<Ctrl> + <Super> + Minus` |
-| Toggle focus hint | `<Super> + x` |
-| Toggle active workspace tiling | `<Shift> + <Super> + w` |
-| Toggle stacked layout | `<Shift> + <Super> + s` |
-| Toggle tabbed layout | `<Shift> + <Super> + t` |
-| Show/hide tab decoration | `<Ctrl> + <Alt> + y` |
-| Activate tile drag-drop | `Start dragging - Mod key configuration in prefs` |
-| Snap active window left two thirds | `<Ctrl> + <Alt> + e` |
-| Snap active window right two thirds | `<Ctrl> + <Alt> + t` |
-| Snap active window left third | `<Ctrl> + <Alt> + d` |
-| Snap active window right third | `<Ctrl> + <Alt> + g` |
-| Persist toggle floating for active window | `<Super> + c` |
-| Persist toggle floating for active window and its window class | `<Super><Shift> + c` |
+| Action                                                         | Shortcut                                          |
+| -------------------------------------------------------------- | ------------------------------------------------- |
+| Increase active window size left                               | `<Ctrl> + <Super> + y`                            |
+| Decrease active window size left                               | `<Ctrl> + <Shift> + <Super> + o`                  |
+| Increase active window size bottom                             | `<Ctrl> + <Super> + u`                            |
+| Decrease active window size bottom                             | `<Ctrl> + <Shift> + <Super> + i`                  |
+| Increase active window size top                                | `<Ctrl> + <Super> + i`                            |
+| Decrease active window size top                                | `<Ctrl> + <Shift> + <Super> + u`                  |
+| Increase active window size right                              | `<Ctrl> + <Super> + o`                            |
+| Decrease active window size right                              | `<Ctrl> + <Shift> + <Super> + y`                  |
+| Open preferences                                               | `<Super> + period`                                |
+| Toggle tiling mode                                             | `<Super> + w`                                     |
+| Focus left                                                     | `<Super> + h`                                     |
+| Focus right                                                    | `<Super> + l`                                     |
+| Focus up                                                       | `<Super> + k`                                     |
+| Focus down                                                     | `<Super> + j`                                     |
+| Swap current window with last active                           | `<Super> + Return`                                |
+| Swap active window left                                        | `<Ctrl> + <Super> + h`                            |
+| Swap active window right                                       | `<Ctrl> + <Super> + l`                            |
+| Swap active window up                                          | `<Ctrl> + <Super> + k`                            |
+| Swap active window down                                        | `<Ctrl> + <Super> + j`                            |
+| Move active window left                                        | `<Shift> + <Super> + h`                           |
+| Move active window right                                       | `<Shift> + <Super> + l`                           |
+| Move active window up                                          | `<Shift> + <Super> + k`                           |
+| Move active window down                                        | `<Shift> + <Super> + j`                           |
+| Split container horizontally                                   | `<Super> + z`                                     |
+| Split container vertically                                     | `<Super> + v`                                     |
+| Toggle split container                                         | `<Super> + g`                                     |
+| Gap increase                                                   | `<Ctrl> + <Super> + Plus`                         |
+| Gap decrease                                                   | `<Ctrl> + <Super> + Minus`                        |
+| Toggle focus hint                                              | `<Super> + x`                                     |
+| Toggle active workspace tiling                                 | `<Shift> + <Super> + w`                           |
+| Toggle stacked layout                                          | `<Shift> + <Super> + s`                           |
+| Toggle tabbed layout                                           | `<Shift> + <Super> + t`                           |
+| Show/hide tab decoration                                       | `<Ctrl> + <Alt> + y`                              |
+| Activate tile drag-drop                                        | `Start dragging - Mod key configuration in prefs` |
+| Snap active window left two thirds                             | `<Ctrl> + <Alt> + e`                              |
+| Snap active window right two thirds                            | `<Ctrl> + <Alt> + t`                              |
+| Snap active window left third                                  | `<Ctrl> + <Alt> + d`                              |
+| Snap active window right third                                 | `<Ctrl> + <Alt> + g`                              |
+| Persist toggle floating for active window                      | `<Super> + c`                                     |
+| Persist toggle floating for active window and its window class | `<Super><Shift> + c`                              |
 
 For any shortcut conflicts, the user has to manually configure those for now from the
 `GNOME Control Center > Keyboard > Customize Shortcuts`. https://github.com/forge-ext/forge/issues/37
@@ -96,6 +96,7 @@ For any shortcut conflicts, the user has to manually configure those for now fro
 GNOME Shell has built in support for workspace management and seems to work well - so Anvil will not touch those.
 
 User is encouraged to bind the following:
+
 - Switching/moving windows to different workspaces
 - Switching to numbered, previous or next workspace
 
@@ -122,7 +123,7 @@ with hand-written mocks for all GJS/GNOME APIs.
 npm run test:unit
 
 # Run unit tests in watch mode (re-runs on file save)
-npm run test:watch
+npm run test:unit:watch
 
 # Run lint + unit tests together
 npm test
@@ -150,20 +151,22 @@ readable Gherkin feature files. Test results are published as a self-contained H
 with AT-SPI tree snapshots embedded on failure for debugging.
 
 **What is NOT testable headless:**
+
 - Keyboard keybindings (`zwp_virtual_keyboard_v1` not implemented by headless compositor)
 - Pixel-level visual rendering (no GPU framebuffer)
 - Mouse drag-and-drop (no pointer device)
 - GtkSwitch clicks via AT-SPI (no pointer device; state verified via `.checked` property)
 
 **Prerequisites:**
+
 - [Podman](https://podman.io/docs/installation) installed
 - `glib2-devel` installed (`sudo dnf install glib2-devel`, for `make dist`)
 
 **Supported GNOME Shell versions:**
 
-| Fedora | GNOME Shell | Status |
-|--------|-------------|--------|
-| 44     | 50          | ✅ Primary |
+| Fedora | GNOME Shell | Status       |
+| ------ | ----------- | ------------ |
+| 44     | 50          | ✅ Primary   |
 | 43     | 49          | ✅ Supported |
 | 42     | 48          | ✅ Supported |
 
@@ -193,6 +196,7 @@ make test-e2e-all
 **Debugging a failed test:**
 
 On failure, the test runner saves:
+
 - A self-contained **HTML report** to `test/e2e/output/behave-report-*.html` with full
   scenario breakdown, step status, and embedded AT-SPI tree snapshots
 - The full GNOME Shell **journal log** to `test/e2e/output/journal.log`
@@ -256,6 +260,7 @@ npm run format
 ## Credits
 
 Thank you to:
+
 - Forge extension contributors
 - Michael Stapelberg/contributors for i3
 - System76/contributors for pop-shell

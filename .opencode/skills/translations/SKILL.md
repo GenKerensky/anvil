@@ -39,7 +39,10 @@ Files using this import:
 ### Preferences side (GTK4/Adwaita process)
 
 ```js
-import { ExtensionPreferences, gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
+import {
+  ExtensionPreferences,
+  gettext as _,
+} from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 ```
 
 Files using this import:
@@ -59,9 +62,9 @@ Check whether the file runs in the extension process or preferences process to c
 ### Simple strings
 
 ```js
-_("Tiling")
-_("Settings")
-_("Border color")
+_("Tiling");
+_("Settings");
+_("Border color");
 ```
 
 ### Strings with printf-style interpolation
@@ -69,7 +72,7 @@ _("Border color")
 Use `String.prototype.format()` (provided by GNOME Shell):
 
 ```js
-_('Enabling %s').format(this.metadata.name)
+_("Enabling %s").format(this.metadata.name);
 ```
 
 ### Strings with context (pgettext)
@@ -79,7 +82,7 @@ Use when a word has different meanings in different contexts (e.g. "Restart" as 
 ```js
 import { gettext as _, pgettext } from "resource:///org/gnome/shell/extensions/extension.js";
 
-pgettext("menu item", "Notify")
+pgettext("menu item", "Notify");
 ```
 
 **Note**: `pgettext` is not currently used in Anvil, but the context argument is available if needed.
@@ -91,7 +94,11 @@ For strings that vary by count in different languages:
 ```js
 import { gettext as _, ngettext } from "resource:///org/gnome/shell/extensions/extension.js";
 
-const body = ngettext("You have been notified %d time", "You have been notified %d times", count).format(count);
+const body = ngettext(
+  "You have been notified %d time",
+  "You have been notified %d times",
+  count
+).format(count);
 ```
 
 **Note**: `ngettext` is not currently used in Anvil, but is available if needed.
@@ -140,11 +147,11 @@ This copies compiled `.mo` files into `dist/locale/<lang>/LC_MESSAGES/anvil.mo` 
 
 From `Makefile:59-51`:
 
-| Target | Command | Effect |
-|--------|---------|--------|
-| `potfile` | `xgettext --from-code=UTF-8 --output=src/po/anvil.pot` | Scans `src/prefs.ts`, `src/extension.ts`, `src/lib/**/*.ts` for `_()` calls |
-| `compilemsgs` | `msgmerge -U $lang.po src/po/anvil.pot` + `msgfmt -c` | Updates each `.po` with new strings, compiles to `.mo` |
-| `build` | Copies `.mo` → `dist/locale/<lang>/LC_MESSAGES/anvil.mo` | Staged into extension output directory |
+| Target        | Command                                                  | Effect                                                                      |
+| ------------- | -------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `potfile`     | `xgettext --from-code=UTF-8 --output=src/po/anvil.pot`   | Scans `src/prefs.ts`, `src/extension.ts`, `src/lib/**/*.ts` for `_()` calls |
+| `compilemsgs` | `msgmerge -U $lang.po src/po/anvil.pot` + `msgfmt -c`    | Updates each `.po` with new strings, compiles to `.mo`                      |
+| `build`       | Copies `.mo` → `dist/locale/<lang>/LC_MESSAGES/anvil.mo` | Staged into extension output directory                                      |
 
 `make build` depends on `compilemsgs`, so translations are always up-to-date in builds.
 

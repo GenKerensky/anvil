@@ -27,18 +27,20 @@ src/lib/prefs/
 
 Two GSettings schemas (from `metadata.json` `settings-schema`):
 
-| Schema | Path | Purpose |
-|--------|------|---------|
-| `org.gnome.shell.extensions.anvil` | `/org/gnome/shell/extensions/anvil/` | Main settings |
+| Schema                                         | Path                                             | Purpose            |
+| ---------------------------------------------- | ------------------------------------------------ | ------------------ |
+| `org.gnome.shell.extensions.anvil`             | `/org/gnome/shell/extensions/anvil/`             | Main settings      |
 | `org.gnome.shell.extensions.anvil.keybindings` | `/org/gnome/shell/extensions/anvil/keybindings/` | Keyboard shortcuts |
 
 In `src/prefs.ts`, both are loaded:
+
 ```ts
-this.settings = this.getSettings();                                  // main schema
+this.settings = this.getSettings(); // main schema
 this.kbdSettings = this.getSettings("org.gnome.shell.extensions.anvil.keybindings");
 ```
 
 Pages receive them via destructuring:
+
 ```ts
 window.add(new SettingsPage(this as any));
 // Page constructor: constructor({ settings, window, metadata, ... })
@@ -49,6 +51,7 @@ window.add(new SettingsPage(this as any));
 ### 1. Add the GSettings key
 
 In `src/schemas/org.gnome.shell.extensions.anvil.gschema.xml`:
+
 ```xml
 <key type="b" name="my-new-setting">
     <default>true</default>
@@ -61,14 +64,15 @@ Common types: `b` (boolean), `s` (string), `u` (uint32), `as` (string array).
 ### 2. Add the widget
 
 In the appropriate page constructor (e.g. `SettingsPage`):
+
 ```ts
 new SwitchRow({
-    title: _("My New Setting"),
-    subtitle: _("What it does"),
-    experimental: true,   // optional: shows a bug icon with tooltip
-    settings,
-    bind: "my-new-setting",
-})
+  title: _("My New Setting"),
+  subtitle: _("What it does"),
+  experimental: true, // optional: shows a bug icon with tooltip
+  settings,
+  bind: "my-new-setting",
+});
 ```
 
 The widget library is in `src/lib/prefs/widgets.ts`.
@@ -81,8 +85,9 @@ with `GObject.registerClass(this)`.
 ### `SwitchRow` (extends `Adw.ActionRow`)
 
 Boolean toggle. Binds `Gtk.Switch.active` ↔ `Gio.Settings` key.
+
 ```ts
-new SwitchRow({ title, settings, bind, subtitle?, experimental? })
+new SwitchRow({ title, settings, bind, subtitle, experimental });
 ```
 
 ### `SpinButtonRow` (extends `Adw.ActionRow`)
@@ -90,69 +95,84 @@ new SwitchRow({ title, settings, bind, subtitle?, experimental? })
 Numeric spinner. Two modes:
 
 **Mode A: bind to GSettings** — settings key must be type `u`:
+
 ```ts
-new SpinButtonRow({ title, range: [0, 32, 1], settings, bind: "window-gap-size" })
+new SpinButtonRow({ title, range: [0, 32, 1], settings, bind: "window-gap-size" });
 ```
 
 **Mode B: manual callback** — no settings binding, use `init` + `onChange`:
+
 ```ts
 new SpinButtonRow({
-    title, range: [0, 28, 1],
-    init: currentRadius,
-    onChange: (value) => { /* handle value change */ }
-})
+  title,
+  range: [0, 28, 1],
+  init: currentRadius,
+  onChange: (value) => {
+    /* handle value change */
+  },
+});
 ```
 
 ### `DropDownRow` (extends `Adw.ActionRow`)
 
 Dropdown selector. Must provide `type` (GVariant type string like `"s"`, `"u"`):
+
 ```ts
 new DropDownRow({
-    title, settings, bind: "dnd-center-layout",
-    type: "s",
-    items: [
-        { id: "swap", name: _("Swap") },
-        { id: "tabbed", name: _("Tabbed") },
-    ],
-})
+  title,
+  settings,
+  bind: "dnd-center-layout",
+  type: "s",
+  items: [
+    { id: "swap", name: _("Swap") },
+    { id: "tabbed", name: _("Tabbed") },
+  ],
+});
 ```
+
 Uses a `Gtk.StringList` model internally. The `id` values are written to GSettings.
 
 ### `ColorRow` (extends `Adw.ActionRow`)
 
 Color picker with alpha. No settings binding — uses `onChange`:
+
 ```ts
 new ColorRow({
-    title: _("Border color"),
-    init: theme.getCssProperty(selector, "border-color").value,
-    onChange: (rgbaString) => { /* handle color change */ },
-})
+  title: _("Border color"),
+  init: theme.getCssProperty(selector, "border-color").value,
+  onChange: (rgbaString) => {
+    /* handle color change */
+  },
+});
 ```
+
 The `colorButton` (a `Gtk.ColorButton`) is exposed as a public property for external
 reset logic.
 
 ### `EntryRow` (extends `Adw.EntryRow`)
 
 Text entry. For plain strings, no `map` needed:
+
 ```ts
-new EntryRow({ title, settings, bind: "workspace-skip-tile" })
+new EntryRow({ title, settings, bind: "workspace-skip-tile" });
 ```
 
 For complex type conversions, use `map.from` / `map.to`:
+
 ```ts
 new EntryRow({
-    title: key,
-    settings: kbdSettings,
-    bind: key,
-    map: {
-        from(settings, bind) {
-            return settings.get_strv(bind).join(",");
-        },
-        to(settings, bind, value) {
-            // parse and validate, then call settings.set_strv(bind, [...])
-        },
+  title: key,
+  settings: kbdSettings,
+  bind: key,
+  map: {
+    from(settings, bind) {
+      return settings.get_strv(bind).join(",");
     },
-})
+    to(settings, bind, value) {
+      // parse and validate, then call settings.set_strv(bind, [...])
+    },
+  },
+});
 ```
 
 Each `EntryRow` automatically gets a `ClearButton` (sets text to "") and a `ResetButton`
@@ -161,24 +181,27 @@ Each `EntryRow` automatically gets a `ClearButton` (sets text to "") and a `Rese
 ### `RadioRow` (extends `Adw.ActionRow`)
 
 Set of `Gtk.ToggleButton` widgets bound to a string GSettings key:
+
 ```ts
 new RadioRow({
-    title: _("Modifier key"),
-    settings: kbdSettings,
-    bind: "mod-mask-mouse-tile",
-    options: {
-        Super: _("Super"),
-        Ctrl: _("Ctrl"),
-        Alt: _("Alt"),
-        None: _("None"),
-    },
-})
+  title: _("Modifier key"),
+  settings: kbdSettings,
+  bind: "mod-mask-mouse-tile",
+  options: {
+    Super: _("Super"),
+    Ctrl: _("Ctrl"),
+    Alt: _("Alt"),
+    None: _("None"),
+  },
+});
 ```
+
 The key (`Super`, `Ctrl`, etc.) is what gets stored in GSettings. The value is the label.
 
 ### `PreferencesPage` (extends `Adw.PreferencesPage`)
 
 Base class for all pages. Provides `add_group()`:
+
 ```ts
 this.add_group({
     title: _("Group Title"),
@@ -212,16 +235,16 @@ which extends `ThemeManagerBase` (`src/lib/shared/theme.ts`).
 
 ### Common CSS selectors
 
-| Selector | Scheme | Use |
-|----------|--------|-----|
-| `.window-tiled-border` | `tiled` | Focused window border |
-| `.window-tabbed-border` | `tabbed` | Tabbed window border |
-| `.window-stacked-border` | `stacked` | Stacked window border |
-| `.window-floated-border` | `floated` | Floating window border |
-| `.window-split-border` | `split` | Split direction hint |
-| `.window-tilepreview-tiled` | `tiled` | Drag preview |
-| `.window-tilepreview-stacked` | `stacked` | Drag preview |
-| `.window-tilepreview-tabbed` | `tabbed` | Drag preview |
+| Selector                      | Scheme    | Use                    |
+| ----------------------------- | --------- | ---------------------- |
+| `.window-tiled-border`        | `tiled`   | Focused window border  |
+| `.window-tabbed-border`       | `tabbed`  | Tabbed window border   |
+| `.window-stacked-border`      | `stacked` | Stacked window border  |
+| `.window-floated-border`      | `floated` | Floating window border |
+| `.window-split-border`        | `split`   | Split direction hint   |
+| `.window-tilepreview-tiled`   | `tiled`   | Drag preview           |
+| `.window-tilepreview-stacked` | `stacked` | Drag preview           |
+| `.window-tilepreview-tabbed`  | `tabbed`  | Drag preview           |
 
 ### Pattern for a color picker with reset
 
@@ -229,22 +252,24 @@ which extends `ThemeManagerBase` (`src/lib/shared/theme.ts`).
 const row = new Adw.ExpanderRow({ title: _("Tiled window") });
 
 const borderColorRow = new ColorRow({
-    title: _("Border color"),
-    init: theme.getCssProperty(selector, "border-color").value,
-    onChange: (rgbaString) => {
-        const rgba = new Gdk.RGBA();
-        if (rgba.parse(rgbaString)) {
-            theme.setCssProperty(selector, "border-color", rgba.to_string());
-            // Also update preview variants with adjusted alpha...
-        }
-    },
+  title: _("Border color"),
+  init: theme.getCssProperty(selector, "border-color").value,
+  onChange: (rgbaString) => {
+    const rgba = new Gdk.RGBA();
+    if (rgba.parse(rgbaString)) {
+      theme.setCssProperty(selector, "border-color", rgba.to_string());
+      // Also update preview variants with adjusted alpha...
+    }
+  },
 });
-borderColorRow.add_suffix(new ResetButton({
+borderColorRow.add_suffix(
+  new ResetButton({
     onReset: () => {
-        const defaultColor = theme.defaultPalette[scheme].color;
-        // reset color and update the colorButton...
+      const defaultColor = theme.defaultPalette[scheme].color;
+      // reset color and update the colorButton...
     },
-}));
+  })
+);
 
 row.add_row(borderColorRow);
 ```
@@ -253,6 +278,7 @@ row.add_row(borderColorRow);
 
 Shortcuts use GSettings type `as` (string array) in the keybindings schema.
 Keybinding GSettings key names follow a prefix pattern for grouping:
+
 - `window-*` → "Tiling shortcuts"
 - `con-*` → "Container shortcuts"
 - `workspace-*` → "Workspace shortcuts"
@@ -289,7 +315,7 @@ The default overrides live in `src/config/windows.json` and are copied to the bu
 ### FloatingPage pattern
 
 ```ts
-this.configMgr = new ConfigManager({ dir });  // dir = extension.get_dir()
+this.configMgr = new ConfigManager({ dir }); // dir = extension.get_dir()
 
 // Read overrides
 let overrides = this.configMgr.windowProps.overrides;
@@ -307,21 +333,26 @@ Each override entry has `wmClass`, `wmTitle`, and `mode` ("float").
 `src/lib/shared/settings.ts` exports `production` (default `true`). `make dev` toggles it to
 `false` via `sed`. Dev-only preferences (Logger page, About button) are conditionally
 rendered:
+
 ```ts
 if (!production) {
-    this.add_group({
-        title: _("Logger"),
-        children: [ /* DropDownRow for log level */ ],
-    });
+  this.add_group({
+    title: _("Logger"),
+    children: [
+      /* DropDownRow for log level */
+    ],
+  });
 }
 ```
 
 ## i18n
 
 Import `gettext as _` from the prefs module (NOT from `src/extension.ts`):
+
 ```ts
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 ```
+
 Wrap all user-visible strings in `_()`.
 
 ## Accessibility
@@ -347,6 +378,7 @@ on a custom widget, or a broken label relationship.
    For example, a group of `Gtk.ToggleButton` widgets (like `RadioRow`) should each have
    the `RADIO_BUTTON` role. GTK derives this from `Gtk.ToggleButton` automatically, but if
    you build a widget from `St.Bin` or a bare container, you must set it:
+
    ```ts
    accessible_role: Atk.Role.CHECK_BOX,
    ```
@@ -354,11 +386,10 @@ on a custom widget, or a broken label relationship.
 4. **State toggles must update CSS pseudo-classes** — AT-SPI `checked`/`selected` states
    are driven by the CSS pseudo-classes `:checked` and `:selected`. If a widget manages
    its own toggle state outside of GSettings binding, it must add/remove the pseudo-class:
+
    ```ts
-   if (state)
-       this.add_style_pseudo_class('checked');
-   else
-       this.remove_style_pseudo_class('checked');
+   if (state) this.add_style_pseudo_class("checked");
+   else this.remove_style_pseudo_class("checked");
    ```
 
 5. **Label every icon-only button** — buttons with just an icon (`ResetButton`, `ClearButton`,
@@ -386,6 +417,7 @@ accerciser  # GUI browser for AT-SPI tree
 ```
 
 In Dogtail (from E2E tests):
+
 ```python
 from dogtail.tree import root
 from dogtail.predicate import GenericPredicate
@@ -417,6 +449,7 @@ row = prefs_window.findChild(GenericPredicate(roleName="label"), "Show Indicator
 No keyboard/pixel/drag-drop testing possible in headless Wayland.
 
 To verify a switch's state: write via gsettings, read `.checked` via AT-SPI.
+
 ```python
 # Find switches (try multiple role names for GTK version compat)
 for role in ("switch", "toggle button", "check box"):

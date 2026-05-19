@@ -15,7 +15,7 @@ import {
 } from "../mocks/helpers/index.js";
 
 describe("WindowManager - Gaps", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture();

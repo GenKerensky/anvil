@@ -136,7 +136,9 @@ export class WindowManager extends GObject.Object {
   declare grabOp: Meta.GrabOp;
 
   // --- Resize exemption tracking ---
-  declare _resizedWindows: Set<number>;
+  // Map<windowId, resizeCount> — only exempt after 2+ completed grabs
+  // to avoid race with async Wayland size-changed signals.
+  declare _resizedWindows: Map<number, number>;
 
   constructor(ext: AnvilExtension) {
     super();
@@ -157,7 +159,7 @@ export class WindowManager extends GObject.Object {
     this.shouldFocusOnHover = !!this.ext.settings?.get_boolean("focus-on-hover-enabled");
     this.cancelGrab = false;
     this._workspaceChanging = false;
-    this._resizedWindows = new Set();
+    this._resizedWindows = new Map();
 
     Logger.info("anvil initialized");
 
@@ -1933,8 +1935,11 @@ export class WindowManager extends GObject.Object {
       console.warn(`[anvil-debug] enforceUltrawideSize: constraints disabled`);
       return rect;
     }
-    // Skip enforcement for manually resized windows when exemption is enabled
-    if (constraints.resizeExempt && this._resizedWindows.has(metaWindow.get_id())) {
+    // Skip enforcement for manually resized windows when exemption is enabled.
+    // Require 2+ completed grab operations so the first resize is still clamped
+    // even if async Wayland size-changed signals trigger follow-up renders.
+    const resizeCount = this._resizedWindows.get(metaWindow.get_id()) || 0;
+    if (constraints.resizeExempt && resizeCount >= 2) {
       // When this is the only tiled window on the monitor, preserve its
       // manual size but center it within the monitor bounds (clamped).
       let monitorNode = node.parentNode;
@@ -3022,15 +3027,6 @@ export class WindowManager extends GObject.Object {
     }
     this._draggedNodeWindow = null;
 
-    // Track manually resized windows for per-monitor resize exemption
-    if (focusMetaWindow && Utils.grabMode(grabOp) === GRAB_TYPES.RESIZING) {
-      const monitorIndex = focusMetaWindow.get_monitor();
-      const constraints = this._getMonitorConstraints(monitorIndex);
-      if (constraints?.resizeExempt) {
-        this._resizedWindows.add(focusMetaWindow.get_id());
-      }
-    }
-
     this._grabCleanup(focusNodeWindow);
 
     if (
@@ -3045,6 +3041,22 @@ export class WindowManager extends GObject.Object {
       })()
     ) {
       this.renderTree("grab-op-end");
+    }
+
+    // Track manually resized windows for per-monitor resize exemption.
+    // Must run AFTER renderTree so the first resize is still clamped by
+    // enforceUltrawideSize; subsequent renders will see the window in
+    // _resizedWindows and skip clamping.
+    // renderTree() queues an idle callback, so we also queue the add
+    // via idle_add to ensure it runs after the render completes.
+    if (focusMetaWindow && Utils.grabMode(grabOp) === GRAB_TYPES.RESIZING) {
+      const monitorIndex = focusMetaWindow.get_monitor();
+      const constraints = this._getMonitorConstraints(monitorIndex);
+      if (constraints?.resizeExempt) {
+        const winId = focusMetaWindow.get_id();
+        const currentCount = this._resizedWindows.get(winId) || 0;
+        this._resizedWindows.set(winId, currentCount + 1);
+      }
     }
 
     this.updateStackedFocus(focusNodeWindow);
@@ -3136,7 +3148,11 @@ export class WindowManager extends GObject.Object {
         )} currentRect=${JSON.stringify(
           currentRect
         )} direction=${direction} orientation=${orientation} sameParent=${sameParent} resizePair=${
-          resizePairForWindow ? (resizePairForWindow.nodeValue as Meta.Window)?.get_title() : "none"
+          resizePairForWindow
+            ? resizePairForWindow.isWindow()
+              ? (resizePairForWindow.nodeValue as Meta.Window)?.get_title()
+              : resizePairForWindow.nodeType
+            : "none"
         }`
       );
 
@@ -3183,7 +3199,9 @@ export class WindowManager extends GObject.Object {
             } else {
               index = index! - 1;
             }
-            parentNodeForFocus = resizePairForWindow.parentNode.childNodes[index!];
+            const childNodes = resizePairForWindow.parentNode.childNodes;
+            if (index === null || index < 0 || index >= childNodes.length) return;
+            parentNodeForFocus = childNodes[index!];
             firstRect = parentNodeForFocus.rect;
             secondRect = resizePairForWindow.rect;
             if (!firstRect || !secondRect) {
@@ -3244,7 +3262,9 @@ export class WindowManager extends GObject.Object {
             } else {
               index = index! - 1;
             }
-            parentNodeForFocus = resizePairForWindow.parentNode.childNodes[index!];
+            const childNodes = resizePairForWindow.parentNode.childNodes;
+            if (index === null || index < 0 || index >= childNodes.length) return;
+            parentNodeForFocus = childNodes[index!];
             firstRect = parentNodeForFocus.rect;
             secondRect = resizePairForWindow.rect;
             if (!firstRect || !secondRect) {

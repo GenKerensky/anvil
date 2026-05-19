@@ -41,7 +41,7 @@ describe("Logger", () => {
     });
 
     it("should replace multiple placeholders in order", () => {
-      expect(Logger.format("{} + {} = {}", 1, 2, 3)).toBe("1 + 2 = 3");
+      expect(Logger.format("{} + {} = {}", 1 as any, 2 as any, 3 as any)).toBe("1 + 2 = 3");
     });
 
     it("should return the message unchanged when no params are provided", () => {
@@ -61,9 +61,9 @@ describe("Logger", () => {
     });
 
     it("should handle various value types", () => {
-      expect(Logger.format("num: {}, bool: {}, null: {}", 42, true, null)).toBe(
-        "num: 42, bool: true, null: null"
-      );
+      expect(
+        Logger.format("num: {}, bool: {}, null: {}", 42 as any, true as any, null as any)
+      ).toBe("num: 42, bool: true, null: null");
     });
   });
 
@@ -79,14 +79,14 @@ describe("Logger", () => {
     });
 
     afterEach(() => {
-      Logger.init(null);
+      Logger.init(null as any);
     });
 
     describe("when logging is enabled and level is ALL", () => {
       beforeEach(() => {
         mockSettings.get_boolean.mockReturnValue(true);
         mockSettings.get_uint.mockReturnValue(Logger.LOG_LEVELS.ALL);
-        Logger.init(mockSettings);
+        Logger.init(mockSettings as any);
       });
 
       it("should call global log for fatal", () => {
@@ -129,7 +129,7 @@ describe("Logger", () => {
       beforeEach(() => {
         mockSettings.get_boolean.mockReturnValue(true);
         mockSettings.get_uint.mockReturnValue(Logger.LOG_LEVELS.WARN);
-        Logger.init(mockSettings);
+        Logger.init(mockSettings as any);
       });
 
       it("should call global log for fatal (level > OFF)", () => {
@@ -167,7 +167,7 @@ describe("Logger", () => {
       beforeEach(() => {
         mockSettings.get_boolean.mockReturnValue(true);
         mockSettings.get_uint.mockReturnValue(Logger.LOG_LEVELS.FATAL);
-        Logger.init(mockSettings);
+        Logger.init(mockSettings as any);
       });
 
       it("should call global log for fatal (level > OFF)", () => {
@@ -190,7 +190,7 @@ describe("Logger", () => {
       beforeEach(() => {
         mockSettings.get_boolean.mockReturnValue(false);
         mockSettings.get_uint.mockReturnValue(Logger.LOG_LEVELS.ALL);
-        Logger.init(mockSettings);
+        Logger.init(mockSettings as any);
       });
 
       it("should NOT call global log for any level", () => {
@@ -207,7 +207,7 @@ describe("Logger", () => {
 
     describe("when settings is null (not initialized)", () => {
       beforeEach(() => {
-        Logger.init(null);
+        Logger.init(null as any);
       });
 
       it("should NOT call global log for any level", () => {
@@ -235,13 +235,13 @@ describe("Logger", () => {
     });
 
     afterEach(() => {
-      Logger.init(null);
+      Logger.init(null as any);
       vi.restoreAllMocks();
     });
 
     it("calls global log when production is false (our mock default)", () => {
       // The top-level vi.mock sets production = false, so logging is active.
-      Logger.init(mockSettings);
+      Logger.init(mockSettings as any);
       Logger.fatal("test");
       expect(globalThis.log).toHaveBeenCalled();
     });

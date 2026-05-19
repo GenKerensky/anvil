@@ -16,8 +16,14 @@ import {
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
+declare module "../mocks/helpers/index.js" {
+  export function createMockWindow(options?: Record<string, any>): any;
+  export function createTreeFixture(options?: Record<string, any>): any;
+  export function getWorkspaceAndMonitor(ctx: any, wsIndex?: number, monIndex?: number): any;
+}
+
 describe("Tree Operations", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createTreeFixture({ fullExtWm: true });

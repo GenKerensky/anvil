@@ -15,12 +15,16 @@ import {
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
+function getMonitorManager(): any {
+  return (Meta.MonitorManager as any).get();
+}
+
 describe("WindowManager - Per-Monitor Constraints", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     (globalThis as any).global.backend = {
-      get_monitor_manager: () => Meta.MonitorManager.get(),
+      get_monitor_manager: () => getMonitorManager(),
     };
     MonitorManagerReset();
     ctx = createWindowManagerFixture();
@@ -29,7 +33,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
   const wm = () => ctx.windowManager;
 
   function MonitorManagerReset() {
-    const mgr = Meta.MonitorManager.get();
+    const mgr = getMonitorManager();
     mgr.set_logical_monitors([]);
     // Restore any prototype methods that may have been shadowed by tests
     try {
@@ -42,10 +46,10 @@ describe("WindowManager - Per-Monitor Constraints", () => {
   function setupMonitor(connector = "DP-1") {
     const monitor = new Meta.Monitor({ connector });
     const logicalMonitor = new Meta.LogicalMonitor({ monitors: [monitor] });
-    Meta.MonitorManager.get().set_logical_monitors([logicalMonitor]);
+    getMonitorManager().set_logical_monitors([logicalMonitor]);
   }
 
-  function setupWindowOnMonitor(monitorIndex = 0, windowId = undefined) {
+  function setupWindowOnMonitor(monitorIndex = 0, windowId: any = undefined) {
     const metaWindow = createMockWindow({
       id: windowId ?? `win-${monitorIndex}`,
       monitor: monitorIndex,
@@ -69,7 +73,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
     it("returns connector for second monitor", () => {
       const m1 = new Meta.Monitor({ connector: "eDP-1" });
       const m2 = new Meta.Monitor({ connector: "DP-1" });
-      Meta.MonitorManager.get().set_logical_monitors([
+      getMonitorManager().set_logical_monitors([
         new Meta.LogicalMonitor({ monitors: [m1] }),
         new Meta.LogicalMonitor({ monitors: [m2] }),
       ]);
@@ -87,7 +91,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
 
     it("returns null when get_logical_monitors throws", () => {
       setupMonitor("DP-1");
-      const mgr = Meta.MonitorManager.get();
+      const mgr = getMonitorManager();
       const orig = mgr.get_logical_monitors.bind(mgr);
       mgr.get_logical_monitors = vi.fn(() => {
         throw new Error("fail");
@@ -209,7 +213,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, true]];
       const metaWindow1 = setupWindowOnMonitor(0, 42);
       setupWindowOnMonitor(0, 43); // second window so it's not solo
-      wm()._resizedWindows.add(42);
+      wm()._resizedWindows.set(42, 2);
       const node = ctx.tree.findNode(metaWindow1);
       const result = wm().enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
@@ -227,7 +231,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       metaWindow._monitor = 0;
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      wm()._resizedWindows.add(42);
+      wm()._resizedWindows.set(42, 2);
 
       const node = ctx.tree.findNode(metaWindow);
       const result = wm().enforceUltrawideSize(node, BIG_RECT);
@@ -251,7 +255,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       metaWindow._monitor = 0;
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      wm()._resizedWindows.add(43);
+      wm()._resizedWindows.set(43, 2);
 
       const node = ctx.tree.findNode(metaWindow);
       const result = wm().enforceUltrawideSize(node, BIG_RECT);
@@ -290,7 +294,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
     it("handles window on monitor without constraints (different monitor)", () => {
       const m1 = new Meta.Monitor({ connector: "eDP-1" });
       const m2 = new Meta.Monitor({ connector: "DP-1" });
-      Meta.MonitorManager.get().set_logical_monitors([
+      getMonitorManager().set_logical_monitors([
         new Meta.LogicalMonitor({ monitors: [m1] }),
         new Meta.LogicalMonitor({ monitors: [m2] }),
       ]);
@@ -364,8 +368,8 @@ describe("WindowManager - Per-Monitor Constraints", () => {
   // ----------------------------------------------------------------
   describe("settings changed - monitor-constraints", () => {
     it("clears _resizedWindows when monitor-constraints changes", () => {
-      wm()._resizedWindows.add(1);
-      wm()._resizedWindows.add(2);
+      wm()._resizedWindows.set(1, 1);
+      wm()._resizedWindows.set(2, 1);
       expect(wm()._resizedWindows.size).toBe(2);
 
       // Simulate what the settings-changed handler does

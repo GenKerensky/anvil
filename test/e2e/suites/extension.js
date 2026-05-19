@@ -2,13 +2,12 @@
  * Extension lifecycle tests.
  */
 
-import { describe, it, assert } from "../lib/framework.js";
-import { isExtensionActive, getExtensionErrors } from "../lib/commands.js";
+import { isExtensionActive, getExtensionErrors } from "../../lib/shared-commands.js";
 
 describe("Extension Lifecycle", function () {
   it("Extension loads without errors", function () {
-    assert(isExtensionActive(), "Extension is not ACTIVE");
+    expect(isExtensionActive()).toBe(true);
     const errors = getExtensionErrors();
-    assert(errors.length === 0, "Extension has errors: " + JSON.stringify(errors));
+    expect(errors.length).toBe(0);
   });
 });

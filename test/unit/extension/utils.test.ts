@@ -117,19 +117,19 @@ describe("rectContainsPoint", () => {
   });
 
   it("returns false when rect is null", () => {
-    expect(rectContainsPoint(null, [50, 40] as Point)).toBe(false);
+    expect(rectContainsPoint(null as any, [50, 40] as Point)).toBe(false);
   });
 
   it("returns false when point is null", () => {
-    expect(rectContainsPoint(rect, null)).toBe(false);
+    expect(rectContainsPoint(rect, null as any)).toBe(false);
   });
 
   it("returns false when both are null", () => {
-    expect(rectContainsPoint(null, null)).toBe(false);
+    expect(rectContainsPoint(null as any, null as any)).toBe(false);
   });
 
   it("returns false when rect is undefined", () => {
-    expect(rectContainsPoint(undefined, [50, 40] as Point)).toBe(false);
+    expect(rectContainsPoint(undefined as any, [50, 40] as Point)).toBe(false);
   });
 });
 
@@ -147,11 +147,11 @@ describe("monitorIndex", () => {
   });
 
   it("returns -1 for null input", () => {
-    expect(monitorIndex(null)).toBe(-1);
+    expect(monitorIndex(null as any)).toBe(-1);
   });
 
   it("returns -1 for undefined input", () => {
-    expect(monitorIndex(undefined)).toBe(-1);
+    expect(monitorIndex(undefined as any)).toBe(-1);
   });
 
   it("returns -1 for empty string", () => {
@@ -624,11 +624,11 @@ describe("resolveDirection", () => {
   });
 
   it("returns null for null input", () => {
-    expect(resolveDirection(null)).toBeNull();
+    expect(resolveDirection(null as any)).toBeNull();
   });
 
   it("returns null for undefined input", () => {
-    expect(resolveDirection(undefined)).toBeNull();
+    expect(resolveDirection(undefined as any)).toBeNull();
   });
 
   it("returns null for empty string", () => {

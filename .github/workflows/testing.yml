@@ -30,7 +30,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck && npm run lint && npm run test:unit
 
-  e2e:
+  integration:
     needs: fast
     runs-on: ubuntu-latest
     strategy:
@@ -55,19 +55,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/containers/storage
-          key: podman-fedora-${{ matrix.fedora }}-${{ hashFiles('test/e2e/Containerfile') }}
+          key: podman-fedora-${{ matrix.fedora }}-${{ hashFiles('test/integration/Containerfile') }}
           restore-keys: |
             podman-fedora-${{ matrix.fedora }}-
 
-      - name: Build E2E container image
-        run: bash test/e2e/build-container.sh ${{ matrix.fedora }}
+      - name: Build integration container image
+        run: bash test/integration/build-container.sh ${{ matrix.fedora }}
 
-      - name: Run E2E tests
-        run: make test-e2e FEDORA_VERSION=${{ matrix.fedora }}
-
-      - name: Upload behave HTML report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: behave-report-fedora-${{ matrix.fedora }}
-          path: test/e2e/output/behave-report-*.html
+      - name: Run integration tests
+        run: make test-integration FEDORA_VERSION=${{ matrix.fedora }}

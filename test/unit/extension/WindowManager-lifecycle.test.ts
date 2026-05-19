@@ -17,7 +17,7 @@ import {
 } from "../mocks/helpers/index.js";
 
 describe("WindowManager - Lifecycle", () => {
-  let ctx;
+  let ctx: any;
 
   beforeEach(() => {
     ctx = createWindowManagerFixture();
