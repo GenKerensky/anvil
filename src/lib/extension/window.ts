@@ -140,6 +140,12 @@ export class WindowManager extends GObject.Object {
   // to avoid race with async Wayland size-changed signals.
   declare _resizedWindows: Map<number, number>;
 
+  // --- Live resize pair tracking ---
+  // Stores the resize pair found during _handleResizing so that
+  // _liveResizeNeighbors can process the common ancestor when the
+  // pair lives in a different parent container (diffParent case).
+  declare _lastResizePair: Node<any> | null;
+
   constructor(ext: AnvilExtension) {
     super();
     this.ext = ext;
@@ -160,6 +166,7 @@ export class WindowManager extends GObject.Object {
     this.cancelGrab = false;
     this._workspaceChanging = false;
     this._resizedWindows = new Map();
+    this._lastResizePair = null;
 
     Logger.info("anvil initialized");
 
@@ -3070,6 +3077,7 @@ export class WindowManager extends GObject.Object {
 
   _grabCleanup(focusNodeWindow: Node<any> | null) {
     this.cancelGrab = false;
+    this._lastResizePair = null;
     if (!focusNodeWindow) return;
     focusNodeWindow.initRect = null;
     focusNodeWindow.grabMode = null;
@@ -3137,6 +3145,8 @@ export class WindowManager extends GObject.Object {
           }
         }
       }
+
+      this._lastResizePair = resizePairForWindow || null;
 
       const sameParent = resizePairForWindow
         ? resizePairForWindow.parentNode === focusNodeWindow!.parentNode!
@@ -3350,8 +3360,30 @@ export class WindowManager extends GObject.Object {
   _liveResizeNeighbors(draggingNodeWindow: Node<any>) {
     const draggingMetaWin = draggingNodeWindow.nodeValue as Meta.Window;
 
-    // Only reprocess the affected container subtree, not the entire tree
-    const parentNode = draggingNodeWindow.parentNode;
+    // Only reprocess the affected container subtree, not the entire tree.
+    // When the resize pair lives in a different parent (diffParent case),
+    // we must process the common ancestor so that both subtrees get
+    // updated rects.
+    let parentNode = draggingNodeWindow.parentNode;
+    if (parentNode && this._lastResizePair) {
+      const resizePairParent = this._lastResizePair.parentNode;
+      if (resizePairParent && resizePairParent !== parentNode) {
+        const ancestors = new Set<Node<any>>();
+        let ancestor: Node<any> | null = draggingNodeWindow.parentNode;
+        while (ancestor) {
+          ancestors.add(ancestor);
+          ancestor = ancestor.parentNode;
+        }
+        ancestor = this._lastResizePair.parentNode;
+        while (ancestor) {
+          if (ancestors.has(ancestor)) {
+            parentNode = ancestor;
+            break;
+          }
+          ancestor = ancestor.parentNode;
+        }
+      }
+    }
     if (parentNode) {
       this.tree.processNode(parentNode);
     }

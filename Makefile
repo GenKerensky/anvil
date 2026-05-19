@@ -34,6 +34,8 @@ metadata:
 
 build: clean metadata.json schemas compilemsgs metadata
 	npm run build
+	# Strip TypeScript build artifacts not needed at runtime
+	find dist -type f \( -name '*.d.ts' -o -name '*.d.ts.map' -o -name '*.tsbuildinfo' \) -delete
 	mkdir -p dist
 	cp metadata.json dist
 	cp -r src/resources dist
