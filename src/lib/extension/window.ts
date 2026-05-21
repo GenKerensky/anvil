@@ -686,6 +686,15 @@ export class WindowManager extends GObject.Object {
         if (!focusNodeWindow) {
           focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
         }
+        // In headless environments (container tests), there is no pointer
+        // to auto-focus the window. Explicitly activate so get_focus_window()
+        // returns the correct window.
+        if (focusNodeWindow) {
+          const win = focusNodeWindow.nodeValue as Meta.Window;
+          safeRaise(win);
+          safeActivate(win, global.display.get_current_time());
+        }
+        this.movePointerWith(focusNodeWindow);
         break;
       }
       case "Swap": {
@@ -693,7 +702,9 @@ export class WindowManager extends GObject.Object {
         this.unfreezeRender();
         const swapDirection = Utils.resolveDirection(action.direction)!;
         this.tree.swap(focusNodeWindow, swapDirection);
-        safeRaise(focusNodeWindow.nodeValue as Meta.Window);
+        const swapWin = focusNodeWindow.nodeValue as Meta.Window;
+        safeRaise(swapWin);
+        safeActivate(swapWin, global.display.get_current_time());
         this.updateTabbedFocus(focusNodeWindow);
         this.updateStackedFocus(focusNodeWindow);
         this.movePointerWith(focusNodeWindow);
@@ -723,6 +734,12 @@ export class WindowManager extends GObject.Object {
         }
         this.tree.attachNode = focusNodeWindow!.parentNode!;
         this.renderTree("layout-split-toggle");
+        {
+          const win = focusNodeWindow.nodeValue as Meta.Window;
+          safeRaise(win);
+          safeActivate(win, global.display.get_current_time());
+        }
+        this.movePointerWith(focusNodeWindow);
         break;
       case "FocusBorderToggle": {
         const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
@@ -1840,26 +1857,24 @@ export class WindowManager extends GObject.Object {
     try {
       const mgr = global.backend.get_monitor_manager();
       const logicalMonitors = mgr.get_logical_monitors() ?? [];
-      console.warn(
-        `[anvil-debug] _getMonitorConnector: monitorIndex=${monitorIndex}, logicalMonitors.length=${logicalMonitors.length}`
+      Logger.debug(
+        `_getMonitorConnector: monitorIndex=${monitorIndex}, logicalMonitors.length=${logicalMonitors.length}`
       );
       const logicalMonitor = logicalMonitors[monitorIndex];
       if (!logicalMonitor) {
-        console.warn(
-          `[anvil-debug] _getMonitorConnector: no logicalMonitor at index ${monitorIndex}`
-        );
+        Logger.debug(`_getMonitorConnector: no logicalMonitor at index ${monitorIndex}`);
         return null;
       }
       const monitors = logicalMonitor.get_monitors();
-      console.warn(`[anvil-debug] _getMonitorConnector: monitors.length=${monitors.length}`);
+      Logger.debug(`_getMonitorConnector: monitors.length=${monitors.length}`);
       if (monitors.length > 0) {
         const connector = monitors[0].get_connector();
-        console.warn(`[anvil-debug] _getMonitorConnector: connector="${connector}"`);
+        Logger.debug(`_getMonitorConnector: connector="${connector}"`);
         return connector;
       }
       return null;
     } catch (e) {
-      console.warn(`[anvil-debug] _getMonitorConnector: exception: ${e}`);
+      Logger.debug(`_getMonitorConnector: exception: ${e}`);
       return null;
     }
   }
@@ -1875,14 +1890,12 @@ export class WindowManager extends GObject.Object {
   } | null {
     const connector = this._getMonitorConnector(monitorIndex);
     if (!connector) {
-      console.warn(
-        `[anvil-debug] _getMonitorConstraints: no connector for monitor ${monitorIndex}`
-      );
+      Logger.debug(`_getMonitorConstraints: no connector for monitor ${monitorIndex}`);
       return null;
     }
     const rawConstraints = this.ext.settings.get_value("monitor-constraints").deep_unpack();
-    console.warn(
-      `[anvil-debug] _getMonitorConstraints: connector="${connector}", rawConstraints=${JSON.stringify(
+    Logger.debug(
+      `_getMonitorConstraints: connector="${connector}", rawConstraints=${JSON.stringify(
         rawConstraints
       )}`
     );
@@ -1896,12 +1909,12 @@ export class WindowManager extends GObject.Object {
       ]
     >;
     for (const entry of constraints) {
-      console.warn(
-        `[anvil-debug] _getMonitorConstraints: checking entry[0]="${entry[0]}" against connector="${connector}"`
+      Logger.debug(
+        `_getMonitorConstraints: checking entry[0]="${entry[0]}" against connector="${connector}"`
       );
       if (entry[0] === connector) {
-        console.warn(
-          `[anvil-debug] _getMonitorConstraints: MATCH! maxWidth=${entry[1]}, maxHeight=${entry[2]}, enabled=${entry[3]}, resizeExempt=${entry[4]}`
+        Logger.debug(
+          `_getMonitorConstraints: MATCH! maxWidth=${entry[1]}, maxHeight=${entry[2]}, enabled=${entry[3]}, resizeExempt=${entry[4]}`
         );
         return {
           maxWidth: entry[1],
@@ -1911,9 +1924,7 @@ export class WindowManager extends GObject.Object {
         };
       }
     }
-    console.warn(
-      `[anvil-debug] _getMonitorConstraints: no matching entry for connector="${connector}"`
-    );
+    Logger.debug(`_getMonitorConstraints: no matching entry for connector="${connector}"`);
     return null;
   }
 
@@ -1923,30 +1934,31 @@ export class WindowManager extends GObject.Object {
    */
   enforceUltrawideSize(node: Node<any>, rect: RectLike): RectLike {
     if (!node.isWindow()) {
-      console.warn(`[anvil-debug] enforceUltrawideSize: node is not a window, skipping`);
+      Logger.debug(`enforceUltrawideSize: node is not a window, skipping`);
       return rect;
     }
     const metaWindow = node.nodeValue as Meta.Window;
     const monitorIndex = metaWindow.get_monitor();
-    console.warn(
-      `[anvil-debug] enforceUltrawideSize: window_id=${metaWindow.get_id()}, monitorIndex=${monitorIndex}, rect=${JSON.stringify(
+    Logger.debug(
+      `enforceUltrawideSize: window_id=${metaWindow.get_id()}, monitorIndex=${monitorIndex}, rect=${JSON.stringify(
         rect
       )}`
     );
     const constraints = this._getMonitorConstraints(monitorIndex);
     if (!constraints) {
-      console.warn(`[anvil-debug] enforceUltrawideSize: no constraints found`);
+      Logger.debug(`enforceUltrawideSize: no constraints found`);
       return rect;
     }
     if (!constraints.enabled) {
-      console.warn(`[anvil-debug] enforceUltrawideSize: constraints disabled`);
+      Logger.debug(`enforceUltrawideSize: constraints disabled`);
       return rect;
     }
     // Skip enforcement for manually resized windows when exemption is enabled.
-    // Require 2+ completed grab operations so the first resize is still clamped
-    // even if async Wayland size-changed signals trigger follow-up renders.
+    // The first resize is clamped (resizeCount == 0).
+    // After _handleGrabOpEnd increments the counter, resizeCount becomes 1,
+    // so the second resize is exempt.
     const resizeCount = this._resizedWindows.get(metaWindow.get_id()) || 0;
-    if (constraints.resizeExempt && resizeCount >= 2) {
+    if (constraints.resizeExempt && resizeCount >= 1) {
       // When this is the only tiled window on the monitor, preserve its
       // manual size but center it within the monitor bounds (clamped).
       let monitorNode = node.parentNode;
@@ -1964,8 +1976,8 @@ export class WindowManager extends GObject.Object {
           if (height > rect.height) height = rect.height;
           const x = rect.x + Math.floor((rect.width - width) / 2);
           const y = rect.y + Math.floor((rect.height - height) / 2);
-          console.warn(
-            `[anvil-debug] enforceUltrawideSize: resize-exempt solo centered from ${JSON.stringify(
+          Logger.debug(
+            `enforceUltrawideSize: resize-exempt solo centered from ${JSON.stringify(
               rect
             )} to ${JSON.stringify({ x, y, width, height })}`
           );
@@ -1973,8 +1985,8 @@ export class WindowManager extends GObject.Object {
         }
       }
       // Not solo: let the split layout govern size/position
-      console.warn(
-        `[anvil-debug] enforceUltrawideSize: skipping (resize exempt, window was manually resized, not solo)`
+      Logger.debug(
+        `enforceUltrawideSize: skipping (resize exempt, window was manually resized, not solo)`
       );
       return rect;
     }
@@ -1992,14 +2004,17 @@ export class WindowManager extends GObject.Object {
       changed = true;
     }
     if (changed) {
-      console.warn(
-        `[anvil-debug] enforceUltrawideSize: CLAMPED from ${JSON.stringify(
-          rect
-        )} to ${JSON.stringify({ x, y, width, height })}`
+      Logger.debug(
+        `enforceUltrawideSize: CLAMPED from ${JSON.stringify(rect)} to ${JSON.stringify({
+          x,
+          y,
+          width,
+          height,
+        })}`
       );
       return { x, y, width, height };
     }
-    console.warn(`[anvil-debug] enforceUltrawideSize: within limits, no change needed`);
+    Logger.debug(`enforceUltrawideSize: within limits, no change needed`);
     return rect;
   }
 

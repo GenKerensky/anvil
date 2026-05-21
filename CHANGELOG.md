@@ -8,6 +8,16 @@ This project is a fork of [Forge](https://github.com/forge-ext/forge) by
 Jose Maranan, adapted for GNOME 50+ with improved code quality, automated
 testing, and ongoing maintainability.
 
+### 2026 — Unreleased
+
+#### Added
+
+- **Spec filter for integration tests** — `SPEC=<name>` variable on
+  `make test-integration` runs only matching spec files (exact filename match,
+  `.js` extension optional). Supports comma-separated values
+  (`SPEC=resize,keyboard`). Unknown spec names produce a warning log without
+  crashing. Omit `SPEC` to run all 16 specs (backward compatible).
+
 ### 2026 — Anvil 1.0.0
 
 #### Added

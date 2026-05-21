@@ -3,9 +3,10 @@
  *
  * Loaded by gnome-shell --headless --wayland --automation-script.
  *
- * Uses module-level code rather than `export async function run()` because
- * only `gnome-shell --devkit` calls run(). The --headless mode used in the
- * container only evaluates the module's top-level code.
+ * GNOME 50 calls `export async function run()` on automation scripts in both
+ * --headless and --devkit modes.  We guard against double-execution so the
+ * module-level bootstrap (for older shells) and the exported run() both
+ * work without running tests twice.
  *
  * Startup sequence:
  *   1. Wait for Main.extensionManager to be available
@@ -29,6 +30,7 @@ const UUID = "anvil@GenKerensky.github.com";
 const SCHEMA_ID = "org.gnome.shell.extensions.anvil";
 const RESULTS_PATH = "/tmp/anvil-jasmine-results.json";
 const SPECS_DIR = "/usr/local/share/anvil-tests/specs";
+const SPEC_FILTER_PATH = "/tmp/spec-filter";
 
 // ---------------------------------------------------------------------------
 // Startup helpers (identical logic to the old agent.js)
@@ -216,13 +218,14 @@ async function bootJasmine() {
 }
 
 // ---------------------------------------------------------------------------
-// Module-level startup chain
+// Test execution
 // ---------------------------------------------------------------------------
 
-log("[AnvilRunner] Starting…");
+async function runTests() {
+  log("[AnvilRunner] Starting…");
 
-waitForMain()
-  .then(function () {
+  try {
+    await waitForMain();
     log("[AnvilRunner] Main.extensionManager ready");
 
     try {
@@ -236,9 +239,7 @@ waitForMain()
       );
     }
 
-    return ensureExtension();
-  })
-  .then(async function () {
+    await ensureExtension();
     log("[AnvilRunner] Extension active — booting Jasmine");
 
     let runner;
@@ -270,14 +271,67 @@ waitForMain()
       "extension-lifecycle.js",
       "tiling.js",
       "keyboard.js",
+      "focus.js",
+      "swap.js",
+      "move.js",
       "operations.js",
       "resize.js",
       "constraints.js",
+      "layouts.js",
+      "floating.js",
+      "workspace.js",
+      "borders.js",
+      "minimize.js",
       "settings.js",
       "preferences.js",
     ];
 
-    for (const file of specFiles) {
+    // Read optional spec filter written by run.py --spec.
+    // When present, only load matching spec files (exact base-name match).
+    let specsToLoad = specFiles;
+    let filterData = null;
+    try {
+      filterData = GLib.file_get_contents(SPEC_FILTER_PATH)[1];
+    } catch (_e) {
+      // File doesn't exist — not an error, run all specs.
+    }
+    if (filterData && filterData.byteLength > 0) {
+      const decoder = new TextDecoder();
+      const filterText = decoder.decode(filterData);
+      /** @type {string[]} */
+      const filterNames = filterText
+        .split(",")
+        .map(function (s) {
+          return s.trim().replace(/\.js$/i, "");
+        })
+        .filter(function (s) {
+          return s.length > 0;
+        });
+      log("[AnvilRunner] Spec filter active: " + JSON.stringify(filterNames));
+
+      // Warn about filter entries that don't match any known spec
+      for (let i = 0; i < filterNames.length; i++) {
+        if (specFiles.indexOf(filterNames[i] + ".js") === -1) {
+          log(
+            "[AnvilRunner] Warning: spec-filter entry '" +
+              filterNames[i] +
+              "' does not match any known spec file"
+          );
+        }
+      }
+
+      // Filter to only matching spec files (exact base-name match)
+      specsToLoad = specFiles.filter(function (file) {
+        return filterNames.indexOf(file.replace(/\.js$/, "")) !== -1;
+      });
+
+      if (specsToLoad.length === 0) {
+        log("[AnvilRunner] Warning: spec-filter matched no known specs; loading all");
+        specsToLoad = specFiles;
+      }
+    }
+
+    for (const file of specsToLoad) {
       try {
         await import(`file://${SPECS_DIR}/${file}`);
         log("[AnvilRunner] Loaded spec: " + file);
@@ -304,8 +358,7 @@ waitForMain()
     }
 
     log("[AnvilRunner] Done.");
-  })
-  .catch(function (err) {
+  } catch (err) {
     log("[AnvilRunner] Fatal error: " + (err instanceof Error ? err.message : String(err)));
     const errJson = JSON.stringify({
       results: [],
@@ -315,4 +368,14 @@ waitForMain()
       timestamp: new Date().toISOString(),
     });
     GLib.file_set_contents(RESULTS_PATH, errJson);
-  });
+  }
+}
+
+// Single entry point — GNOME 50 calls run() on automation scripts in both
+// --headless and --devkit modes.  No module-level side effect: the exported
+// run() is the sole path into test bootstrap, avoiding the deadlock / export
+// conflict that a dual-entry design causes (scripting.js calls
+// scriptModule.run() after the module is already mid-execution).
+export async function run() {
+  await runTests();
+}

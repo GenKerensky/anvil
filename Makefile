@@ -114,12 +114,16 @@ test-unit:
 #        make test-integration FEDORA_VERSION=43
 #        make test-integration FEDORA_VERSION=42
 FEDORA_VERSION ?= 44
+# Optional: run only specific spec(s). Omit to run all specs.
+#   SPEC=resize make test-integration          -> run resize.js only
+#   SPEC=focus,keyboard make test-integration   -> run focus.js + keyboard.js
+SPEC ?=
 test-integration: dist
 	@if ! podman image exists anvil-test-pod:fedora-$(FEDORA_VERSION); then \
 		echo "Container image not found. Building..."; \
 		bash test/integration/build-container.sh $(FEDORA_VERSION); \
 	fi
-	python3 test/integration/run.py -v $(FEDORA_VERSION)
+	python3 test/integration/run.py -v $(FEDORA_VERSION) $(if $(SPEC),--spec $(SPEC),)
 
 # Build Integration container images for all supported Fedora versions
 test-integration-build-all:
@@ -128,10 +132,10 @@ test-integration-build-all:
 	bash test/integration/build-container.sh 44
 
 # Run Integration tests across all supported Fedora versions
+# Uses run-all.py to launch all versions in parallel, cutting wall-clock
+# time from ~210 s to ~75 s.
 test-integration-all: dist
-	python3 test/integration/run.py -v 42
-	python3 test/integration/run.py -v 43
-	python3 test/integration/run.py -v 44
+	python3 test/integration/run-all.py
 
 # Backward-compat aliases for old test-e2e targets
 test-e2e-container: test-integration

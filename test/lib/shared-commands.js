@@ -97,6 +97,18 @@ export async function launchApp(desktopFile, timeoutMs = 10000) {
     if (count > before) {
       log("[SharedCommands] Window appeared for " + desktopFile + " (windows now=" + count + ")");
       await sleep(500);
+      // In headless environments, the new window may not receive focus
+      // automatically. Explicitly activate it so tests can interact.
+      const wins = global.display.get_tab_list(
+        Meta.TabList.NORMAL_ALL,
+        global.display.get_workspace_manager().get_active_workspace()
+      );
+      for (let i = wins.length - 1; i >= 0; i--) {
+        if (wins[i].get_title() && wins[i].get_title().length > 0) {
+          wins[i].activate(global.get_current_time());
+          break;
+        }
+      }
       return;
     }
   }
@@ -139,7 +151,7 @@ export function getWindowGeometries() {
 /** @returns {string | null} */
 export function getFocusedWindowTitle() {
   const w = global.display.get_focus_window();
-  return w ? w.get_title() : "";
+  return w ? w.get_title() : null;
 }
 
 /** @returns {{ x: number, y: number, width: number, height: number }} */

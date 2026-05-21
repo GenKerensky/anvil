@@ -201,8 +201,9 @@ class ContainerSession:
       9.  Enable extension via gnome-extensions CLI
     """
 
-    def __init__(self, fedora_version: str = "44", keep: bool = False) -> None:
+    def __init__(self, fedora_version: str = "44", spec: str | None = None, keep: bool = False) -> None:
         self.fedora_version = fedora_version
+        self.spec = spec
         self.keep = keep
         self.pod: str = ""
         self._image = f"anvil-test-pod:fedora-{fedora_version}"
@@ -224,7 +225,7 @@ class ContainerSession:
         #    wait-user-bus.sh blocks until /run/user/1000/bus exists.
         _info("Waiting for user D-Bus socket…")
         _pod_exec(self.pod, "wait-user-bus.sh")
-        time.sleep(2)
+        time.sleep(0.5)
 
         # 3. Suppress the GNOME welcome tour and centre new windows.
         _info("Applying gsettings tweaks…")
@@ -234,10 +235,13 @@ class ContainerSession:
                   "center-new-windows", "true", check=False)
 
         # 4. Wait for the initial gnome-shell startup (started by systemd).
+        #    We poll for the Wayland socket AND D-Bus — these confirm that
+        #    gnome-shell is actually running.  A short settle lets internal
+        #    state propagate before we install the extension.
         _info("Waiting for initial GNOME Shell startup…")
         _wait_for_wayland_socket(self.pod)
         _wait_for_shell_dbus(self.pod)
-        time.sleep(2)
+        time.sleep(0.5)
 
         # 5. Install the extension and push updated session scripts.
         #    Installation must happen after gnome-shell is running so the
@@ -266,11 +270,33 @@ class ContainerSession:
                 f"{RUNNER_DIR}/runner.js")
         _pod_cp(self.pod, INTEGRATION_DIR / "specs",
                 f"{RUNNER_DIR}/specs")
+        # Specs import shared-commands.js via ../../lib/shared-commands.js,
+        # which from /usr/local/share/anvil-tests/specs/ resolves to
+        # /usr/local/share/lib/shared-commands.js.
+        _pod_exec_root(self.pod, "mkdir", "-p", "/usr/local/share/lib")
         _pod_cp(self.pod, PROJECT_ROOT / "test" / "lib" / "shared-commands.js",
-                f"{RUNNER_DIR}/lib/shared-commands.js")
+                "/usr/local/share/lib/shared-commands.js")
         _pod_exec_root(self.pod, "chmod", "0755", f"{RUNNER_DIR}/runner.js")
         _pod_exec_root(self.pod, "chmod", "-R", "0755", f"{RUNNER_DIR}/specs")
-        _pod_exec_root(self.pod, "chmod", "0755", f"{RUNNER_DIR}/lib/shared-commands.js")
+        _pod_exec_root(self.pod, "chmod", "0755", "/usr/local/share/lib/shared-commands.js")
+
+        # 6b. If a spec filter was requested, write it into the container.
+        #     runner.js reads this file at startup to limit which spec files are loaded.
+        #     We write to /tmp/ (writable by gnomeshell user) to match the
+        #     /tmp/anvil-automation-script pattern — RUNNER_DIR is root-owned.
+        if self.spec:
+            # Validate: only alphanumeric, comma, dot, hyphen, underscore
+            safe_chars = frozenset(
+                "abcdefghijklmnopqrstuvwxyz"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "0123456789_,.-"
+            )
+            if not all(c in safe_chars for c in self.spec):
+                _fail(f"Invalid --spec value: {self.spec!r}")
+                raise SystemExit(1)
+            _info(f"Filtering specs to: {self.spec}")
+            _pod_exec(self.pod, "bash", "-c",
+                      f"printf '%s' '{self.spec}' > /tmp/spec-filter")
 
         # 7. Write the automation-script marker file and restart gnome-shell.
         #    start-session.sh reads this file and passes --automation-script
@@ -279,17 +305,21 @@ class ContainerSession:
         _pod_exec(self.pod, "bash", "-c",
                   f"echo '{RUNNER_DIR}/runner.js' > /tmp/anvil-automation-script")
         _pod_exec_root(self.pod, "systemctl", "restart", "gnome-headless.service")
-        time.sleep(2)
+        # The restart is asynchronous — a short settle avoids a race where
+        # D-Bus still reports the old shell's name.
+        time.sleep(1)
 
         # 8. Re-wait for gnome-shell after restart.
         _info("Waiting for gnome-shell after restart…")
         _wait_for_shell_dbus(self.pod)
-        time.sleep(1)
+        time.sleep(0.5)
 
         # 9. Enable the extension.
+        #    gnome-extensions enable is synchronous when successful, so a
+        #    shorter settle suffices for the extension's enable() to run.
         _info("Enabling extension…")
         _pod_exec(self.pod, "gnome-extensions", "enable", UUID, check=False)
-        time.sleep(3)
+        time.sleep(1.5)
 
         return self
 
@@ -349,6 +379,18 @@ def main() -> int:
         "-k", "--keep", action="store_true",
         help="Keep the container running after tests (useful for debugging)",
     )
+    parser.add_argument(
+        "--spec", type=str, default=None,
+        help="Run only specified spec(s). Comma-separated, exact match (no .js needed).",
+    )
+    parser.add_argument(
+        "--shard", type=int, default=None,
+        help="Shard index (1-based). Splits specs across --total-shards shards.",
+    )
+    parser.add_argument(
+        "--total-shards", type=int, default=1,
+        help="Total number of shards (default: 1, no sharding).",
+    )
     args = parser.parse_args()
 
     fedora_version = args.fedora_version
@@ -384,7 +426,7 @@ def main() -> int:
     HOST_RESULTS_PATH.unlink(missing_ok=True)
 
     exit_code = 1
-    with ContainerSession(fedora_version=fedora_version, keep=args.keep) as session:
+    with ContainerSession(fedora_version=fedora_version, spec=args.spec, keep=args.keep) as session:
         try:
             _info("Waiting for Jasmine test results…")
             raw_json = _wait_for_results_in_container(session.pod)

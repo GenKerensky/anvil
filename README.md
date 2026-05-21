@@ -107,8 +107,9 @@ User is encouraged to bind the following:
 
 ## Testing
 
-Anvil has two levels of automated tests: **unit tests** (fast, no GNOME runtime needed)
-and **E2E tests** (full GNOME Shell session in a container).
+Anvil has three levels of automated tests: **unit tests** (fast, no GNOME runtime needed),
+**integration tests** (full GNOME Shell session in a Podman container), and
+**E2E tests** (local devkit compositor).
 
 ### Unit Tests
 
@@ -129,33 +130,29 @@ npm run test:unit:watch
 npm test
 ```
 
-### E2E Tests
+### Integration Tests (Container)
 
-E2E tests run a real GNOME Shell session inside a [Podman](https://podman.io) container
-and validate the extension through three mechanisms:
-
-1. **D-Bus API calls** — extension lifecycle, enabling/disabling, error checking
-2. **GSettings read/write** — settings propagation, layout mode toggles, window effects
-3. **Dogtail/AT-SPI widget inspection** — GTK preferences dialog structure, switch state
-   verification, page tab navigation (all via the accessibility bus, no display needed)
-
-The session runs `gnome-shell --headless --wayland` — the correct headless mode for
+Integration tests run a real GNOME Shell session inside a [Podman](https://podman.io)
+container using `gnome-shell --headless --wayland` — the correct headless mode for
 GNOME 50, which removed the `--nested` flag. This brings up a complete Wayland compositor
 with a virtual framebuffer; no Xvfb, no DRM device, and no real GPU are required.
 D-Bus system services are provided by
 [python-dbusmock](https://github.com/martinpitt/python-dbusmock) stubs, matching the
 approach used by GNOME Shell's own GitLab CI.
 
-UI tests use **Behave** (BDD framework) to organize Dogtail/AT-SPI interactions into
-readable Gherkin feature files. Test results are published as a self-contained HTML report
-with AT-SPI tree snapshots embedded on failure for debugging.
+Tests are written as **Jasmine** specs that run inside gnome-shell via
+`--automation-script`. The runner (`runner.js`) bootstraps Jasmine from the
+system-installed `jasmine-gjs` package, imports all spec files, executes them, and
+writes results as JSON.
+
+Specs cover: extension lifecycle, tiling geometry, keyboard shortcuts, window operations,
+resize clamping, monitor constraints, GSettings, preferences UI (via `gi://Atspi`), and
+tiling layouts — approximately 115+ data-driven tests.
 
 **What is NOT testable headless:**
 
-- Keyboard keybindings (`zwp_virtual_keyboard_v1` not implemented by headless compositor)
-- Pixel-level visual rendering (no GPU framebuffer)
 - Mouse drag-and-drop (no pointer device)
-- GtkSwitch clicks via AT-SPI (no pointer device; state verified via `.checked` property)
+- Pixel-level visual rendering (no GPU framebuffer)
 
 **Prerequisites:**
 
@@ -174,37 +171,57 @@ with AT-SPI tree snapshots embedded on failure for debugging.
 
 ```bash
 # Build for Fedora 44 (GNOME 50) — the primary target
-./test/e2e/build-container.sh 44
+./test/integration/build-container.sh 44
 
 # Or build for all supported versions
-make test-e2e-build-all
+make test-integration-build-all
 ```
 
 **Step 2: Run the tests**
 
 ```bash
 # Run against Fedora 44 (default)
-make test-e2e
+make test-integration
 
 # Run against a specific Fedora version
-make test-e2e FEDORA_VERSION=43
+make test-integration FEDORA_VERSION=43
 
-# Run against all supported versions
-make test-e2e-all
+# Run against all supported versions (parallel)
+make test-integration-all
 ```
+
+**Step 3: Run a subset of spec files**
+
+Use `SPEC=<name>` to run only specific spec(s) by exact filename match (`.js` extension
+is optional). Supports comma-separated values:
+
+```bash
+# Run only resize tests
+make test-integration SPEC=resize
+
+# Run multiple specs
+make test-integration SPEC=resize,keyboard
+
+# Run with a specific Fedora version
+make test-integration FEDORA_VERSION=43 SPEC=constraints
+```
+
+When `SPEC` is unset, all 16 spec files run (backward compatible). Unknown spec names
+produce a warning in the GNOME Shell log without causing test failure.
+
+**Available spec names:** `extension-lifecycle`, `tiling`, `keyboard`, `focus`, `swap`,
+`move`, `operations`, `resize`, `constraints`, `layouts`, `floating`, `workspace`,
+`borders`, `minimize`, `settings`, `preferences`
 
 **Debugging a failed test:**
 
-On failure, the test runner saves:
-
-- A self-contained **HTML report** to `test/e2e/output/behave-report-*.html` with full
-  scenario breakdown, step status, and embedded AT-SPI tree snapshots
-- The full GNOME Shell **journal log** to `test/e2e/output/journal.log`
+On failure, the test runner saves the full GNOME Shell **journal log** to
+`test/integration/output/journal.log`.
 
 Use `-k` to keep the container running for manual inspection:
 
 ```bash
-./test/integration/run-tests.sh -v 44 -k
+python3 test/integration/run.py -v 44 -k
 # Container is left running — connect to it for debugging:
 podman exec -it --user gnomeshell <container-id> set-env.sh bash
 ```
@@ -212,19 +229,46 @@ podman exec -it --user gnomeshell <container-id> set-env.sh bash
 **Test structure:**
 
 ```
-test/e2e/
-├── features/                    # Behave BDD feature files
-│   ├── environment.py           # Hooks: AT-SPI tree dump on failure
-│   ├── atspi_tree.feature       # AT-SPI accessibility verification
-│   ├── preferences.feature      # Page tabs, switch state, tab navigation
-│   └── steps/
-│       ├── helpers.py           # Shared: gsettings, prefs, AT-SPI dump utilities
-│       ├── atspi_steps.py       # Step definitions for AT-SPI tree
-│       └── preferences_steps.py # Step definitions for preferences
-├── run-tests.sh                 # Test runner (container lifecycle, orchestration → behave)
-├── start-session.sh             # Session D-Bus + dbusmock + gnome-shell --headless
-└── Containerfile                # Fedora-based image with AT-SPI + Dogtail + behave
+test/integration/
+├── run.py                   # Python orchestrator (container lifecycle, results polling)
+├── runner.js                # Jasmine automation-script loaded by gnome-shell
+├── start-session.sh         # Session D-Bus + dbusmock + gnome-shell --headless
+├── set-env.sh               # Environment wrapper for podman exec commands
+├── build-container.sh       # Build container image for a Fedora version
+├── run-all.py               # Runs all Fedora versions in parallel
+├── specs/                   # Jasmine spec files (GJS ES modules)
+│   ├── extension-lifecycle.js
+│   ├── tiling.js
+│   ├── keyboard.js
+│   ├── focus.js
+│   ├── swap.js
+│   ├── move.js
+│   ├── operations.js
+│   ├── resize.js
+│   ├── constraints.js
+│   ├── layouts.js
+│   ├── floating.js
+│   ├── workspace.js
+│   ├── borders.js
+│   ├── minimize.js
+│   ├── settings.js
+│   └── preferences.js
+└── output/                  # Test artifacts (journal, screenshots, results JSON)
 ```
+
+### E2E Tests (Devkit)
+
+E2E tests run on the host GNOME Shell using `gnome-shell --devkit --wayland` with
+a local devkit compositor. They support keyboard injection via `wtype` and screen
+capture via `gnome-screenshot`.
+
+```bash
+# Run devkit E2E tests
+make test-e2e
+```
+
+E2E specs live in `test/e2e/suites/` and cover extension lifecycle, tiling geometry,
+keyboard shortcuts, and window operations (7 tests).
 
 ## Local Development Setup
 
