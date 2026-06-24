@@ -19,10 +19,23 @@
   before counter increments).
 - `clearResizedWindows()` in test `beforeEach` to prevent state bleed.
 
-## Terminal/TUI flicker
+## wl-clipboard / ephemeral Wayland helpers
 
-- Spurious `size-changed` / `position-changed` from terminals must not trigger `renderTree`.
-- `move()` skips `move_resize_frame` when frame already matches target rect.
+Wayland creates short-lived helper windows (notably **`wl-clipboard`**, a 1×1 stub) during
+delete/paste/clipboard sync. If Anvil tracks them, the helper can enter a split and
+`window-destroy-quick` re-tiles the real TUI; focus bounces also trigger border relayout.
+
+**Anvil policy (fully ignore):**
+
+- `Utils.isEphemeralHelperWindow()` — matches `wl-clipboard`, `xclip`, `xsel` by wm class/title,
+  or any ≤2×2 frame stub.
+- `_validWindow()` returns `false` → never tracked, no signal handlers.
+- `isFloatingExempt()` returns `true`; `windows.json` has `{ "wmClass": "wl-clipboard", "mode": "float" }`.
+- `windowDestroy` skips `renderTree` for float/ephemeral nodes.
+- Focus handler returns early for ephemeral windows (belt-and-suspenders).
+
+**Residual symptom:** a subtle terminal titlebar brightness flash may still occur when Mutter
+briefly focuses `wl-clipboard` at the compositor level; the extension cannot suppress that.
 
 ## Shared test commands
 

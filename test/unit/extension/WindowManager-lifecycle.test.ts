@@ -191,6 +191,21 @@ describe("WindowManager - Lifecycle", () => {
       expect(ctx.tree.findNode(metaWindow1)).toBeNull();
     });
 
+    it("should not renderTree when destroying an ephemeral helper window", () => {
+      const metaWindow = createMockWindow({
+        wm_class: "wl-clipboard",
+        title: "wl-clipboard",
+        rect: { x: 640, y: 416, width: 1, height: 1 },
+      });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+
+      const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+      wm().windowDestroy(metaWindow.get_compositor_private());
+
+      expect(renderSpy).not.toHaveBeenCalled();
+    });
+
     it("should not throw for missing actor properties", () => {
       const actor = {
         border: null,
@@ -220,6 +235,20 @@ describe("WindowManager - Lifecycle", () => {
       const afterCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
 
       expect(afterCount).toBe(initialWindowCount);
+    });
+
+    it("should not track ephemeral clipboard helper windows", () => {
+      const window = createMockWindow({
+        wm_class: "wl-clipboard",
+        title: "wl-clipboard",
+        rect: { x: 640, y: 416, width: 1, height: 1 },
+      });
+
+      const initialWindowCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
+
+      wm().trackWindow(ctx.display, window);
+
+      expect(ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length).toBe(initialWindowCount);
     });
 
     it("should not track XWayland Video Bridge windows", () => {

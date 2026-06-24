@@ -1693,6 +1693,9 @@ export class WindowManager extends GObject.Object {
               this.hideActorBorder(windowActor);
             }),
             metaWindow.connect("focus", (_metaWindowFocus: Meta.Window) => {
+              if (Utils.isEphemeralHelperWindow(_metaWindowFocus)) {
+                return;
+              }
               this.queueEvent({
                 name: "focus-update",
                 callback: () => {
@@ -1883,6 +1886,11 @@ export class WindowManager extends GObject.Object {
   }
 
   _validWindow(metaWindow: Meta.Window) {
+    // Wayland clipboard/paste helpers (wl-clipboard, 1×1 stubs) must not enter the tree.
+    if (Utils.isEphemeralHelperWindow(metaWindow)) {
+      return false;
+    }
+
     // Bug #309, #322 fix: Filter out XWayland Video Bridge and ddterm windows
     // Ported from jcrussell/forge
     const wmClass = metaWindow.get_wm_class();
@@ -1932,8 +1940,12 @@ export class WindowManager extends GObject.Object {
     const hadFocus = !!metaWindow && this.focusMetaWindow === metaWindow;
 
     if (nodeWindow?.isWindow()) {
+      const skipRelayout =
+        nodeWindow.isFloat() || (!!metaWindow && Utils.isEphemeralHelperWindow(metaWindow));
       this.tree.removeNode(nodeWindow);
-      this.renderTree("window-destroy-quick", true);
+      if (!skipRelayout) {
+        this.renderTree("window-destroy-quick", true);
+      }
       this.removeFloatOverride(nodeWindow.nodeValue as Meta.Window, true);
 
       // Bug #258 fix: Restore focus if this window had it and tiling is enabled
@@ -3186,6 +3198,10 @@ export class WindowManager extends GObject.Object {
       }
 
       if (matchClass) return false;
+    }
+
+    if (Utils.isEphemeralHelperWindow(metaWindow)) {
+      return true;
     }
 
     // Bug #383 fix: Firefox PIP (Picture-in-Picture) windows should always float

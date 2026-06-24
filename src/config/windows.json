@@ -16,6 +16,7 @@
     { "wmClass": "gnome-terminal-server", "wmTitle": "Preferences – General", "mode": "float" },
     { "wmClass": "gnome-terminal-preferences", "mode": "float" },
     { "wmClass": "Guake", "mode": "float" },
+    { "wmClass": "wl-clipboard", "mode": "float" },
     { "wmClass": "zoom", "mode": "float" },
     { "wmClass": "firefox", "wmTitle": "About Mozilla Firefox", "mode": "float" },
     { "wmClass": "firefox", "wmTitle": "!Mozilla Firefox", "mode": "float" },

@@ -225,6 +225,18 @@ export function directionFrom(position: string, orientation: string) {
   }
 }
 
+/** Wayland paste/selection helpers — must not participate in tiling. */
+export function isEphemeralHelperWindow(metaWindow: Meta.Window) {
+  const wmClass = (metaWindow.get_wm_class() ?? "").toLowerCase();
+  const title = (metaWindow.get_title() ?? "").toLowerCase();
+  const knownHelpers = ["wl-clipboard", "xclip", "xsel"];
+  if (knownHelpers.some((name) => wmClass.includes(name) || title === name)) {
+    return true;
+  }
+  const frame = metaWindow.get_frame_rect();
+  return frame.width <= 2 && frame.height <= 2;
+}
+
 export function rectContainsPoint(
   rect: { x: number; y: number; width: number; height: number },
   pointP: [number, number]

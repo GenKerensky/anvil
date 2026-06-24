@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   createEnum,
+  isEphemeralHelperWindow,
   rectContainsPoint,
   monitorIndex,
   removeGapOnRect,
@@ -156,6 +157,35 @@ describe("monitorIndex", () => {
 
   it("returns -1 for empty string", () => {
     expect(monitorIndex("")).toBe(-1);
+  });
+});
+
+describe("isEphemeralHelperWindow", () => {
+  it("detects wl-clipboard by wm class", () => {
+    const metaWindow = {
+      get_wm_class: () => "wl-clipboard",
+      get_title: () => "wl-clipboard",
+      get_frame_rect: () => ({ x: 0, y: 0, width: 1, height: 1 }),
+    } as Meta.Window;
+    expect(isEphemeralHelperWindow(metaWindow)).toBe(true);
+  });
+
+  it("detects 1x1 stub windows", () => {
+    const metaWindow = {
+      get_wm_class: () => "SomeApp",
+      get_title: () => "helper",
+      get_frame_rect: () => ({ x: 640, y: 416, width: 1, height: 1 }),
+    } as Meta.Window;
+    expect(isEphemeralHelperWindow(metaWindow)).toBe(true);
+  });
+
+  it("returns false for normal tiled windows", () => {
+    const metaWindow = {
+      get_wm_class: () => "kitty",
+      get_title: () => "nvim",
+      get_frame_rect: () => ({ x: 8, y: 40, width: 628, height: 752 }),
+    } as Meta.Window;
+    expect(isEphemeralHelperWindow(metaWindow)).toBe(false);
   });
 });
 
