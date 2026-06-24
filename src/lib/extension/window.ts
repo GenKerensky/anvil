@@ -48,6 +48,8 @@ import {
 } from "./tree.js";
 import { production } from "../shared/settings.js";
 import { safeRaise, safeFocus, safeActivate } from "./mutter-safe.js";
+import { PointerPolicy, type PointerFocusSource } from "./pointer-policy.js";
+import { TilingRender } from "./tiling-render.js";
 
 type AnvilExtension = import("../../extension.js").default;
 
@@ -92,7 +94,6 @@ export class WindowManager extends GObject.Object {
 
   // --- State ---
   declare prefsTitle: string;
-  declare shouldFocusOnHover: boolean;
   declare disabled: boolean;
   declare _signalsBound: boolean;
   declare _freezeRender: boolean;
@@ -109,9 +110,8 @@ export class WindowManager extends GObject.Object {
   declare _tree: Tree;
   declare eventQueue: Queue;
   declare theme: import("./extension-theme-manager.js").ExtensionThemeManager;
-  declare lastFocusedWindow: Node<any> | null;
-  declare lastFocusedWindowMonitor: number;
-  declare lastFocusedWindowWorkspace: number;
+  declare _pointerPolicy: PointerPolicy;
+  declare _tilingRender: TilingRender;
   declare nodeWinAtPointer: Node<any> | null;
   declare _draggedNodeWindow: Node<any> | null;
   declare sortedWindows: Meta.Window[];
@@ -127,7 +127,6 @@ export class WindowManager extends GObject.Object {
   declare _renderTreeSrcId: number;
   declare _reloadTreeSrcId: number;
   declare _wsWindowAddSrcId: number;
-  declare _pointerFocusTimeoutId: number;
   declare _workspaceChangingTimeoutId: number;
   declare _prefsOpenSrcId: number;
   declare _liveResizeSrcId: number;
@@ -157,36 +156,76 @@ export class WindowManager extends GObject.Object {
     this._tree = new Tree(this);
     this.eventQueue = new Queue();
     this.theme = this.ext.theme;
-    this.lastFocusedWindow = null;
-    this.lastFocusedWindowMonitor = global.display.get_current_monitor();
-    this.lastFocusedWindowWorkspace = global.display
-      .get_workspace_manager()
-      .get_active_workspace_index();
-    this.shouldFocusOnHover = !!this.ext.settings?.get_boolean("focus-on-hover-enabled");
+    this._pointerPolicy = new PointerPolicy({
+      settings: this.ext.settings,
+      isWorkspaceChanging: () => this._workspaceChanging,
+      isDisabled: () => this.disabled,
+    });
+    this._pointerPolicy.setHoverFocusEnabled(
+      !!this.ext.settings?.get_boolean("focus-on-hover-enabled")
+    );
+    this._tilingRender = new TilingRender({
+      settings: this.ext.settings,
+      getTree: () => this.tree,
+      moveWindow: (metaWindow, rect) => this.move(metaWindow, rect),
+      getAllNodeWindows: () => this.allNodeWindows,
+      isFloatingExempt: (w) => this.isFloatingExempt(w),
+      isActiveWindowWorkspaceTiled: (w) => this.isActiveWindowWorkspaceTiled(w),
+      getTiledChildren: (nodes) => this.tree.getTiledChildren(nodes),
+      getResizeCount: (id) => this._resizedWindows.get(id) || 0,
+      findParent: (node, type) => this.tree.findParent(node, type),
+    });
     this.cancelGrab = false;
     this._workspaceChanging = false;
     this._resizedWindows = new Map();
     this._lastResizePair = null;
 
     Logger.info("anvil initialized");
-
-    if (this.shouldFocusOnHover) {
-      // Start the pointer loop to observe the pointer position
-      // and change the focus window accordingly
-      this.pointerLoopInit();
-    }
   }
 
-  pointerLoopInit() {
-    if (this._pointerFocusTimeoutId) {
-      GLib.Source.remove(this._pointerFocusTimeoutId);
-    }
+  get pointerPolicy() {
+    return this._pointerPolicy;
+  }
 
-    this._pointerFocusTimeoutId = GLib.timeout_add(
-      GLib.PRIORITY_DEFAULT,
-      16,
-      this._focusWindowUnderPointer.bind(this)
-    );
+  get tilingRender() {
+    return this._tilingRender;
+  }
+
+  get lastFocusedWindow() {
+    return this._pointerPolicy.lastFocusedWindow;
+  }
+
+  set lastFocusedWindow(node: Node<any> | null) {
+    this._pointerPolicy.lastFocusedWindow = node;
+  }
+
+  get lastFocusedWindowMonitor() {
+    return this._pointerPolicy.lastFocusedWindowMonitor;
+  }
+
+  set lastFocusedWindowMonitor(monitor: number) {
+    this._pointerPolicy.lastFocusedWindowMonitor = monitor;
+  }
+
+  get lastFocusedWindowWorkspace() {
+    return this._pointerPolicy.lastFocusedWindowWorkspace;
+  }
+
+  set lastFocusedWindowWorkspace(ws: number) {
+    this._pointerPolicy.lastFocusedWindowWorkspace = ws;
+  }
+
+  get shouldFocusOnHover() {
+    return this._pointerPolicy.hoverFocusEnabled;
+  }
+
+  set shouldFocusOnHover(enabled: boolean) {
+    this._pointerPolicy.setHoverFocusEnabled(enabled);
+  }
+
+  private _onPointerFocusChanged(node: Node<any> | null, source: PointerFocusSource) {
+    this._pointerPolicy.onFocusChanged({ node, source });
+    if (node) this.tree.debugParentNodes(node);
   }
 
   addFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
@@ -394,7 +433,7 @@ export class WindowManager extends GObject.Object {
           this._workspaceChangingTimeoutId = 0;
           this._workspaceChanging = false;
           // Tree should have rendered by now (idle_add runs before 300ms timeout)
-          this.refocusPointerMonitor();
+          this._pointerPolicy.onWorkspaceSettled();
           return false;
         });
       }),
@@ -423,12 +462,7 @@ export class WindowManager extends GObject.Object {
           this.renderTree(settingName);
           break;
         case "focus-on-hover-enabled":
-          this.shouldFocusOnHover = settings.get_boolean(settingName);
-
-          if (this.shouldFocusOnHover) {
-            this.pointerLoopInit();
-          }
-
+          this._pointerPolicy.setHoverFocusEnabled(settings.get_boolean(settingName));
           break;
         case "tiling-mode-enabled":
           this.renderTree(settingName);
@@ -505,7 +539,7 @@ export class WindowManager extends GObject.Object {
             const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
             this.updateStackedFocus(focusNodeWindow);
             this.updateTabbedFocus(focusNodeWindow);
-            this.movePointerWith(focusNodeWindow);
+            this._onPointerFocusChanged(focusNodeWindow, "overview");
           },
         };
         this.queueEvent(eventObj);
@@ -669,7 +703,7 @@ export class WindowManager extends GObject.Object {
                 if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
                 this.renderTree("move-tabbed-queue");
               }
-              this.movePointerWith(focusNodeWindow);
+              this._onPointerFocusChanged(focusNodeWindow, "move");
             }
           },
         });
@@ -694,7 +728,6 @@ export class WindowManager extends GObject.Object {
           safeRaise(win);
           safeActivate(win, global.display.get_current_time());
         }
-        this.movePointerWith(focusNodeWindow);
         break;
       }
       case "Swap": {
@@ -707,7 +740,7 @@ export class WindowManager extends GObject.Object {
         safeActivate(swapWin, global.display.get_current_time());
         this.updateTabbedFocus(focusNodeWindow);
         this.updateStackedFocus(focusNodeWindow);
-        this.movePointerWith(focusNodeWindow);
+        this._onPointerFocusChanged(focusNodeWindow, "swap");
         this.renderTree("swap", true);
         break;
       }
@@ -739,7 +772,7 @@ export class WindowManager extends GObject.Object {
           safeRaise(win);
           safeActivate(win, global.display.get_current_time());
         }
-        this.movePointerWith(focusNodeWindow);
+        this._onPointerFocusChanged(focusNodeWindow, "command");
         break;
       case "FocusBorderToggle": {
         const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
@@ -877,7 +910,7 @@ export class WindowManager extends GObject.Object {
           );
           const lastActiveNodeWindow = this.tree.findNode(lastActiveWindow);
           this.tree.swapPairs(lastActiveNodeWindow!, focusNodeWindow);
-          this.movePointerWith(focusNodeWindow);
+          this._onPointerFocusChanged(focusNodeWindow, "swap");
           this.renderTree("swap-last-active");
         }
         break;
@@ -923,7 +956,7 @@ export class WindowManager extends GObject.Object {
           }
           focusNodeWindow.rect = layout as any;
           if (processGap) {
-            focusNodeWindow.rect = this.tree.processGap(focusNodeWindow) as any;
+            focusNodeWindow.rect = this._tilingRender.processGap(focusNodeWindow) as any;
           }
           if (!focusNodeWindow.isFloat()) {
             this.addFloatOverride(focusNodeWindow.nodeValue as Meta.Window, false);
@@ -1325,10 +1358,7 @@ export class WindowManager extends GObject.Object {
       this._queueSourceId = 0;
     }
 
-    if (this._pointerFocusTimeoutId) {
-      GLib.Source.remove(this._pointerFocusTimeoutId);
-      this._pointerFocusTimeoutId = 0;
-    }
+    this._pointerPolicy.disable();
 
     if (this._prefsOpenSrcId) {
       GLib.Source.remove(this._prefsOpenSrcId);
@@ -1355,8 +1385,7 @@ export class WindowManager extends GObject.Object {
     } else {
       if (!this._renderTreeSrcId) {
         this._renderTreeSrcId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-          this.processFloats();
-          this.tree.render(from);
+          this._tilingRender.render(from);
           this._renderTreeSrcId = 0;
           this.updateDecorationLayout();
           this.updateBorderLayout();
@@ -1368,14 +1397,7 @@ export class WindowManager extends GObject.Object {
   }
 
   processFloats() {
-    this.allNodeWindows.forEach((nodeWindow: Node<any>) => {
-      const metaWindow = nodeWindow.nodeValue as Meta.Window;
-      if (this.isFloatingExempt(metaWindow) || !this.isActiveWindowWorkspaceTiled(metaWindow)) {
-        nodeWindow.float = true;
-      } else {
-        nodeWindow.float = false;
-      }
-    });
+    this._tilingRender.processFloats();
   }
 
   get allNodeWindows() {
@@ -1580,25 +1602,7 @@ export class WindowManager extends GObject.Object {
   }
 
   calculateGaps(node: Node<any>) {
-    if (!node) return 0;
-
-    const settings = this.ext.settings;
-    const gapSize = settings.get_uint("window-gap-size");
-    const gapIncrement = settings.get_uint("window-gap-size-increment");
-    let gap = gapSize * gapIncrement;
-
-    if (!node.isRoot()) {
-      const hideGapWhenSingle = settings.get_boolean("window-gap-hidden-on-single");
-      const parentNode = this.tree.findParent(node, NODE_TYPES.MONITOR);
-      if (parentNode) {
-        const tiled = parentNode
-          .getNodeByMode(WINDOW_MODES.TILE)
-          .filter((t) => t.isWindow() && !t.nodeValue.minimized);
-        if (tiled.length == 1 && hideGapWhenSingle) gap = 0;
-      }
-    }
-
-    return gap;
+    return this._tilingRender.calculateGaps(node);
   }
 
   /**
@@ -1698,7 +1702,7 @@ export class WindowManager extends GObject.Object {
                   this.updateStackedFocus(undefined);
                   this.updateTabbedFocus(undefined);
                   const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-                  this.movePointerWith(focusNodeWindow);
+                  this._onPointerFocusChanged(focusNodeWindow, "signal");
                 },
               });
               const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
@@ -1780,7 +1784,7 @@ export class WindowManager extends GObject.Object {
           .activate_with_focus(metaWindow, global.display.get_current_time());
         this.moveCenter(metaWindow);
       } else {
-        this.movePointerWith(nodeWindow);
+        this._onPointerFocusChanged(nodeWindow, "window-create");
       }
     }
   }
@@ -1850,172 +1854,16 @@ export class WindowManager extends GObject.Object {
     return !skipThisWs;
   }
 
-  /**
-   * Get the connector name for a monitor index via Meta.MonitorManager.
-   */
-  _getMonitorConnector(monitorIndex: number): string | null {
-    try {
-      const mgr = global.backend.get_monitor_manager();
-      const logicalMonitors = mgr.get_logical_monitors() ?? [];
-      Logger.debug(
-        `_getMonitorConnector: monitorIndex=${monitorIndex}, logicalMonitors.length=${logicalMonitors.length}`
-      );
-      const logicalMonitor = logicalMonitors[monitorIndex];
-      if (!logicalMonitor) {
-        Logger.debug(`_getMonitorConnector: no logicalMonitor at index ${monitorIndex}`);
-        return null;
-      }
-      const monitors = logicalMonitor.get_monitors();
-      Logger.debug(`_getMonitorConnector: monitors.length=${monitors.length}`);
-      if (monitors.length > 0) {
-        const connector = monitors[0].get_connector();
-        Logger.debug(`_getMonitorConnector: connector="${connector}"`);
-        return connector;
-      }
-      return null;
-    } catch (e) {
-      Logger.debug(`_getMonitorConnector: exception: ${e}`);
-      return null;
-    }
-  }
-
-  /**
-   * Look up per-monitor constraints from GSettings for a given monitor index.
-   */
-  _getMonitorConstraints(monitorIndex: number): {
-    maxWidth: number;
-    maxHeight: number;
-    enabled: boolean;
-    resizeExempt: boolean;
-  } | null {
-    const connector = this._getMonitorConnector(monitorIndex);
-    if (!connector) {
-      Logger.debug(`_getMonitorConstraints: no connector for monitor ${monitorIndex}`);
-      return null;
-    }
-    const rawConstraints = this.ext.settings.get_value("monitor-constraints").deep_unpack();
-    Logger.debug(
-      `_getMonitorConstraints: connector="${connector}", rawConstraints=${JSON.stringify(
-        rawConstraints
-      )}`
-    );
-    const constraints = rawConstraints as Array<
-      [
-        connector: string,
-        maxWidth: number,
-        maxHeight: number,
-        enabled: boolean,
-        resizeExempt: boolean
-      ]
-    >;
-    for (const entry of constraints) {
-      Logger.debug(
-        `_getMonitorConstraints: checking entry[0]="${entry[0]}" against connector="${connector}"`
-      );
-      if (entry[0] === connector) {
-        Logger.debug(
-          `_getMonitorConstraints: MATCH! maxWidth=${entry[1]}, maxHeight=${entry[2]}, enabled=${entry[3]}, resizeExempt=${entry[4]}`
-        );
-        return {
-          maxWidth: entry[1],
-          maxHeight: entry[2],
-          enabled: entry[3],
-          resizeExempt: entry[4],
-        };
-      }
-    }
-    Logger.debug(`_getMonitorConstraints: no matching entry for connector="${connector}"`);
-    return null;
-  }
-
-  /**
-   * Clamp a window rect to per-monitor size limits.
-   * Reads constraints from the monitor-constraints GSettings array.
-   */
   enforceUltrawideSize(node: Node<any>, rect: RectLike): RectLike {
-    if (!node.isWindow()) {
-      Logger.debug(`enforceUltrawideSize: node is not a window, skipping`);
-      return rect;
-    }
-    const metaWindow = node.nodeValue as Meta.Window;
-    const monitorIndex = metaWindow.get_monitor();
-    Logger.debug(
-      `enforceUltrawideSize: window_id=${metaWindow.get_id()}, monitorIndex=${monitorIndex}, rect=${JSON.stringify(
-        rect
-      )}`
-    );
-    const constraints = this._getMonitorConstraints(monitorIndex);
-    if (!constraints) {
-      Logger.debug(`enforceUltrawideSize: no constraints found`);
-      return rect;
-    }
-    if (!constraints.enabled) {
-      Logger.debug(`enforceUltrawideSize: constraints disabled`);
-      return rect;
-    }
-    // Skip enforcement for manually resized windows when exemption is enabled.
-    // The first resize is clamped (resizeCount == 0).
-    // After _handleGrabOpEnd increments the counter, resizeCount becomes 1,
-    // so the second resize is exempt.
-    const resizeCount = this._resizedWindows.get(metaWindow.get_id()) || 0;
-    if (constraints.resizeExempt && resizeCount >= 1) {
-      // When this is the only tiled window on the monitor, preserve its
-      // manual size but center it within the monitor bounds (clamped).
-      let monitorNode = node.parentNode;
-      while (monitorNode && !monitorNode.isMonitor()) {
-        monitorNode = monitorNode.parentNode;
-      }
-      if (monitorNode) {
-        const tiledChildren = this.tree.getTiledChildren(monitorNode.childNodes);
-        if (tiledChildren.length === 1) {
-          const frameRect = metaWindow.get_frame_rect();
-          let width = frameRect.width;
-          let height = frameRect.height;
-          // Clamp to monitor bounds (already gap-adjusted in `rect`)
-          if (width > rect.width) width = rect.width;
-          if (height > rect.height) height = rect.height;
-          const x = rect.x + Math.floor((rect.width - width) / 2);
-          const y = rect.y + Math.floor((rect.height - height) / 2);
-          Logger.debug(
-            `enforceUltrawideSize: resize-exempt solo centered from ${JSON.stringify(
-              rect
-            )} to ${JSON.stringify({ x, y, width, height })}`
-          );
-          return { x, y, width, height };
-        }
-      }
-      // Not solo: let the split layout govern size/position
-      Logger.debug(
-        `enforceUltrawideSize: skipping (resize exempt, window was manually resized, not solo)`
-      );
-      return rect;
-    }
-    const { maxWidth, maxHeight } = constraints;
-    let { x, y, width, height } = rect;
-    let changed = false;
-    if (maxWidth > 0 && width > maxWidth) {
-      x += Math.floor((width - maxWidth) / 2);
-      width = maxWidth;
-      changed = true;
-    }
-    if (maxHeight > 0 && height > maxHeight) {
-      y += Math.floor((height - maxHeight) / 2);
-      height = maxHeight;
-      changed = true;
-    }
-    if (changed) {
-      Logger.debug(
-        `enforceUltrawideSize: CLAMPED from ${JSON.stringify(rect)} to ${JSON.stringify({
-          x,
-          y,
-          width,
-          height,
-        })}`
-      );
-      return { x, y, width, height };
-    }
-    Logger.debug(`enforceUltrawideSize: within limits, no change needed`);
-    return rect;
+    return this._tilingRender.enforceUltrawideSize(node, rect);
+  }
+
+  _getMonitorConnector(monitorIndex: number): string | null {
+    return this._tilingRender.getMonitorConnector(monitorIndex);
+  }
+
+  _getMonitorConstraints(monitorIndex: number) {
+    return this._tilingRender.getMonitorConstraints(monitorIndex);
   }
 
   trackCurrentWindows() {
@@ -2310,64 +2158,18 @@ export class WindowManager extends GObject.Object {
     return node.nodeType === NODE_TYPES.WINDOW && node.mode === WINDOW_MODES.FLOAT;
   }
 
-  /**
-   * Moves the pointer along with the nodeWindow's meta
-   *
-   * This is useful for making sure that Anvil calculates the attachNode
-   * properly
-   */
-  movePointerWith(nodeWindow: Node<any> | null, { force = false }: { force?: boolean } = {}) {
-    if (!nodeWindow || !nodeWindow._data) return;
-    const shouldWarp = force || this.ext.settings.get_boolean("move-pointer-focus-enabled");
-    if (shouldWarp) {
-      this.storePointerLastPosition(this.lastFocusedWindow);
-      if (this.canMovePointerInsideNodeWindow(nodeWindow)) {
-        this.warpPointerToNodeWindow(nodeWindow);
-      }
-    }
-    this.lastFocusedWindow = nodeWindow;
-    this.lastFocusedWindowMonitor = (nodeWindow._data as Meta.Window).get_monitor();
-    this.lastFocusedWindowWorkspace = global.display
-      .get_workspace_manager()
-      .get_active_workspace_index();
-    this.tree.debugParentNodes(nodeWindow);
-  }
-
-  warpPointerToNodeWindow(nodeWindow: Node<any>) {
-    const newCoord = this.getPointerPositionInside(nodeWindow);
-    if (newCoord && newCoord.x && newCoord.y) {
-      const seat = Clutter.get_default_backend().get_default_seat();
-      if (seat) {
-        const wmTitle = (nodeWindow.nodeValue as Meta.Window).get_title();
-        Logger.debug(`moved pointer to [${wmTitle}] at (${newCoord.x},${newCoord.y})`);
-        seat.warp_pointer(newCoord.x, newCoord.y);
-      }
-    }
+  /** @deprecated Use pointerPolicy.onFocusChanged — kept for test compatibility */
+  movePointerWith(nodeWindow: Node<any> | null) {
+    this._onPointerFocusChanged(nodeWindow, "command");
   }
 
   getPointer(): [number, number] {
-    return global.get_pointer() as unknown as [number, number];
+    return this._pointerPolicy.getPointer();
   }
 
-  /**
-   * Ensures the pointer is on the same monitor as the last focused window.
-   * Ported from cnharrison/forge PR #486 (multi-monitor focus persistence).
-   */
+  /** @deprecated Use pointerPolicy.onWorkspaceSettled */
   refocusPointerMonitor() {
-    if (!this.lastFocusedWindow || !this.lastFocusedWindow._data) return;
-    const currentMonitor = global.display.get_current_monitor();
-    if (currentMonitor !== this.lastFocusedWindowMonitor) {
-      const monitorGeom = global.display.get_monitor_geometry(this.lastFocusedWindowMonitor);
-      if (monitorGeom) {
-        const seat = Clutter.get_default_backend().get_default_seat();
-        if (seat) {
-          seat.warp_pointer(
-            monitorGeom.x + Math.floor(monitorGeom.width / 2),
-            monitorGeom.y + Math.floor(monitorGeom.height / 2)
-          );
-        }
-      }
-    }
+    this._pointerPolicy.onWorkspaceSettled();
   }
 
   minimizedWindow(node: Node<any> | null) {
@@ -2533,7 +2335,7 @@ export class WindowManager extends GObject.Object {
             } else {
               containerNode = parentNodeTarget;
               referenceNode = null;
-              const parentTargetRect = this.tree.processGap(parentNodeTarget!);
+              const parentTargetRect = this._tilingRender.processGap(parentNodeTarget!);
               previewParams = {
                 className: "",
                 targetRect: parentTargetRect,
@@ -2754,67 +2556,15 @@ export class WindowManager extends GObject.Object {
   }
 
   canMovePointerInsideNodeWindow(nodeWindow: Node<any> | null) {
-    if (nodeWindow && nodeWindow._data) {
-      const metaWindow = nodeWindow.nodeValue as Meta.Window;
-      const metaRect = metaWindow.get_frame_rect();
-      const pointerCoord = global.get_pointer() as unknown as [number, number];
-      return (
-        metaRect &&
-        // xdg-copy creates a 1x1 pixel window to capture mouse events.
-        metaRect.width > 8 &&
-        metaRect.height > 8 &&
-        !Utils.rectContainsPoint(metaRect, pointerCoord) &&
-        !metaWindow.minimized &&
-        !Main.overview.visible &&
-        !this.pointerIsOverParentDecoration(nodeWindow, pointerCoord)
-      );
-    }
-    return false;
-  }
-
-  pointerIsOverParentDecoration(nodeWindow: Node<any>, pointerCoord: [number, number]) {
-    if (pointerCoord && nodeWindow && nodeWindow!.parentNode!) {
-      const node = nodeWindow!.parentNode!;
-      if (node.isTabbed() || node.isStacked()) {
-        return Utils.rectContainsPoint(node.rect!, pointerCoord);
-      }
-    }
-    return false;
+    return this._pointerPolicy.canWarpToNode(nodeWindow);
   }
 
   getPointerPositionInside(nodeWindow: Node<any> | null) {
-    if (nodeWindow && nodeWindow._data) {
-      const metaWindow = nodeWindow.nodeValue as Meta.Window;
-      const metaRect = metaWindow.get_frame_rect();
-      // on: last position of cursor inside window
-      // on: titlebar: near to app toolbars, menubar, tabs, etc...
-      const [wx, wy] = nodeWindow.pointer
-        ? [nodeWindow.pointer.x, nodeWindow.pointer.y]
-        : [metaRect.width / 2, 8];
-      const px = wx >= metaRect.width ? metaRect.width - 8 : wx;
-      const py = wy >= metaRect.height ? metaRect.height - 8 : wy;
-      return {
-        x: metaRect.x + px,
-        y: metaRect.y + py,
-      };
-    }
-    return null;
+    return this._pointerPolicy.getPointerPositionInside(nodeWindow);
   }
 
   storePointerLastPosition(nodeWindow: Node<any> | null) {
-    if (nodeWindow && nodeWindow._data) {
-      const metaWindow = nodeWindow.nodeValue as Meta.Window;
-      const metaRect = metaWindow.get_frame_rect();
-      const pointerCoord = global.get_pointer() as unknown as [number, number];
-      if (Utils.rectContainsPoint(metaRect, pointerCoord)) {
-        const px = pointerCoord[0] - metaRect.x;
-        const py = pointerCoord[1] - metaRect.y;
-        if (px > 0 && py > 0) {
-          nodeWindow.pointer = { x: px, y: py };
-          Logger.debug(`stored pointer for [${metaWindow.get_title()}] at (${px},${py})`);
-        }
-      }
-    }
+    this._pointerPolicy.storePointerLastPosition(nodeWindow);
   }
 
   findNodeWindowAtPointer(focusNodeWindow: Node<any>) {
@@ -2827,78 +2577,10 @@ export class WindowManager extends GObject.Object {
     return nodeWinAtPointer;
   }
 
-  /**
-   * Focus the window under the pointer and raise it.
-   *
-   * @returns {boolean} true if we should continue polling, false otherwise
-   */
   _focusWindowUnderPointer(): boolean {
-    // Break the loop if the user has disabled the feature
-    // or if the window manager is disabled
-    if (!this.shouldFocusOnHover || this.disabled) return false;
-
-    // We don't want to focus windows when the overview is visible
-    if (Main.overview.visible) return true;
-
-    // Bug #374 fix: Skip focus-on-hover during workspace transitions
-    // Ported from jcrussell/forge
-    if (this._workspaceChanging) return true;
-
-    // Bug #483 fix: Don't steal focus from modal dialogs or password prompts
-    // Ported from jcrussell/forge
-    const focusedWindow = global.display.get_focus_window();
-    if (focusedWindow) {
-      const focusedType = focusedWindow.get_window_type();
-      if (focusedType === Meta.WindowType.MODAL_DIALOG || focusedType === Meta.WindowType.DIALOG) {
-        return true;
-      }
-    }
-
-    // Get the global mouse position
-    const pointer = global.get_pointer() as unknown as [number, number];
-
-    const metaWindow = this._getMetaWindowAtPointer(pointer);
-
-    if (metaWindow) {
-      safeFocus(metaWindow, global.get_current_time());
-      safeRaise(metaWindow);
-    }
-
-    // Continue polling
-    return true;
+    return this._pointerPolicy.runHoverFocusPoll();
   }
 
-  /**
-   * Get the Meta.Window at the pointer coordinates
-   *
-   * @returns null if no window is found, otherwise the Meta.Window
-   */
-  _getMetaWindowAtPointer(pointer: [number, number]) {
-    const windows = global.get_window_actors();
-    const [x, y] = pointer;
-
-    // Iterate through the windows in reverse order to get the top-most window
-    for (let i = windows.length - 1; i >= 0; i--) {
-      const window = windows[i];
-      const metaWindow = window.meta_window;
-      if (!metaWindow) continue;
-
-      const { x: wx, y: wy, width, height } = metaWindow.get_frame_rect();
-
-      // Check if the position is within the window bounds
-      if (x >= wx && x <= wx + width && y >= wy && y <= wy + height) {
-        return metaWindow;
-      }
-    }
-
-    // No window found at the pointer
-    return null;
-  }
-
-  /**
-   * Finds the NodeWindow under the Meta.Window and the
-   * current pointer coordinates;
-   */
   _findNodeWindowAtPointer(metaWindow: Meta.Window, pointer: [number, number]) {
     if (!metaWindow) return undefined;
 
@@ -3069,15 +2751,23 @@ export class WindowManager extends GObject.Object {
     // Must run AFTER renderTree so the first resize is still clamped by
     // enforceUltrawideSize; subsequent renders will see the window in
     // _resizedWindows and skip clamping.
-    // renderTree() queues an idle callback, so we also queue the add
-    // via idle_add to ensure it runs after the render completes.
-    if (focusMetaWindow && Utils.grabMode(grabOp) === GRAB_TYPES.RESIZING) {
-      const monitorIndex = focusMetaWindow.get_monitor();
-      const constraints = this._getMonitorConstraints(monitorIndex);
+    // Use a timeout (instead of idle_add) to ensure all async renders
+    // triggered by the resize (e.g., from size-changed signals) complete
+    // before the counter is incremented. This prevents a race where a
+    // late render sees the incremented counter and undoes the clamping.
+    // Use _metaWindow (the window that was actually resized) instead of
+    // focusMetaWindow to avoid race conditions where focus changed during
+    // async resize operations.
+    if (_metaWindow && Utils.grabMode(grabOp) === GRAB_TYPES.RESIZING) {
+      const monitorIndex = _metaWindow.get_monitor();
+      const constraints = this._tilingRender.getMonitorConstraints(monitorIndex);
       if (constraints?.resizeExempt) {
-        const winId = focusMetaWindow.get_id();
-        const currentCount = this._resizedWindows.get(winId) || 0;
-        this._resizedWindows.set(winId, currentCount + 1);
+        const winId = _metaWindow.get_id();
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
+          const currentCount = this._resizedWindows.get(winId) || 0;
+          this._resizedWindows.set(winId, currentCount + 1);
+          return GLib.SOURCE_REMOVE;
+        });
       }
     }
 
@@ -3400,7 +3090,7 @@ export class WindowManager extends GObject.Object {
       }
     }
     if (parentNode) {
-      this.tree.processNode(parentNode);
+      this._tilingRender.processNode(parentNode);
     }
 
     // Move all tiled windows except the one being dragged

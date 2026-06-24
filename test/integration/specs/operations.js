@@ -5,17 +5,17 @@
 import {
   launchApp,
   getWindowGeometries,
-  getWindowCount,
   closeFocusedWindow,
   windowsOverlap,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
 
 describe("Window Operations", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -26,14 +26,14 @@ describe("Window Operations", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(1000);
+    await waitForWindowCount(3, 5000);
 
-    expect(getWindowCount()).toBe(3);
+    expect(getWindowGeometries().length).toBe(3);
 
-    closeFocusedWindow();
-    await sleep(1500);
+    await closeFocusedWindow();
+    await waitForWindowCount(2, 5000);
 
-    expect(getWindowCount()).toBe(2);
+    expect(getWindowGeometries().length).toBe(2);
 
     const wins = getWindowGeometries();
     expect(windowsOverlap(wins)).toBe(false);

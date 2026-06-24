@@ -13,16 +13,16 @@ import {
   clearMonitorConstraints,
   setMonitorConstraint,
   getAnvilWM,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
 
-const COMMAND_DELAY = 600;
 const RESIZE_AMOUNT = 150;
 
 describe("Monitor Constraints", function () {
   beforeEach(async function () {
     clearMonitorConstraints();
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -33,7 +33,7 @@ describe("Monitor Constraints", function () {
   it("setting a constraint limits window width on resize", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const area = getMonitorWorkArea();
     const maxW = Math.floor(area.width * 0.35);
@@ -41,14 +41,14 @@ describe("Monitor Constraints", function () {
     const wm = getAnvilWM();
     const connector = wm._getMonitorConnector(0);
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, false);
-    await sleep(400);
+    await sleep(200);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
     const focused = before[0];
 
     sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -61,7 +61,7 @@ describe("Monitor Constraints", function () {
   it("resize-exempt windows bypass the constraint after enough resize events", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const area = getMonitorWorkArea();
     const maxW = Math.floor(area.width * 0.35);
@@ -69,11 +69,11 @@ describe("Monitor Constraints", function () {
     const wm = getAnvilWM();
     const connector = wm._getMonitorConnector(0);
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, true);
-    await sleep(400);
+    await sleep(200);
 
     // First resize — should be clamped
     sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const afterFirst = getWindowGeometries();
     expect(afterFirst[0].width).toBeLessThanOrEqual(maxW + 5);
@@ -83,7 +83,7 @@ describe("Monitor Constraints", function () {
 
     // Second resize — should be exempt
     sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const afterSecond = getWindowGeometries();
     // After exemption, the window should exceed the limit
@@ -93,7 +93,7 @@ describe("Monitor Constraints", function () {
   it("removing constraints reverts to normal behaviour", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const area = getMonitorWorkArea();
     const maxW = Math.floor(area.width * 0.35);
@@ -103,22 +103,22 @@ describe("Monitor Constraints", function () {
 
     // Set constraint
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, false);
-    await sleep(400);
+    await sleep(200);
 
     // Resize with constraint
     sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const withConstraint = getWindowGeometries();
     expect(withConstraint[0].width).toBeLessThanOrEqual(maxW + 5);
 
     // Remove constraint
     clearMonitorConstraints();
-    await sleep(400);
+    await sleep(200);
 
     // Resize again — should NOT be clamped
     sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const withoutConstraint = getWindowGeometries();
     // After removing constraint, the window should be able to grow larger
@@ -128,20 +128,20 @@ describe("Monitor Constraints", function () {
   it("zero constraint is equivalent to no constraint", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const wm = getAnvilWM();
     const connector = wm._getMonitorConnector(0);
 
     // Set zero constraint
     setMonitorConstraint(connector, 0, 0, true, false);
-    await sleep(400);
+    await sleep(200);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
     sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);

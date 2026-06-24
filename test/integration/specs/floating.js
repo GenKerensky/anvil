@@ -9,19 +9,17 @@ import {
   launchApp,
   getWindowGeometries,
   getMonitorWorkArea,
-  getFocusedWindowTitle,
   getSettings,
   sendAnvilCommand,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
-
-const COMMAND_DELAY = 800;
 
 describe("Floating and Snap Layout", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -33,7 +31,7 @@ describe("Floating and Snap Layout", function () {
   it("FloatToggle floats the focused window", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -55,7 +53,7 @@ describe("Floating and Snap Layout", function () {
       width: 0.65,
       height: 0.75,
     });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -72,7 +70,7 @@ describe("Floating and Snap Layout", function () {
   it("FloatClassToggle toggles float by window class", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -85,7 +83,7 @@ describe("Floating and Snap Layout", function () {
       width: 0.65,
       height: 0.75,
     });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -104,7 +102,7 @@ describe("Floating and Snap Layout", function () {
 
   it("SnapLayoutMove Left 1/3 snaps window to left third", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     const area = getMonitorWorkArea();
 
@@ -113,7 +111,7 @@ describe("Floating and Snap Layout", function () {
       direction: "Left",
       amount: 1 / 3,
     });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(1);
@@ -126,7 +124,7 @@ describe("Floating and Snap Layout", function () {
 
   it("SnapLayoutMove Right 2/3 snaps window to right two-thirds", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     const area = getMonitorWorkArea();
 
@@ -135,7 +133,7 @@ describe("Floating and Snap Layout", function () {
       direction: "Right",
       amount: 2 / 3,
     });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(1);
@@ -147,7 +145,7 @@ describe("Floating and Snap Layout", function () {
 
   it("SnapLayoutMove Center centers the window", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(1);
@@ -156,7 +154,7 @@ describe("Floating and Snap Layout", function () {
       name: "SnapLayoutMove",
       direction: "Center",
     });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(1);
@@ -171,7 +169,7 @@ describe("Floating and Snap Layout", function () {
   it("TilingModeToggle disables and re-enables tiling", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -186,13 +184,13 @@ describe("Floating and Snap Layout", function () {
 
     // Disable tiling
     sendAnvilCommand({ name: "TilingModeToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     expect(getSettings().get_boolean("tiling-mode-enabled")).toBe(false);
 
     // Re-enable tiling
     sendAnvilCommand({ name: "TilingModeToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     expect(getSettings().get_boolean("tiling-mode-enabled")).toBe(true);
   });

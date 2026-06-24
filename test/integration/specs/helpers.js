@@ -13,10 +13,7 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 export const UUID = "anvil@GenKerensky.github.com";
 export const SCHEMA_ID = "org.gnome.shell.extensions.anvil";
 
-// ---------------------------------------------------------------------------
-// Re-export shared commands (common between E2E and integration)
-// ---------------------------------------------------------------------------
-
+// Re-export shared commands
 import {
   sleep,
   getSettings,
@@ -43,6 +40,7 @@ import {
   formatWindowState,
   isExtensionActive,
   getExtensionErrors,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
 
 export {
@@ -71,22 +69,10 @@ export {
   formatWindowState,
   isExtensionActive,
   getExtensionErrors,
+  waitForWindowCount,
 };
 
-// ---------------------------------------------------------------------------
-// AT-SPI helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Walk the AT-SPI accessible tree starting at `node`, calling `predicate`
- * on each node. Returns the first node for which predicate returns true,
- * or null if none found within maxDepth.
- *
- * @param {Atspi.Accessible} node
- * @param {(node: Atspi.Accessible) => boolean} predicate
- * @param {number} [maxDepth=12]
- * @returns {Atspi.Accessible|null}
- */
+// AT‑SPI helpers
 export function findAccessible(node, predicate, maxDepth = 12) {
   if (maxDepth < 0) return null;
   try {
@@ -98,28 +84,14 @@ export function findAccessible(node, predicate, maxDepth = 12) {
       const found = findAccessible(child, predicate, maxDepth - 1);
       if (found) return found;
     }
-  } catch (_e) {
-    // Stale/inaccessible node — skip
-  }
+  } catch (_e) {}
   return null;
 }
 
-/**
- * Find all AT-SPI nodes under `node` that match `predicate`.
- *
- * @param {Atspi.Accessible} node
- * @param {(node: Atspi.Accessible) => boolean} predicate
- * @param {number} [maxDepth=12]
- * @returns {Atspi.Accessible[]}
- */
 export function findAllAccessibles(node, predicate, maxDepth = 12) {
   /** @type {Atspi.Accessible[]} */
   const results = [];
 
-  /**
-   * @param {Atspi.Accessible} n
-   * @param {number} depth
-   */
   function walk(n, depth) {
     if (depth < 0) return;
     try {
@@ -129,22 +101,12 @@ export function findAllAccessibles(node, predicate, maxDepth = 12) {
         const child = n.get_child_at_index(i);
         if (child) walk(child, depth - 1);
       }
-    } catch (_e) {
-      // Stale node — skip
-    }
+    } catch (_e) {}
   }
   walk(node, maxDepth);
   return results;
 }
 
-/**
- * Poll the AT-SPI desktop until a node matching `predicate` appears,
- * or until `timeoutMs` is exceeded.
- *
- * @param {(node: Atspi.Accessible) => boolean} predicate
- * @param {number} [timeoutMs=10000]
- * @returns {Promise<Atspi.Accessible>}
- */
 export async function waitForAccessible(predicate, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -158,12 +120,6 @@ export async function waitForAccessible(predicate, timeoutMs = 10000) {
   throw new Error("Timed out waiting for accessible node after " + timeoutMs + "ms");
 }
 
-/**
- * Returns true if the node's state set contains the given Atspi.StateType.
- * @param {Atspi.Accessible} node
- * @param {number} stateType - An Atspi.StateType value
- * @returns {boolean}
- */
 export function hasState(node, stateType) {
   try {
     return node.get_state_set().contains(stateType);
@@ -172,12 +128,6 @@ export function hasState(node, stateType) {
   }
 }
 
-/**
- * Returns true if the node's role name matches (case-insensitive).
- * @param {Atspi.Accessible} node
- * @param {string} roleName
- * @returns {boolean}
- */
 export function hasRole(node, roleName) {
   try {
     return (node.get_role_name() || "").toLowerCase() === roleName.toLowerCase();
@@ -186,11 +136,6 @@ export function hasRole(node, roleName) {
   }
 }
 
-/**
- * Returns the node's accessible name, or "" if unavailable.
- * @param {Atspi.Accessible} node
- * @returns {string}
- */
 export function getName(node) {
   try {
     return node.get_name() || "";
@@ -199,11 +144,6 @@ export function getName(node) {
   }
 }
 
-/**
- * Perform the default action (index 0) on an accessible node.
- * @param {Atspi.Accessible} node
- * @returns {boolean}
- */
 export function doAction(node) {
   try {
     const iface = node.get_action_iface();
@@ -211,73 +151,68 @@ export function doAction(node) {
       iface.do_action(0);
       return true;
     }
-  } catch (_e) {
-    // ignore
-  }
+  } catch (_e) {}
   return false;
 }
 
-// ---------------------------------------------------------------------------
 // Preferences window helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Opens the Anvil preferences window via D-Bus and waits for it to appear
- * in the AT-SPI tree.
- *
- * @param {number} [timeoutMs=10000]
- * @returns {Promise<Atspi.Accessible>} The prefs window accessible node.
- */
 export async function openPrefsWindow(timeoutMs = 10000) {
-  // Initialize the AT-SPI subsystem (safe to call multiple times)
+  // Initialize AT‑SPI
   Atspi.init();
 
-  // Open the prefs window via the gnome-shell Extensions D-Bus API
-  Gio.DBus.session.call_sync(
-    "org.gnome.Shell",
-    "/org/gnome/Shell",
-    "org.gnome.Shell.Extensions",
-    "OpenExtensionPrefs",
-    new GLib.Variant("(ssa{sv})", [UUID, "", {}]),
-    null,
-    Gio.DBusCallFlags.NONE,
-    5000,
-    null
-  );
+  // Try D‑Bus first
+  try {
+    Gio.DBus.session.call_sync(
+      "org.gnome.Shell",
+      "/org/gnome/Shell",
+      "org.gnome.Shell.Extensions",
+      "OpenExtensionPrefs",
+      new GLib.Variant("(ssa{sv})", [UUID, "", {}]),
+      null,
+      Gio.DBusCallFlags.NONE,
+      15000,
+      null
+    );
+  } catch (_e) {}
 
-  // Poll the AT-SPI tree for a frame/window whose name contains "Anvil"
-  return waitForAccessible(function (node) {
+  // Wait for the prefs window
+  const atspiResult = await waitForAccessible((node) => {
     const role = (node.get_role_name() || "").toLowerCase();
     if (role !== "frame" && role !== "window") return false;
     const name = node.get_name() || "";
     return name.includes("Anvil");
   }, timeoutMs);
+
+  if (!atspiResult) {
+    const ext = global.extensionManager.lookup(UUID);
+    if (ext && typeof ext.openPreferences === "function") {
+      try {
+        ext.openPreferences();
+      } catch {}
+      // Wait again
+      return await waitForAccessible((node) => {
+        const role = (node.get_role_name() || "").toLowerCase();
+        if (role !== "frame" && role !== "window") return false;
+        const name = node.get_name() || "";
+        return name.includes("Anvil");
+      }, timeoutMs);
+    }
+  }
+
+  return atspiResult;
 }
 
-/**
- * Navigate to a named page tab in the prefs window by clicking it.
- *
- * @param {Atspi.Accessible} prefsWindow
- * @param {string} tabName
- */
 export async function navigateToTab(prefsWindow, tabName) {
-  const tab = findAccessible(prefsWindow, function (node) {
+  const tab = findAccessible(prefsWindow, (node) => {
     return hasRole(node, "page tab") && getName(node) === tabName;
   });
-  if (!tab) throw new Error("Page tab '" + tabName + "' not found");
+  if (!tab) throw new Error(`Page tab "${tabName}" not found`);
   doAction(tab);
   await sleep(500);
 }
 
-/**
- * Find a switch/toggle-button by name in the prefs window.
- *
- * @param {Atspi.Accessible} prefsWindow
- * @param {string} switchName
- * @returns {Atspi.Accessible|null}
- */
 export function findSwitch(prefsWindow, switchName) {
-  return findAccessible(prefsWindow, function (node) {
+  return findAccessible(prefsWindow, (node) => {
     const role = (node.get_role_name() || "").toLowerCase();
     const isSwitch = role === "toggle button" || role === "check box" || role === "switch";
     return isSwitch && getName(node) === switchName;

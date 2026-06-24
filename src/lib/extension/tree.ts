@@ -961,7 +961,6 @@ export class Tree extends Node<string> {
 
     const metaWindow = next.nodeValue as Meta.Window;
     if (!metaWindow) return null;
-    const previousMetaWindow = this.extWm.focusMetaWindow;
     if (metaWindow.minimized) {
       next = this.focus(next, direction);
     } else {
@@ -969,18 +968,8 @@ export class Tree extends Node<string> {
       safeFocus(metaWindow, global.display.get_current_time());
       safeActivate(metaWindow, global.display.get_current_time());
 
-      const monitorArea = metaWindow.get_work_area_current_monitor();
-      const ptr = this.extWm.getPointer();
-      const pointerInside = Utils.rectContainsPoint(monitorArea, [ptr[0], ptr[1]]);
-      const metaWin = previousMetaWindow as Meta.Window | null;
-      const monitorChanged =
-        !!metaWin && metaWin.get_monitor && metaWin.get_monitor() !== metaWindow.get_monitor();
-
-      if (this.settings?.get_boolean("move-pointer-focus-enabled")) {
-        this.extWm.movePointerWith(next);
-      } else if (!pointerInside) {
-        this.extWm.movePointerWith(next, { force: monitorChanged });
-      }
+      this.extWm.pointerPolicy.onFocusChanged({ node: next, source: "keyboard" });
+      this.debugParentNodes(next);
     }
     return next;
   }
@@ -1041,9 +1030,8 @@ export class Tree extends Node<string> {
         // If same parent, swap
         if (next === node.previousSibling || next === node.nextSibling) {
           this.swapPairs(node, next);
-          if (this.settings?.get_boolean("move-pointer-focus-enabled")) {
-            this.extWm.movePointerWith(node);
-          }
+          this.extWm.pointerPolicy.onFocusChanged({ node, source: "move" });
+          this.debugParentNodes(node);
           // do not reset percent when swapped
           return true;
         } else {
@@ -1091,7 +1079,8 @@ export class Tree extends Node<string> {
           }
           const rect = targetMonRect;
           this.extWm.move(node.nodeValue as Meta.Window, rect);
-          this.extWm.movePointerWith(node);
+          this.extWm.pointerPolicy.onFocusChanged({ node, source: "move" });
+          this.debugParentNodes(node);
         } else {
           if (position === POSITION.AFTER) {
             currMonWsNode.appendChild(node);
@@ -1407,341 +1396,6 @@ export class Tree extends Node<string> {
     }
 
     return oldChild ? true : false;
-  }
-
-  render(from?: any) {
-    Logger.debug(`render tree ${from ? "from " + from : ""}`);
-    this.processNode(this);
-    this.apply(this);
-    this.cleanTree();
-    const debugMode = true;
-    if (debugMode) {
-      this.debugTree();
-    }
-    Logger.debug(`*********************************************`);
-  }
-
-  apply(node: Node<any>) {
-    if (!node) return;
-    const tiledChildren = node
-      .getNodeByMode(Window.WINDOW_MODES.TILE)
-      .filter((t: Node<any>) => t.isWindow());
-    tiledChildren.forEach((w: Node<any>) => {
-      if (w.renderRect) {
-        if (w.renderRect.width > 0 && w.renderRect.height > 0) {
-          // Window may have been destroyed since processNode computed renderRect
-          const metaWin = w.nodeValue;
-          try {
-            this.extWm.move(metaWin as Meta.Window, w.renderRect);
-          } catch {}
-        } else {
-          Logger.debug(`ignoring apply for ${w.renderRect.width}x${w.renderRect.height}`);
-        }
-      }
-
-      if ((w.nodeValue as any).firstRender) (w.nodeValue as any).firstRender = false;
-    });
-  }
-
-  cleanTree() {
-    // Phase 1: remove any cons with empty children
-    const orphanCons = this.getNodeByType(NODE_TYPES.CON).filter((c) => c.childNodes.length === 0);
-    const hasOrphanCons = orphanCons.length > 0;
-
-    orphanCons.forEach((o) => {
-      this.removeNode(o);
-    });
-
-    const invalidWindows = this.getNodeByType(NODE_TYPES.WINDOW).filter((w) => {
-      const metaWindow = w.nodeValue as Meta.Window;
-      const wmClass = (metaWindow as any).wm_class;
-      return wmClass === "gjs";
-    });
-
-    invalidWindows.forEach((w) => {
-      this.removeNode(w);
-    });
-
-    // Phase 2: remove any empty parent cons up to the single intermediate parent-window level
-    // Basically, flatten them?
-    // [con[con[con[con[window]]]]] --> [con[window]]
-    // TODO: help :)
-    const grandParentCons = this.getNodeByType(NODE_TYPES.CON).filter(
-      (c) => c.childNodes.length === 1 && c.childNodes[0].nodeType === NODE_TYPES.CON
-    );
-
-    grandParentCons.forEach((c) => {
-      c.layout = LAYOUT_TYPES.HSPLIT;
-    });
-
-    if (hasOrphanCons || invalidWindows.length > 0) {
-      this.processNode(this);
-      this.apply(this);
-    }
-  }
-
-  /**
-   *
-   * Credits: Do the i3-like calculations
-   *
-   */
-  processNode(node: Node<any>) {
-    if (!node) return;
-
-    // Render the Root, Workspace and Monitor
-    // For now, we let them render their children recursively
-    if (node.nodeType === NODE_TYPES.ROOT) {
-      node.childNodes.forEach((child: Node<any>) => {
-        this.processNode(child);
-      });
-    }
-
-    if (node.nodeType === NODE_TYPES.WORKSPACE) {
-      node.childNodes.forEach((child: Node<any>) => {
-        this.processNode(child);
-      });
-    }
-
-    const params: Record<string, any> = {};
-
-    if (node.nodeType === NODE_TYPES.MONITOR || node.nodeType === NODE_TYPES.CON) {
-      // The workarea from Meta.Window's assigned monitor
-      // is important so it computes to `remove` the panel size
-      // really well. However, this type of workarea would only
-      // appear if there is window present on the monitor.
-      if (node.childNodes.length === 0) {
-        return;
-      }
-
-      // If monitor, get the workarea
-      if (node.nodeType === NODE_TYPES.MONITOR) {
-        const monitorIndex = Utils.monitorIndex(node.nodeValue as string);
-        const monitorArea = global.display
-          .get_workspace_manager()
-          .get_active_workspace()
-          .get_work_area_for_monitor(monitorIndex);
-        if (!monitorArea) return; // there is no visible child window
-        node.rect = monitorArea;
-        node.rect = this.processGap(node);
-      }
-
-      const tiledChildren = this.getTiledChildren(node.childNodes);
-      const sizes = this.computeSizes(node, tiledChildren);
-
-      params.sizes = sizes;
-      const showTabs = this.settings?.get_boolean("showtab-decoration-enabled") ?? false;
-      params.stackedHeight = showTabs ? this.defaultStackHeight * Utils.dpi() : 0;
-      params.tiledChildren = tiledChildren;
-
-      const decoration = node.decoration;
-
-      if (decoration) {
-        const decoChildren = decoration.get_children();
-        decoChildren.forEach((decoChild: Clutter.Actor) => {
-          decoration.remove_child(decoChild);
-        });
-      }
-
-      // Skip windows whose actors were destroyed mid-render
-      tiledChildren
-        .filter((c: Node<any>) => c.isNodeValid())
-        .forEach((child: Node<any>, index: number) => {
-          // A monitor can contain a window or container child
-          if (node.layout === LAYOUT_TYPES.HSPLIT || node.layout === LAYOUT_TYPES.VSPLIT) {
-            this.processSplit(node, child, params, index);
-          } else if (node.layout === LAYOUT_TYPES.STACKED) {
-            this.processStacked(node, child, params, index);
-          } else if (node.layout === LAYOUT_TYPES.TABBED) {
-            this.processTabbed(node, child, params, index);
-          }
-          this.processNode(child);
-        });
-    }
-
-    if (node.isWindow()) {
-      if (!node.rect) node.rect = node.nodeValue.get_work_area_current_monitor();
-      node.renderRect = this.processGap(node);
-      node.renderRect = this.extWm.enforceUltrawideSize(node, node.renderRect);
-    }
-  }
-
-  /**
-   * Anvil processes both non-Window and Window gaps
-   */
-  processGap(node: Node<any>) {
-    const rect = node.rect!;
-    let nodeWidth = rect.width;
-    let nodeHeight = rect.height;
-    let nodeX = rect.x;
-    let nodeY = rect.y;
-    const gap = this.extWm.calculateGaps(node);
-
-    if (nodeWidth > gap * 2 && nodeHeight > gap * 2) {
-      nodeX += gap;
-      nodeY += gap;
-
-      // TODO - detect inbetween windows and adjust accordingly
-      // Also adjust depending on display scaling
-      nodeWidth -= gap * 2;
-      nodeHeight -= gap * 2;
-    }
-    return { x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight };
-  }
-
-  processSplit(node: Node<any>, child: Node<any>, params: Record<string, any>, index: number) {
-    const layout = node.layout;
-    const nodeRect = node.rect!;
-    let nodeWidth: number;
-    let nodeHeight: number;
-    let nodeX: number;
-    let nodeY: number;
-
-    if (layout === LAYOUT_TYPES.HSPLIT) {
-      // Divide the parent container's width
-      // depending on number of children. And use this
-      // to setup each child window's width.
-      nodeWidth = params.sizes[index];
-      nodeHeight = nodeRect.height;
-      nodeX = nodeRect.x;
-      if (index != 0) {
-        let i = 1;
-        while (i <= index) {
-          nodeX += params.sizes[i - 1];
-          i++;
-        }
-      }
-      nodeY = nodeRect.y;
-    } else if (layout === LAYOUT_TYPES.VSPLIT) {
-      // split vertically
-      // Conversely for vertical split, divide the parent container's height
-      // depending on number of children. And use this
-      // to setup each child window's height.
-      nodeWidth = nodeRect.width;
-      nodeHeight = params.sizes[index];
-      nodeX = nodeRect.x;
-      nodeY = nodeRect.y;
-      if (index != 0) {
-        let i = 1;
-        while (i <= index) {
-          nodeY += params.sizes[i - 1];
-          i++;
-        }
-      }
-    } else {
-      return;
-    }
-
-    child.rect = {
-      x: nodeX,
-      y: nodeY,
-      width: nodeWidth,
-      height: nodeHeight,
-    };
-  }
-
-  /**
-   * Process the child node here for the dimensions of the child stack/window,
-   * It will be moved to the Node class in the future as Node.render()
-   *
-   */
-  processStacked(node: Node<any>, child: Node<any>, params: Record<string, any>, index: number) {
-    const layout = node.layout;
-    const rect = node.rect!;
-    const nodeWidth = rect.width;
-    let nodeHeight = rect.height;
-    const nodeX = rect.x;
-    let nodeY = rect.y;
-    const stackHeight = this.defaultStackHeight;
-
-    if (layout === LAYOUT_TYPES.STACKED) {
-      if (node.childNodes.length > 1) {
-        nodeY += stackHeight * index;
-        nodeHeight -= stackHeight * index;
-      }
-
-      child.rect = {
-        x: nodeX,
-        y: nodeY,
-        width: nodeWidth,
-        height: nodeHeight,
-      };
-    }
-  }
-
-  /**
-   * Process the child node here for the dimensions of the child tab/window,
-   * It will be moved to the Node class in the future as Node.render()
-   *
-   */
-  processTabbed(node: Node<any>, child: Node<any>, params: Record<string, any>, _index: number) {
-    const layout = node.layout;
-    const nodeRect = node.rect!;
-    let nodeWidth: number;
-    let nodeHeight: number;
-    let nodeX: number;
-    let nodeY: number;
-
-    if (layout === LAYOUT_TYPES.TABBED) {
-      nodeWidth = nodeRect.width;
-      nodeX = nodeRect.x;
-      nodeY = nodeRect.y;
-      nodeHeight = nodeRect.height;
-
-      const alwaysShowDecorationTab = true;
-
-      if (node.childNodes.length > 1 || alwaysShowDecorationTab) {
-        nodeY = nodeRect.y + params.stackedHeight;
-        nodeHeight = nodeRect.height - params.stackedHeight;
-        if (node.decoration && child.isWindow() && child.isNodeValid()) {
-          const gap = this.extWm.calculateGaps(node);
-          const renderRect = this.processGap(node);
-          // Border actor may be gone if the window was destroyed mid-render
-          let borderWidth = 0;
-          try {
-            const actorWithBorder = child._actor as any;
-            if (actorWithBorder?.border) {
-              borderWidth = actorWithBorder.border.get_theme_node().get_border_width(St.Side.TOP);
-            }
-          } catch {}
-
-          // Make adjustments to the gaps
-          const adjust = 4 * Utils.dpi();
-          const adjustWidth = renderRect.width + (borderWidth * 2 + gap) / adjust;
-          const adjustX = renderRect.x - (gap + borderWidth * 2) / (adjust * 2);
-          let adjustY = renderRect.y - adjust;
-
-          if (gap === 0) {
-            adjustY = renderRect.y;
-          }
-
-          const decoration = node.decoration;
-
-          if (decoration !== null && decoration !== undefined) {
-            decoration.set_size(adjustWidth, params.stackedHeight);
-            decoration.set_position(adjustX, adjustY);
-            if (params.tiledChildren.length > 0 && params.stackedHeight !== 0) {
-              decoration.show();
-            } else {
-              decoration.hide();
-            }
-            if (child.tab && !decoration.contains(child.tab)) {
-              try {
-                decoration.add_child(child.tab);
-              } catch {}
-            }
-          }
-
-          child.render();
-        }
-      }
-
-      child.rect = {
-        x: nodeX,
-        y: nodeY,
-        width: nodeWidth,
-        height: nodeHeight,
-      };
-    }
   }
 
   computeSizes(node: Node<any>, childItems: Node<any>[]) {

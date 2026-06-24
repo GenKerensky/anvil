@@ -9,10 +9,11 @@
  * (at-spi-bus-launcher --launch-immediately --a11y=1), so Atspi.get_desktop(0)
  * is live by the time these specs run.
  *
- * The prefs window runs as a separate GTK4 process
- * (gnome-shell-extension-prefs). Both gnome-shell and the prefs process
- * register with the same AT-SPI bus, so the prefs window is visible from
- * inside gnome-shell's GJS via Atspi.get_desktop(0).
+ * The prefs window runs inside gnome-shell's own process via
+ * OpenExtensionPrefs D-Bus (not a separate GTK4 process anymore).
+ * Both gnome-shell and the prefs dialog register with the same AT-SPI bus,
+ * so the prefs window is visible from inside gnome-shell's GJS via
+ * Atspi.get_desktop(0).
  */
 
 import Atspi from "gi://Atspi";

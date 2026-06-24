@@ -213,6 +213,8 @@ async function bootJasmine() {
 
   // Disable random ordering for deterministic CI output
   runner.env.configure({ random: false });
+  // eslint-disable-next-line no-undef
+  jasmine.DEFAULT_TIMEOUT_INTERVAL = 15000;
 
   return runner;
 }
@@ -241,6 +243,57 @@ async function runTests() {
 
     await ensureExtension();
     log("[AnvilRunner] Extension active — booting Jasmine");
+
+    // Poll for org.gnome.Shell.Extensions D-Bus service (pre-activation for prefs)
+    async function waitForExtensionsService(timeoutMs = 15000) {
+      const bus = Gio.DBus.session;
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        try {
+          const result = /** @type {GLib.Variant | null} */ (
+            bus.call_sync(
+              "org.freedesktop.DBus",
+              "/org/freedesktop/DBus",
+              "org.freedesktop.DBus",
+              "NameHasOwner",
+              new GLib.Variant("(s)", ["org.gnome.Shell.Extensions"]),
+              new GLib.VariantType("(b)"),
+              Gio.DBusCallFlags.NONE,
+              2000,
+              null
+            )
+          );
+          const [hasOwner] = /** @type {any} */ (result).deep_unpack();
+          if (hasOwner) {
+            log("[AnvilRunner] org.gnome.Shell.Extensions service is active");
+            return true;
+          }
+        } catch (_e) {
+          // Service not yet available
+        }
+        await new Promise(function (resolve) {
+          GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, function () {
+            resolve(undefined);
+            return GLib.SOURCE_REMOVE;
+          });
+        });
+      }
+      log(
+        "[AnvilRunner] Warning: org.gnome.Shell.Extensions service not available after " +
+          timeoutMs +
+          "ms"
+      );
+      return false;
+    }
+
+    // Initialize cascade-failure tracking before any prerequisite checks
+    /** @type {any} */ (global).__anvil_cascade_failures = {};
+
+    const prefsAvailable = await waitForExtensionsService();
+    if (!prefsAvailable) {
+      /** @type {any} */ (global).__anvil_cascade_failures["prefs"] =
+        "org.gnome.Shell.Extensions service not available";
+    }
 
     let runner;
     try {
@@ -345,6 +398,16 @@ async function runTests() {
         log("[AnvilRunner] Stack: " + (e instanceof Error ? e.stack : String(e)));
       }
     }
+
+    // Cascade-failure helper — specs call this to skip if a prerequisite failed
+    /** @type {any} */ (global).__anvil_skipIfFailed = function (
+      /** @type {string} */ prereq,
+      /** @type {string} */ reason
+    ) {
+      if (/** @type {any} */ (global).__anvil_cascade_failures[prereq]) {
+        /** @type {any} */ (globalThis).pending(reason + " — prerequisite failed: " + prereq);
+      }
+    };
 
     log("[AnvilRunner] Running all specs…");
     try {

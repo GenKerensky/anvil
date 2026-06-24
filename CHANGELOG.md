@@ -17,6 +17,46 @@ testing, and ongoing maintainability.
   `.js` extension optional). Supports comma-separated values
   (`SPEC=resize,keyboard`). Unknown spec names produce a warning log without
   crashing. Omit `SPEC` to run all 16 specs (backward compatible).
+- **Conditional-wait helpers in shared-commands.js** — Four new polling-based
+  async helpers for reliable window operations in headless tests:
+  `waitForWindowCount(target, timeoutMs)`, `waitForGeometry(predicate, timeoutMs)`,
+  `waitForFocusChange(previousId, timeoutMs)`, and
+  `waitForFocusWindow(expectedId, timeoutMs)`. Added `getFocusedWindowId()`
+  helper. Converted `closeFocusedWindow()` to use polling instead of one-shot
+  delete.
+- **D-Bus pre-activation in integration runner** — `runner.js` polls for
+  `org.gnome.Shell.Extensions` service before running tests (15s timeout),
+  preventing race conditions in preferences tests that depend on the D-Bus
+  service.
+- **Cascade-failure tracking in integration runner** — `runner.js` sets
+  `global.__anvil_cascade_failures` and exposes
+  `global.__anvil_skipIfFailed(prereq, reason)` so specs can gracefully
+  skip (via `pending()`) when a prerequisite like the extensions D-Bus
+  service was unavailable.
+
+#### Changed
+
+- **Window-ID-based focus detection** — All 16 integration spec files now use
+  `getFocusedWindowId()` instead of `getFocusedWindowTitle()` for focus
+  assertions, eliminating title-collision flakiness when multiple windows of
+  the same application are open.
+- **Reduced resize settle delay** — `COMMAND_DELAY` lowered from 600ms to
+  250ms across all resize tests, speeding up the 74 data-driven resize tests
+  while maintaining reliability via conditional-wait polling.
+- **Fixed Jasmine timeout configuration in runner.js** — Uses
+  `jasmine.DEFAULT_TIMEOUT_INTERVAL = 15000` correctly as a global property,
+  ensuring the configured 15s timeout actually applies to all specs.
+- **Fixed `podman cp` path for spec files** — Added `/.` suffix to the specs
+  source path in `run.py` (`_pod_cp`), ensuring updated spec files correctly
+  overwrite their baked-in container copies rather than nesting under the
+  existing directory.
+
+#### Fixed
+
+- **4-window focus cycle test navigation** — The 4-window focus test now
+  uses a proper 2×2 grid navigation cycle (Right → Down → Left → Up)
+  instead of an incorrect linear pattern, ensuring all four directions are
+  exercised and at least 2 distinct windows are visited.
 
 ### 2026 — Anvil 1.0.0
 

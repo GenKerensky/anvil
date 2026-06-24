@@ -18,6 +18,7 @@ import {
   windowsFillWorkArea,
   sendAnvilCommand,
   sleep,
+  waitForWindowCount,
 } from "./helpers.js";
 
 const TOL = 0.03;
@@ -25,7 +26,7 @@ const TOL = 0.03;
 describe("Tiling", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(300);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -45,7 +46,7 @@ describe("Tiling", function () {
 
   it("single window fills the work area", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(800);
+    await waitForWindowCount(1, 5000);
 
     const area = getMonitorWorkArea();
     const wins = getWindowGeometries();
@@ -63,7 +64,7 @@ describe("Tiling", function () {
   it("two windows do not overlap and stay within work area", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(800);
+    await waitForWindowCount(2, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(2);
@@ -85,7 +86,7 @@ describe("Tiling", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(1000);
+    await waitForWindowCount(3, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(3);
@@ -98,7 +99,7 @@ describe("Tiling", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(1200);
+    await waitForWindowCount(4, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(4);
@@ -110,10 +111,10 @@ describe("Tiling", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(1000);
+    await waitForWindowCount(3, 5000);
 
     sendAnvilCommand({ name: "Swap", direction: "Left" });
-    await sleep(800);
+    await waitForWindowCount(3, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(3);
@@ -124,10 +125,10 @@ describe("Tiling", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(1000);
+    await waitForWindowCount(3, 5000);
 
     sendAnvilCommand({ name: "LayoutToggle" });
-    await sleep(800);
+    await waitForWindowCount(3, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(3);

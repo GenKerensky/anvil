@@ -134,12 +134,12 @@ describe("WindowManager - Commands", () => {
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
       const swapSpy = vi.spyOn(ctx.tree, "swap");
-      const movePointerSpy = vi.spyOn(wm(), "movePointerWith");
+      const pointerSpy = vi.spyOn(wm().pointerPolicy, "onFocusChanged");
 
       wm().command({ name: "Swap", direction: "RIGHT" });
 
       expect(swapSpy).toHaveBeenCalled();
-      expect(movePointerSpy).toHaveBeenCalled();
+      expect(pointerSpy).toHaveBeenCalled();
     });
 
     it("should do nothing if no focus node window", () => {

@@ -145,9 +145,25 @@ Tests are written as **Jasmine** specs that run inside gnome-shell via
 system-installed `jasmine-gjs` package, imports all spec files, executes them, and
 writes results as JSON.
 
+Before running specs, the runner performs **D-Bus pre-activation** — it polls for the
+`org.gnome.Shell.Extensions` service (15s timeout), preventing race conditions in
+preferences tests that depend on that D-Bus path. If the service is unavailable, the
+runner records a cascade failure and downstream specs can gracefully skip via
+`global.__anvil_skipIfFailed(prereq, reason)`.
+
 Specs cover: extension lifecycle, tiling geometry, keyboard shortcuts, window operations,
 resize clamping, monitor constraints, GSettings, preferences UI (via `gi://Atspi`), and
 tiling layouts — approximately 115+ data-driven tests.
+
+All tests import shared GJS helpers from `test/lib/shared-commands.js`, which provides
+reliable async utilities for launching apps, polling window state, and simulating
+Anvil keyboard shortcuts. Key polling helpers include `getFocusedWindowId()`,
+`waitForWindowCount()`, `waitForGeometry()`, `waitForFocusChange()`, and
+`waitForFocusWindow()` — these use GLib timeout-based polling to handle the
+inherently asynchronous nature of Wayland window management in headless mode.
+Focus detection uses stable **window IDs** (`Meta.Window.get_id()`) rather than
+titles, eliminating title-collision flakiness when multiple windows share the
+same application title.
 
 **What is NOT testable headless:**
 
@@ -229,31 +245,34 @@ podman exec -it --user gnomeshell <container-id> set-env.sh bash
 **Test structure:**
 
 ```
-test/integration/
-├── run.py                   # Python orchestrator (container lifecycle, results polling)
-├── runner.js                # Jasmine automation-script loaded by gnome-shell
-├── start-session.sh         # Session D-Bus + dbusmock + gnome-shell --headless
-├── set-env.sh               # Environment wrapper for podman exec commands
-├── build-container.sh       # Build container image for a Fedora version
-├── run-all.py               # Runs all Fedora versions in parallel
-├── specs/                   # Jasmine spec files (GJS ES modules)
-│   ├── extension-lifecycle.js
-│   ├── tiling.js
-│   ├── keyboard.js
-│   ├── focus.js
-│   ├── swap.js
-│   ├── move.js
-│   ├── operations.js
-│   ├── resize.js
-│   ├── constraints.js
-│   ├── layouts.js
-│   ├── floating.js
-│   ├── workspace.js
-│   ├── borders.js
-│   ├── minimize.js
-│   ├── settings.js
-│   └── preferences.js
-└── output/                  # Test artifacts (journal, screenshots, results JSON)
+test/
+├── lib/
+│   └── shared-commands.js       # Shared GJS helpers (both E2E + integration)
+└── integration/
+    ├── run.py                   # Python orchestrator (container lifecycle, results polling)
+    ├── runner.js                # Jasmine automation-script loaded by gnome-shell
+    ├── start-session.sh         # Session D-Bus + dbusmock + gnome-shell --headless
+    ├── set-env.sh               # Environment wrapper for podman exec commands
+    ├── build-container.sh       # Build container image for a Fedora version
+    ├── run-all.py               # Runs all Fedora versions in parallel
+    ├── specs/                   # Jasmine spec files (GJS ES modules)
+    │   ├── extension-lifecycle.js
+    │   ├── tiling.js
+    │   ├── keyboard.js
+    │   ├── focus.js
+    │   ├── swap.js
+    │   ├── move.js
+    │   ├── operations.js
+    │   ├── resize.js
+    │   ├── constraints.js
+    │   ├── layouts.js
+    │   ├── floating.js
+    │   ├── workspace.js
+    │   ├── borders.js
+    │   ├── minimize.js
+    │   ├── settings.js
+    │   └── preferences.js
+    └── output/                  # Test artifacts (journal, screenshots, results JSON)
 ```
 
 ### E2E Tests (Devkit)

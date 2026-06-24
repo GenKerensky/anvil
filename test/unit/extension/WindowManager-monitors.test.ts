@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
+import GLib from "gi://GLib";
 import { GRAB_TYPES } from "../../../src/lib/extension/window.js";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
@@ -313,6 +314,13 @@ describe("WindowManager - Per-Monitor Constraints", () => {
   // ----------------------------------------------------------------
   describe("_handleGrabOpEnd - resize tracking", () => {
     it("tracks resized windows when resize exemption is enabled", () => {
+      const timeoutAddSpy = vi
+        .spyOn(GLib, "timeout_add")
+        .mockImplementation((priority, interval, callback: any) => {
+          callback();
+          return Math.random();
+        });
+
       setupMonitor("DP-1");
       ctx.settings._values["monitor-constraints"] = [["DP-1", 3440, 1440, true, true]];
       const metaWindow = setupWindowOnMonitor(0, 99);
@@ -321,6 +329,8 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
       expect(wm()._resizedWindows.has(99)).toBe(true);
+
+      timeoutAddSpy.mockRestore();
     });
 
     it("does NOT track when resize exemption is off", () => {

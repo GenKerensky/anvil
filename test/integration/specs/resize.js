@@ -11,13 +11,13 @@ import {
   getNodePercents,
   sendAnvilCommand,
   closeAllWindows,
-  formatWindowState,
   clearMonitorConstraints,
   clearResizedWindows,
   setMonitorConstraint,
   getAnvilWM,
   getMonitorWorkArea,
   sleep,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
 
 const COMMAND_DELAY = 600;
@@ -114,7 +114,7 @@ async function testDirection(layout, constraint, dir) {
   for (let i = 0; i < layout.count; i++) {
     await launchApp("org.gnome.TextEditor.desktop");
   }
-  await settle(COMMAND_DELAY);
+  await waitForWindowCount(layout.count, 5000);
 
   clearMonitorConstraints();
   await settle(300);
@@ -273,7 +273,7 @@ describe("Resize", function () {
   it("keyboard resize right changes percent", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await settle(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getNodePercents();
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -292,7 +292,7 @@ describe("Resize", function () {
   it("keyboard resize right produces visible geometry change", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await settle(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);

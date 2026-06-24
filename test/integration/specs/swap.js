@@ -8,13 +8,13 @@
 import {
   launchApp,
   getWindowGeometries,
-  getFocusedWindowTitle,
   sendAnvilCommand,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
+  waitForFocusChange,
+  getFocusedWindowId,
 } from "../../lib/shared-commands.js";
-
-const COMMAND_DELAY = 800;
 
 /**
  * @param {string} dir
@@ -26,7 +26,7 @@ function swapDir(dir) {
 describe("Swap Directions", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -36,19 +36,20 @@ describe("Swap Directions", function () {
   it("Swap Left exchanges positions with the left window", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
     // Focus right window first
+    const prevFocusId = getFocusedWindowId();
     sendAnvilCommand({ name: "Focus", direction: "Right" });
-    await sleep(COMMAND_DELAY);
+    await waitForFocusChange(prevFocusId, 5000);
 
-    const focusedBefore = getFocusedWindowTitle();
+    const focusedBefore = getFocusedWindowId();
 
     swapDir("Left");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -72,22 +73,22 @@ describe("Swap Directions", function () {
     expect(overlap).toBe(false);
 
     // Focus should still be on the swapped window
-    const focusedAfter = getFocusedWindowTitle();
+    const focusedAfter = getFocusedWindowId();
     expect(focusedAfter).toBe(focusedBefore);
   });
 
   it("Swap Right exchanges positions with the right window", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
-    const focusedBefore = getFocusedWindowTitle();
+    const focusedBefore = getFocusedWindowId();
 
     swapDir("Right");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -110,24 +111,24 @@ describe("Swap Directions", function () {
     }
     expect(overlap).toBe(false);
 
-    const focusedAfter = getFocusedWindowTitle();
+    const focusedAfter = getFocusedWindowId();
     expect(focusedAfter).toBe(focusedBefore);
   });
 
   it("Swap Up/Down in vertical split", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     // Toggle to vertical layout
     sendAnvilCommand({ name: "LayoutToggle" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
     swapDir("Down");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -154,24 +155,25 @@ describe("Swap Directions", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(1000);
+    await waitForWindowCount(3, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(3);
 
     // Focus a specific window
+    const prevFocusId = getFocusedWindowId();
     sendAnvilCommand({ name: "Focus", direction: "Right" });
-    await sleep(COMMAND_DELAY);
-    const focusedBefore = getFocusedWindowTitle();
+    await waitForFocusChange(prevFocusId, 5000);
+    const focusedBefore = getFocusedWindowId();
 
     sendAnvilCommand({ name: "WindowSwapLastActive" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(3, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(3);
 
     // Focus should remain on the swapped window
-    const focusedAfter = getFocusedWindowTitle();
+    const focusedAfter = getFocusedWindowId();
     expect(focusedAfter).toBe(focusedBefore);
 
     // No overlap

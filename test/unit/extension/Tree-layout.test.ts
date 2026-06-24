@@ -1,11 +1,12 @@
 /**
- * Unit tests for Tree layout algorithms (processSplit, processStacked, processTabbed, computeSizes)
+ * Unit tests for TilingRender layout algorithms (processSplit, processStacked, processTabbed, computeSizes)
  * Ported from jcrussell/forge
  */
 
 import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import St from "gi://St";
 import { Tree, Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
+import { TilingRender } from "../../../src/lib/extension/tiling-render.js";
 
 const savedDisplay = (global as any).display;
 const savedWindowGroup = (global as any).window_group;
@@ -15,8 +16,9 @@ afterAll(() => {
   (global as any).window_group = savedWindowGroup;
 });
 
-describe("Tree Layout Algorithms", () => {
+describe("TilingRender Layout Algorithms", () => {
   let tree: Tree;
+  let tilingRender: TilingRender;
   let mockWindowManager: Record<string, any>;
 
   beforeEach(() => {
@@ -51,10 +53,22 @@ describe("Tree Layout Algorithms", () => {
       },
       determineSplitLayout: vi.fn(() => LAYOUT_TYPES.HSPLIT),
       bindWorkspaceSignals: vi.fn(),
-      calculateGaps: vi.fn(() => 10),
+      pointerPolicy: { onFocusChanged: vi.fn() },
     };
 
     tree = new Tree(mockWindowManager as any);
+    tilingRender = new TilingRender({
+      settings: mockWindowManager.ext.settings as any,
+      getTree: () => tree,
+      moveWindow: vi.fn(),
+      getAllNodeWindows: () => tree.getNodeByType(NODE_TYPES.WINDOW),
+      isFloatingExempt: vi.fn(() => false),
+      isActiveWindowWorkspaceTiled: vi.fn(() => true),
+      getTiledChildren: (nodes) => tree.getTiledChildren(nodes),
+      getResizeCount: () => 0,
+      findParent: (node, type) => tree.findParent(node, type),
+    });
+    mockWindowManager.tilingRender = tilingRender;
   });
 
   describe("computeSizes", () => {
@@ -167,8 +181,8 @@ describe("Tree Layout Algorithms", () => {
 
       const params = { sizes: [500, 500] };
 
-      tree.processSplit(container, child1, params, 0);
-      tree.processSplit(container, child2, params, 1);
+      tilingRender.processSplit(container, child1, params, 0);
+      tilingRender.processSplit(container, child2, params, 1);
 
       expect(child1.rect!.x).toBe(0);
       expect(child1.rect!.y).toBe(0);
@@ -192,9 +206,9 @@ describe("Tree Layout Algorithms", () => {
 
       const params = { sizes: [300, 500, 400] };
 
-      tree.processSplit(container, child1, params, 0);
-      tree.processSplit(container, child2, params, 1);
-      tree.processSplit(container, child3, params, 2);
+      tilingRender.processSplit(container, child1, params, 0);
+      tilingRender.processSplit(container, child2, params, 1);
+      tilingRender.processSplit(container, child3, params, 2);
 
       expect(child1.rect!.x).toBe(100);
       expect(child2.rect!.x).toBe(400);
@@ -217,7 +231,7 @@ describe("Tree Layout Algorithms", () => {
       const child = new Node(NODE_TYPES.CON, new St.Bin());
       const params = { sizes: [800] };
 
-      tree.processSplit(container, child, params, 0);
+      tilingRender.processSplit(container, child, params, 0);
 
       expect(child.rect!.x).toBe(200);
       expect(child.rect!.y).toBe(100);
@@ -235,8 +249,8 @@ describe("Tree Layout Algorithms", () => {
 
       const params = { sizes: [400, 400] };
 
-      tree.processSplit(container, child1, params, 0);
-      tree.processSplit(container, child2, params, 1);
+      tilingRender.processSplit(container, child1, params, 0);
+      tilingRender.processSplit(container, child2, params, 1);
 
       expect(child1.rect!.x).toBe(0);
       expect(child1.rect!.y).toBe(0);
@@ -260,9 +274,9 @@ describe("Tree Layout Algorithms", () => {
 
       const params = { sizes: [300, 300, 300] };
 
-      tree.processSplit(container, child1, params, 0);
-      tree.processSplit(container, child2, params, 1);
-      tree.processSplit(container, child3, params, 2);
+      tilingRender.processSplit(container, child1, params, 0);
+      tilingRender.processSplit(container, child2, params, 1);
+      tilingRender.processSplit(container, child3, params, 2);
 
       expect(child1.rect!.y).toBe(0);
       expect(child2.rect!.y).toBe(300);
@@ -284,7 +298,7 @@ describe("Tree Layout Algorithms", () => {
       const child = new Node(NODE_TYPES.CON, new St.Bin());
       const params = {};
 
-      tree.processStacked(container, child, params, 0);
+      tilingRender.processStacked(container, child, params, 0);
 
       expect(child.rect!.x).toBe(0);
       expect(child.rect!.y).toBe(0);
@@ -306,9 +320,9 @@ describe("Tree Layout Algorithms", () => {
       const params = {};
       const stackHeight = tree.defaultStackHeight;
 
-      tree.processStacked(container, child1, params, 0);
-      tree.processStacked(container, child2, params, 1);
-      tree.processStacked(container, child3, params, 2);
+      tilingRender.processStacked(container, child1, params, 0);
+      tilingRender.processStacked(container, child2, params, 1);
+      tilingRender.processStacked(container, child3, params, 2);
 
       expect(child1.rect!.y).toBe(0);
       expect(child1.rect!.height).toBe(800);
@@ -337,7 +351,7 @@ describe("Tree Layout Algorithms", () => {
       const child = new Node(NODE_TYPES.CON, new St.Bin());
       const params = {};
 
-      tree.processStacked(container, child, params, 0);
+      tilingRender.processStacked(container, child, params, 0);
 
       expect(child.rect!.x).toBe(100);
       expect(child.rect!.y).toBe(50);
@@ -354,7 +368,7 @@ describe("Tree Layout Algorithms", () => {
       const child = new Node(NODE_TYPES.CON, new St.Bin());
       const params = { stackedHeight: 0 };
 
-      tree.processTabbed(container, child, params, 0);
+      tilingRender.processTabbed(container, child, params, 0);
 
       expect(child.rect!.x).toBe(0);
       expect(child.rect!.y).toBe(0);
@@ -375,7 +389,7 @@ describe("Tree Layout Algorithms", () => {
       const stackedHeight = 35;
       const params = { stackedHeight };
 
-      tree.processTabbed(container, child, params, 0);
+      tilingRender.processTabbed(container, child, params, 0);
 
       expect(child.rect!.y).toBe(stackedHeight);
       expect(child.rect!.height).toBe(800 - stackedHeight);
@@ -398,9 +412,9 @@ describe("Tree Layout Algorithms", () => {
       const stackedHeight = 35;
       const params = { stackedHeight };
 
-      tree.processTabbed(container, child1, params, 0);
-      tree.processTabbed(container, child2, params, 1);
-      tree.processTabbed(container, child3, params, 2);
+      tilingRender.processTabbed(container, child1, params, 0);
+      tilingRender.processTabbed(container, child2, params, 1);
+      tilingRender.processTabbed(container, child3, params, 2);
 
       [child1, child2, child3].forEach((child) => {
         expect(child.rect!.x).toBe(0);
@@ -419,7 +433,7 @@ describe("Tree Layout Algorithms", () => {
       const child = new Node(NODE_TYPES.CON, new St.Bin());
       const params = { stackedHeight: 0 };
 
-      tree.processTabbed(container, child, params, 0);
+      tilingRender.processTabbed(container, child, params, 0);
 
       expect(child.rect!.x).toBe(200);
       expect(child.rect!.y).toBe(100);
@@ -432,9 +446,9 @@ describe("Tree Layout Algorithms", () => {
       node.rect = { x: 0, y: 0, width: 1000, height: 800 };
 
       const gap = 10;
-      mockWindowManager.calculateGaps.mockReturnValue(gap);
+      vi.spyOn(tilingRender, "calculateGaps").mockReturnValue(gap);
 
-      const result = tree.processGap(node);
+      const result = tilingRender.processGap(node);
 
       expect(result.x).toBe(gap);
       expect(result.y).toBe(gap);
@@ -447,9 +461,9 @@ describe("Tree Layout Algorithms", () => {
       node.rect = { x: 100, y: 50, width: 1000, height: 800 };
 
       const gap = 20;
-      mockWindowManager.calculateGaps.mockReturnValue(gap);
+      vi.spyOn(tilingRender, "calculateGaps").mockReturnValue(gap);
 
-      const result = tree.processGap(node);
+      const result = tilingRender.processGap(node);
 
       expect(result.x).toBe(120);
       expect(result.y).toBe(70);
@@ -462,9 +476,9 @@ describe("Tree Layout Algorithms", () => {
       node.rect = { x: 0, y: 0, width: 15, height: 15 };
 
       const gap = 10;
-      mockWindowManager.calculateGaps.mockReturnValue(gap);
+      vi.spyOn(tilingRender, "calculateGaps").mockReturnValue(gap);
 
-      const result = tree.processGap(node);
+      const result = tilingRender.processGap(node);
 
       expect(result.x).toBe(0);
       expect(result.y).toBe(0);
@@ -476,9 +490,9 @@ describe("Tree Layout Algorithms", () => {
       const node = new Node(NODE_TYPES.CON, new St.Bin());
       node.rect = { x: 10, y: 20, width: 1000, height: 800 };
 
-      mockWindowManager.calculateGaps.mockReturnValue(0);
+      vi.spyOn(tilingRender, "calculateGaps").mockReturnValue(0);
 
-      const result = tree.processGap(node);
+      const result = tilingRender.processGap(node);
 
       expect(result).toEqual({ x: 10, y: 20, width: 1000, height: 800 });
     });
@@ -499,8 +513,8 @@ describe("Tree Layout Algorithms", () => {
       const sizes = tree.computeSizes(container, children);
       const params = { sizes };
 
-      tree.processSplit(container, child1, params, 0);
-      tree.processSplit(container, child2, params, 1);
+      tilingRender.processSplit(container, child1, params, 0);
+      tilingRender.processSplit(container, child2, params, 1);
 
       expect(child1.rect!.width).toBe(720);
       expect(child2.rect!.width).toBe(480);

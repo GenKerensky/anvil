@@ -8,19 +8,17 @@
 import {
   launchApp,
   getWindowGeometries,
-  getAnvilWM,
   getSettings,
   sendAnvilCommand,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
-
-const COMMAND_DELAY = 800;
 
 describe("Advanced Layouts", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -35,10 +33,10 @@ describe("Advanced Layouts", function () {
   it("Split Horizontal creates a horizontal container", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     sendAnvilCommand({ name: "Split", orientation: "horizontal" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(2);
@@ -53,10 +51,10 @@ describe("Advanced Layouts", function () {
   it("Split Vertical creates a vertical container", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     sendAnvilCommand({ name: "Split", orientation: "vertical" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(2);
@@ -74,10 +72,10 @@ describe("Advanced Layouts", function () {
 
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     sendAnvilCommand({ name: "LayoutStackedToggle" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(2);
@@ -96,10 +94,10 @@ describe("Advanced Layouts", function () {
 
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     sendAnvilCommand({ name: "LayoutTabbedToggle" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(2);
@@ -118,17 +116,17 @@ describe("Advanced Layouts", function () {
 
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     // First switch to tabbed mode
     sendAnvilCommand({ name: "LayoutTabbedToggle" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getSettings().get_boolean("showtab-decoration-enabled");
     expect(before).toBe(true);
 
     sendAnvilCommand({ name: "ShowTabDecorationToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const after = getSettings().get_boolean("showtab-decoration-enabled");
     expect(after).toBe(false);
@@ -137,7 +135,7 @@ describe("Advanced Layouts", function () {
   it("LayoutToggle cycles between horizontal and vertical", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -148,7 +146,7 @@ describe("Advanced Layouts", function () {
     const isHorizontalInitially = Math.abs(a1.y - b1.y) / Math.abs(a1.y || 1) < 0.05;
 
     sendAnvilCommand({ name: "LayoutToggle" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);

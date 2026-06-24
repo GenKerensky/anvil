@@ -42,13 +42,28 @@ describe("Extension Lifecycle", function () {
   it("can be disabled and re-enabled without errors", async function () {
     // Disable
     Main.extensionManager.disableExtension(UUID);
-    await sleep(1500);
+
+    // Wait for extension to become inactive (poll every 200ms, up to 10s)
+    const disableStart = Date.now();
+    while (Date.now() - disableStart < 10000) {
+      const ext = Main.extensionManager.lookup(UUID);
+      if (ext && ext.state === STATE_INACTIVE) break;
+      await sleep(200);
+    }
+
     const ext = Main.extensionManager.lookup(UUID);
     expect(ext.state).toBe(STATE_INACTIVE);
 
     // Re-enable
     Main.extensionManager.enableExtension(UUID);
-    await sleep(3000);
+
+    // Wait for extension to become active (poll every 200ms, up to 10s)
+    const enableStart = Date.now();
+    while (Date.now() - enableStart < 10000) {
+      const extAfter = Main.extensionManager.lookup(UUID);
+      if (extAfter && extAfter.state === STATE_ACTIVE) break;
+      await sleep(200);
+    }
 
     const extAfter = Main.extensionManager.lookup(UUID);
     expect(extAfter.state).toBe(STATE_ACTIVE);

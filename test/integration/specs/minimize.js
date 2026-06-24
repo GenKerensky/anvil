@@ -12,9 +12,8 @@ import {
   getWindowCount,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
-
-const COMMAND_DELAY = 1000;
 
 /** @returns {Meta.Window | null} */
 function getFocusedWindow() {
@@ -24,7 +23,7 @@ function getFocusedWindow() {
 describe("Minimize Behavior", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -35,7 +34,7 @@ describe("Minimize Behavior", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(3, 5000);
 
     expect(getWindowCount()).toBe(3);
 
@@ -48,7 +47,7 @@ describe("Minimize Behavior", function () {
     if (w) {
       w.minimize();
     }
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     // Should still report 3 windows (minimized still counts)
     expect(getWindowCount()).toBe(3);
@@ -89,7 +88,7 @@ describe("Minimize Behavior", function () {
   it("unminimizing a window restores tiling", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -100,13 +99,13 @@ describe("Minimize Behavior", function () {
     if (w) {
       w.minimize();
     }
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     // Unminimize it
     if (w) {
       w.unminimize();
     }
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);

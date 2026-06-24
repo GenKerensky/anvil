@@ -154,6 +154,12 @@ export function getFocusedWindowTitle() {
   return w ? w.get_title() : null;
 }
 
+/** @returns {number | null} */
+export function getFocusedWindowId() {
+  const w = global.display.get_focus_window();
+  return w ? w.get_id() : null;
+}
+
 /** @returns {{ x: number, y: number, width: number, height: number }} */
 export function getMonitorWorkArea() {
   const workspace = global.display.get_workspace_manager().get_active_workspace();
@@ -161,10 +167,93 @@ export function getMonitorWorkArea() {
   return { x: area.x, y: area.y, width: area.width, height: area.height };
 }
 
-export async function closeFocusedWindow() {
+/**
+ * @param {number} target
+ * @param {number} [timeoutMs=5000]
+ * @returns {Promise<void>}
+ */
+export async function waitForWindowCount(target, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (getWindowCount() === target) return;
+    await sleep(200);
+  }
+  throw new Error(
+    "Timed out waiting for window count: expected " +
+      target +
+      ", got " +
+      getWindowCount() +
+      " after " +
+      timeoutMs +
+      "ms"
+  );
+}
+
+/**
+ * @param {(geometries: Array<{title: string | null, x: number, y: number, width: number, height: number, minimized: boolean}>) => boolean} predicate
+ * @param {number} [timeoutMs=5000]
+ * @returns {Promise<Array<{title: string | null, x: number, y: number, width: number, height: number, minimized: boolean}>>}
+ */
+export async function waitForGeometry(predicate, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const geo = getWindowGeometries();
+    if (predicate(geo)) return geo;
+    await sleep(200);
+  }
+  throw new Error("Timed out waiting for geometry predicate after " + timeoutMs + "ms");
+}
+
+/**
+ * @param {number | null} previousId
+ * @param {number} [timeoutMs=5000]
+ * @returns {Promise<number | null>}
+ */
+export async function waitForFocusChange(previousId, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const id = getFocusedWindowId();
+    if (id !== previousId) return id;
+    await sleep(200);
+  }
+  throw new Error(
+    "Timed out waiting for focus to change from window " + previousId + " after " + timeoutMs + "ms"
+  );
+}
+
+/**
+ * @param {number | null} expectedId
+ * @param {number} [timeoutMs=5000]
+ * @returns {Promise<number | null>}
+ */
+export async function waitForFocusWindow(expectedId, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const id = getFocusedWindowId();
+    if (id === expectedId) return id;
+    await sleep(200);
+  }
+  throw new Error(
+    "Timed out waiting for window " + expectedId + " to be focused after " + timeoutMs + "ms"
+  );
+}
+
+/**
+ * Close the currently focused window and wait for it to disappear.
+ * @param {number} [timeoutMs=5000]
+ * @returns {Promise<void>}
+ */
+export async function closeFocusedWindow(timeoutMs = 5000) {
   const w = global.display.get_focus_window();
-  if (w) w.delete(global.display.get_current_time());
-  await sleep(500);
+  if (!w) throw new Error("No focused window to close");
+  const before = getWindowCount();
+  w.delete(global.display.get_current_time());
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(200);
+    if (getWindowCount() < before) return;
+  }
+  throw new Error("Timed out waiting for focused window to close after " + timeoutMs + "ms");
 }
 
 export async function closeAllWindows() {

@@ -14,14 +14,13 @@ import {
   sendAnvilCommand,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
-
-const COMMAND_DELAY = 800;
 
 describe("Workspace", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
     // Clear any workspace skip settings
     getSettings().set_string("workspace-skip-tile", "");
   });
@@ -35,7 +34,7 @@ describe("Workspace", function () {
   it("WorkspaceActiveTileToggle skips tiling on current workspace", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
@@ -51,7 +50,7 @@ describe("Workspace", function () {
 
     // Toggle workspace skip
     sendAnvilCommand({ name: "WorkspaceActiveTileToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const skipStr = getSettings().get_string("workspace-skip-tile");
     expect(skipStr).toContain("0");
@@ -71,18 +70,18 @@ describe("Workspace", function () {
 
   it("WorkspaceActiveTileToggle toggles back to tiling", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     // Skip workspace
     sendAnvilCommand({ name: "WorkspaceActiveTileToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     let skipStr = getSettings().get_string("workspace-skip-tile");
     expect(skipStr).toContain("0");
 
     // Toggle back
     sendAnvilCommand({ name: "WorkspaceActiveTileToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     skipStr = getSettings().get_string("workspace-skip-tile");
     expect(skipStr).not.toContain("0");

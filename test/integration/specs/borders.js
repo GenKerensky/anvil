@@ -12,14 +12,13 @@ import {
   sendAnvilCommand,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
 } from "../../lib/shared-commands.js";
-
-const COMMAND_DELAY = 800;
 
 describe("Borders and Gaps", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
     // Reset to known defaults
     getSettings().set_boolean("focus-border-toggle", false);
     getSettings().set_uint("window-gap-size-increment", 0);
@@ -36,13 +35,13 @@ describe("Borders and Gaps", function () {
     expect(before).toBe(false);
 
     sendAnvilCommand({ name: "FocusBorderToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const after = getSettings().get_boolean("focus-border-toggle");
     expect(after).toBe(true);
 
     sendAnvilCommand({ name: "FocusBorderToggle" });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const restored = getSettings().get_boolean("focus-border-toggle");
     expect(restored).toBe(false);
@@ -51,14 +50,14 @@ describe("Borders and Gaps", function () {
   it("GapSize increase changes window spacing", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
     // Increase gap
     sendAnvilCommand({ name: "GapSize", amount: 1 });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -82,11 +81,11 @@ describe("Borders and Gaps", function () {
 
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     // Decrease gap
     sendAnvilCommand({ name: "GapSize", amount: -1 });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     expect(getSettings().get_uint("window-gap-size-increment")).toBe(3);
   });
@@ -95,17 +94,17 @@ describe("Borders and Gaps", function () {
     getSettings().set_uint("window-gap-size-increment", 0);
 
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(1, 5000);
 
     // Try to decrease below 0
     sendAnvilCommand({ name: "GapSize", amount: -5 });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     expect(getSettings().get_uint("window-gap-size-increment")).toBe(0);
 
     // Try to increase above 8
     sendAnvilCommand({ name: "GapSize", amount: 10 });
-    await sleep(COMMAND_DELAY);
+    await sleep(200);
 
     expect(getSettings().get_uint("window-gap-size-increment")).toBe(8);
   });

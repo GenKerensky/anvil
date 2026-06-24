@@ -431,33 +431,38 @@ import { launchApp, sendKeyCombo, getWindowGeometries } from "../lib/shared-comm
 
 ### What's in the shared module
 
-| Function                               | Purpose                                                        |
-| -------------------------------------- | -------------------------------------------------------------- |
-| `launchApp(desktopFile)`               | Open any app, wait for window                                  |
-| `openWindow()`                         | Convenience: open gnome-text-editor                            |
-| `getWindowCount()`                     | Non-minimized window count                                     |
-| `getWindowGeometries()`                | Array of `{title, x, y, width, height, minimized}`             |
-| `getFocusedWindowTitle()`              | Title of focused window                                        |
-| `getMonitorWorkArea()`                 | `{x, y, width, height}` for monitor 0                          |
-| `windowsOverlap(wins)`                 | AABB overlap check                                             |
-| `windowsFillWorkArea(wins, tolerance)` | Area coverage ratio check                                      |
-| `closeFocusedWindow()`                 | Delete focused window                                          |
-| `closeAllWindows()`                    | Delete all + poll until closed                                 |
-| `sendKeyCombo(combo)`                  | Simulate shortcuts ("super+h", "super+j", "super+c", "alt+f4") |
-| `sendAnvilCommand(action)`             | Direct `wm.command(action)` call                               |
-| `getAnvilWM()`                         | Returns `global.__anvil_extWm` or fallback                     |
-| `getAnvilSettings()`                   | Returns `global.__anvil_settings` or fallback                  |
-| `getNodePercents()`                    | Tree node percents from `extWm`                                |
-| `clearResizedWindows()`                | Clears `_resizedWindows` Map                                   |
-| `clearMonitorConstraints()`            | Resets monitor constraints GSettings                           |
-| `setMonitorConstraint(...)`            | Sets a single monitor constraint                               |
-| `takeScreenshot(path)`                 | D-Bus Screenshot API (devkit only)                             |
-| `formatWindowState(wins)`              | Human-readable debug string                                    |
-| `isExtensionActive()`                  | Checks extension state === ACTIVE                              |
-| `getExtensionErrors()`                 | Returns extension error array                                  |
-| `sleep(ms)`                            | Promise-based GLib timeout                                     |
-| `getSettings()`                        | Cached `Gio.Settings` for Anvil schema                         |
-| `getExtension()`                       | `Main.extensionManager.lookup(UUID)`                           |
+| Function                                    | Purpose                                                        |
+| ------------------------------------------- | -------------------------------------------------------------- |
+| `launchApp(desktopFile)`                    | Open any app, wait for window                                  |
+| `openWindow()`                              | Convenience: open gnome-text-editor                            |
+| `getWindowCount()`                          | Non-minimized window count                                     |
+| `getWindowGeometries()`                     | Array of `{title, x, y, width, height, minimized}`             |
+| `getFocusedWindowTitle()`                   | Title of focused window                                        |
+| `getMonitorWorkArea()`                      | `{x, y, width, height}` for monitor 0                          |
+| `windowsOverlap(wins)`                      | AABB overlap check                                             |
+| `windowsFillWorkArea(wins, tolerance)`      | Area coverage ratio check                                      |
+| `closeFocusedWindow(timeoutMs)`             | Delete focused window + poll until closed                      |
+| `closeAllWindows()`                         | Delete all + poll until closed                                 |
+| `getFocusedWindowId()`                      | `Meta.Window.get_id()` of focused window                       |
+| `waitForWindowCount(target, timeoutMs)`     | Poll until window count equals target                          |
+| `waitForGeometry(predicate, timeoutMs)`     | Poll until geometry predicate returns true                     |
+| `waitForFocusChange(previousId, timeoutMs)` | Poll until focus changes from `previousId`                     |
+| `waitForFocusWindow(expectedId, timeoutMs)` | Poll until a specific window ID is focused                     |
+| `sendKeyCombo(combo)`                       | Simulate shortcuts ("super+h", "super+j", "super+c", "alt+f4") |
+| `sendAnvilCommand(action)`                  | Direct `wm.command(action)` call                               |
+| `getAnvilWM()`                              | Returns `global.__anvil_extWm` or fallback                     |
+| `getAnvilSettings()`                        | Returns `global.__anvil_settings` or fallback                  |
+| `getNodePercents()`                         | Tree node percents from `extWm`                                |
+| `clearResizedWindows()`                     | Clears `_resizedWindows` Map                                   |
+| `clearMonitorConstraints()`                 | Resets monitor constraints GSettings                           |
+| `setMonitorConstraint(...)`                 | Sets a single monitor constraint                               |
+| `takeScreenshot(path)`                      | D-Bus Screenshot API (devkit only)                             |
+| `formatWindowState(wins)`                   | Human-readable debug string                                    |
+| `isExtensionActive()`                       | Checks extension state === ACTIVE                              |
+| `getExtensionErrors()`                      | Returns extension error array                                  |
+| `sleep(ms)`                                 | Promise-based GLib timeout                                     |
+| `getSettings()`                             | Cached `Gio.Settings` for Anvil schema                         |
+| `getExtension()`                            | `Main.extensionManager.lookup(UUID)`                           |
 
 ### Integration-only helpers (AT-SPI)
 

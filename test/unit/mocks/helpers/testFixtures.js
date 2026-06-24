@@ -14,6 +14,7 @@ import { Tree, LAYOUT_TYPES } from "../../../../src/lib/extension/tree.js";
 export const DEFAULT_SETTINGS = {
   "tiling-mode-enabled": true,
   "focus-on-hover-enabled": false,
+  "move-pointer-focus-enabled": false,
   "auto-split-enabled": false,
   "stacked-tiling-mode-enabled": true,
   "tabbed-tiling-mode-enabled": true,
@@ -181,6 +182,14 @@ export function createTreeFixture(options = {}) {
       sameParentMonitor: vi.fn(() => true),
       floatingWindow: vi.fn(() => false),
       calculateGaps: vi.fn(() => 0),
+      tilingRender: {
+        render: vi.fn(),
+        processNode: vi.fn(),
+        processGap: vi.fn((node) => node?.rect ?? { x: 0, y: 0, width: 0, height: 0 }),
+        calculateGaps: vi.fn(() => 0),
+        enforceUltrawideSize: vi.fn((_, r) => r),
+      },
+      pointerPolicy: { onFocusChanged: vi.fn() },
     });
   }
 

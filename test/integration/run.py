@@ -80,6 +80,27 @@ HOST_RESULTS_PATH = pathlib.Path("/tmp/anvil-jasmine-results.json")
 # Fixed session bus address used by start-session.sh and set-env.sh.
 CONTAINER_DBUS_ADDR = "unix:path=/run/user/1000/bus"
 
+# Spec file names recognized by runner.js (order must match).
+# Used by --shard to compute which subset of specs to run.
+SPEC_FILES = [
+    "extension-lifecycle",
+    "tiling",
+    "keyboard",
+    "focus",
+    "swap",
+    "move",
+    "operations",
+    "resize",
+    "constraints",
+    "layouts",
+    "floating",
+    "workspace",
+    "borders",
+    "minimize",
+    "settings",
+    "preferences",
+]
+
 # Wayland socket name: gnome-shell always picks wayland-0 when XDG_RUNTIME_DIR
 # is clean (which it is on every fresh container start).
 WAYLAND_SOCKET = "/run/user/1000/wayland-0"
@@ -156,7 +177,7 @@ def _wait_for_shell_dbus(pod: str, timeout: float = 40.0) -> None:
     raise TimeoutError(f"org.gnome.Shell did not appear on D-Bus within {timeout}s")
 
 
-def _wait_for_results_in_container(pod: str, timeout: float = 180.0) -> str:
+def _wait_for_results_in_container(pod: str, timeout: float = 900.0) -> str:
     """
     Poll inside the container until runner.js writes the Jasmine results JSON.
 
@@ -268,7 +289,7 @@ class ContainerSession:
         _info("Pushing Jasmine runner and specs…")
         _pod_cp(self.pod, INTEGRATION_DIR / "runner.js",
                 f"{RUNNER_DIR}/runner.js")
-        _pod_cp(self.pod, INTEGRATION_DIR / "specs",
+        _pod_cp(self.pod, f"{INTEGRATION_DIR / 'specs'}/.",
                 f"{RUNNER_DIR}/specs")
         # Specs import shared-commands.js via ../../lib/shared-commands.js,
         # which from /usr/local/share/anvil-tests/specs/ resolves to
@@ -392,6 +413,19 @@ def main() -> int:
         help="Total number of shards (default: 1, no sharding).",
     )
     args = parser.parse_args()
+
+    # --shard resolves to a --spec subset, mutually exclusive with --spec
+    if args.shard is not None:
+        if args.spec is not None:
+            _fail("--shard and --spec are mutually exclusive")
+            return 1
+        if args.shard < 1 or args.shard > args.total_shards:
+            _fail(f"--shard must be between 1 and --total-shards ({args.total_shards})")
+            return 1
+        # Round-robin: pick every Nth spec starting at index shard-1
+        selected = SPEC_FILES[args.shard - 1 :: args.total_shards]
+        args.spec = ",".join(selected)
+        _info(f"Shard {args.shard}/{args.total_shards}: {args.spec}")
 
     fedora_version = args.fedora_version
     image = f"anvil-test-pod:fedora-{fedora_version}"

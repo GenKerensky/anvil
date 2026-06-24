@@ -8,13 +8,13 @@
 import {
   launchApp,
   getWindowGeometries,
-  getFocusedWindowTitle,
   sendAnvilCommand,
   closeAllWindows,
   sleep,
+  waitForWindowCount,
+  waitForFocusChange,
+  getFocusedWindowId,
 } from "../../lib/shared-commands.js";
-
-const COMMAND_DELAY = 800;
 
 /**
  * @param {string} dir
@@ -26,7 +26,7 @@ function moveDir(dir) {
 describe("Move Directions", function () {
   beforeEach(async function () {
     await closeAllWindows();
-    await sleep(500);
+    await sleep(200);
   });
 
   afterEach(async function () {
@@ -36,16 +36,16 @@ describe("Move Directions", function () {
   it("Move Right repositions the focused window", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
-    const focusedTitle = getFocusedWindowTitle();
-    expect(focusedTitle).toBeTruthy();
+    const focusedId = getFocusedWindowId();
+    expect(focusedId).toBeTruthy();
 
     moveDir("Right");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -69,26 +69,27 @@ describe("Move Directions", function () {
     expect(overlap).toBe(false);
 
     // Focus should still be on the moved window
-    expect(getFocusedWindowTitle()).toBe(focusedTitle);
+    expect(getFocusedWindowId()).toBe(focusedId);
   });
 
   it("Move Left repositions the focused window", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     // Focus the right window first
+    const prevFocusId = getFocusedWindowId();
     sendAnvilCommand({ name: "Focus", direction: "Right" });
-    await sleep(COMMAND_DELAY);
+    await waitForFocusChange(prevFocusId, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
-    const focusedTitle = getFocusedWindowTitle();
-    expect(focusedTitle).toBeTruthy();
+    const focusedId = getFocusedWindowId();
+    expect(focusedId).toBeTruthy();
 
     moveDir("Left");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -110,25 +111,25 @@ describe("Move Directions", function () {
     }
     expect(overlap).toBe(false);
 
-    expect(getFocusedWindowTitle()).toBe(focusedTitle);
+    expect(getFocusedWindowId()).toBe(focusedId);
   });
 
   it("Move Up/Down in vertical layout", async function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     // Toggle to vertical layout
     sendAnvilCommand({ name: "LayoutToggle" });
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
-    const focusedTitle = getFocusedWindowTitle();
+    const focusedId = getFocusedWindowId();
 
     moveDir("Down");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(2, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(2);
@@ -150,7 +151,7 @@ describe("Move Directions", function () {
     }
     expect(overlap).toBe(false);
 
-    expect(getFocusedWindowTitle()).toBe(focusedTitle);
+    expect(getFocusedWindowId()).toBe(focusedId);
   });
 
   it("Move through four windows maintains tiling", async function () {
@@ -158,16 +159,16 @@ describe("Move Directions", function () {
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
     await launchApp("org.gnome.TextEditor.desktop");
-    await sleep(1200);
+    await waitForWindowCount(4, 5000);
 
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(4);
 
     // Move right a few times
     moveDir("Right");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(4, 5000);
     moveDir("Right");
-    await sleep(COMMAND_DELAY);
+    await waitForWindowCount(4, 5000);
 
     const after = getWindowGeometries();
     expect(after.length).toBeGreaterThanOrEqual(4);
