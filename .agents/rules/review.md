@@ -1,10 +1,3 @@
----
-name: review
-description: Pre-submission review checklist to ensure the extension passes GNOME Extensions Store review — typechecking, linting, 75%+ test coverage, prettier formatting, and E2E tests across all supported Fedora/GNOME versions
-license: MIT
-compatibility: agents
----
-
 # Review
 
 Comprehensive pre-submission checklist for getting the Anvil extension approved on [extensions.gnome.org](https://extensions.gnome.org). Based on the [GNOME Shell Extensions Review Guidelines](https://gjs.guide/extensions/review-guidelines/review-guidelines.html) and the [GNOME Shell development experience](https://lknuth.dev/writings/making_gnome_shell_extensions/).

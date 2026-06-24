@@ -1,10 +1,3 @@
----
-name: gnome-shell-upgrade
-description: Upgrade Anvil to support a new GNOME Shell / Fedora release — fetch migration guides, run E2E tests, update version metadata and docs
-license: MIT
-compatibility: agents
----
-
 # GNOME Shell Upgrade
 
 Step-by-step workflow for upgrading this extension to support a new GNOME Shell / Fedora release.

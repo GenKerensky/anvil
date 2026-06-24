@@ -11,18 +11,20 @@ test pipeline before marking work complete.
 
 ## Context routing
 
-| When…                                             | Read                                 |
-| ------------------------------------------------- | ------------------------------------ |
-| Starting any task / unfamiliar with the project   | `.agents/context/overview.md`        |
-| Building, installing, or running tests            | `.agents/context/build.md`           |
-| Navigating source layout or tsconfigs             | `.agents/context/architecture.md`    |
-| Headless/devkit sessions, monitor resolution      | `.agents/context/debugging.md`       |
-| Before finishing a code change                    | `.agents/rules/workflow.md`          |
-| Writing git commit messages                       | Conventional Commits (below)         |
-| Coding style, lint, UUID, paths                   | `.agents/rules/conventions.md`       |
-| Writing `gnome-shell --automation-script` tests   | `.agents/rules/gjs-automation.md`    |
-| Architectural consistency / past trade-offs       | `.agents/memory/decisions.md`        |
-| Historical debug session (2026-05-17 resize work) | `.agents/logs/session-2026-05-17.md` |
+| When…                                             | Read                                   |
+| ------------------------------------------------- | -------------------------------------- |
+| Starting any task / unfamiliar with the project   | `.agents/context/overview.md`          |
+| Building, installing, or running tests            | `.agents/context/build.md`             |
+| Navigating source layout or tsconfigs             | `.agents/context/architecture.md`      |
+| Headless/devkit sessions, monitor resolution      | `.agents/context/debugging.md`         |
+| Before finishing a code change                    | `.agents/rules/workflow.md`            |
+| Pre-submission review for extensions.gnome.org    | `.agents/rules/review.md`              |
+| Upgrading for new GNOME Shell / Fedora release    | `.agents/rules/gnome-shell-upgrade.md` |
+| Writing git commit messages                       | Conventional Commits (below)           |
+| Coding style, lint, UUID, paths                   | `.agents/rules/conventions.md`         |
+| Writing `gnome-shell --automation-script` tests   | `.agents/rules/gjs-automation.md`      |
+| Architectural consistency / past trade-offs       | `.agents/memory/decisions.md`          |
+| Historical debug session (2026-05-17 resize work) | `.agents/logs/session-2026-05-17.md`   |
 
 ## Skills
 
@@ -31,9 +33,7 @@ Domain guides in `.agents/skills/<name>/SKILL.md` — load the relevant skill fo
 | Skill                    | Use when                                     |
 | ------------------------ | -------------------------------------------- |
 | `testing`                | Unit, integration, or E2E tests              |
-| `review`                 | Pre-submission for extensions.gnome.org      |
 | `gnome-shell-debug`      | GJS logs, Looking Glass, GDB, devkit scripts |
-| `gnome-shell-upgrade`    | New GNOME Shell / Fedora release port        |
 | `meta-window-management` | Meta.Window tiling, resize, focus            |
 | `preferences-window`     | GTK4/Adwaita prefs dialog                    |
 | `quick-settings`         | Quick Settings panel                         |

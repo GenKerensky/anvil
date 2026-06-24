@@ -668,5 +668,5 @@ npm test
 - `.agents/context/build.md` — Build and test commands
 - `.agents/context/debugging.md` — High-level pointers (seams owned by debug skill)
 - `.agents/rules/workflow.md` — Agent workflow and test gates
-- `.agents/skills/review/` — Pre-submission review checklist
+- `.agents/rules/review.md` — Pre-submission review checklist
 - `.agents/skills/gnome-shell-debug/` — Devkit Seam (default) and Headless Seam, launchers, LG, GDB, logs
