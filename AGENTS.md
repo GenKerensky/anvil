@@ -18,6 +18,7 @@ test pipeline before marking work complete.
 | Navigating source layout or tsconfigs             | `.agents/context/architecture.md`    |
 | Headless/devkit sessions, monitor resolution      | `.agents/context/debugging.md`       |
 | Before finishing a code change                    | `.agents/rules/workflow.md`          |
+| Writing git commit messages                       | Conventional Commits (below)         |
 | Coding style, lint, UUID, paths                   | `.agents/rules/conventions.md`       |
 | Writing `gnome-shell --automation-script` tests   | `.agents/rules/gjs-automation.md`    |
 | Architectural consistency / past trade-offs       | `.agents/memory/decisions.md`        |
@@ -41,6 +42,26 @@ Domain guides in `.agents/skills/<name>/SKILL.md` — load the relevant skill fo
 | `notifications`          | MessageTray / Main.notify                    |
 | `search-provider`        | Overview search provider                     |
 | `translations`           | gettext POT/PO/MO                            |
+
+## Commits
+
+Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for every commit message:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+- **Types:** `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore`
+- **Subject:** imperative mood, lowercase, no trailing period; keep the first line ≤72 characters
+- **Scope:** optional area hint (e.g. `window`, `prefs`, `test`)
+- **Body:** explain _why_ when the change is not obvious from the diff
+- **Breaking changes:** `BREAKING CHANGE:` footer or `type!:` / `type(scope)!:` in the subject
+
+Examples: `fix(window): ignore wl-clipboard ephemeral helpers`, `test: add lifecycle coverage for float destroy`
 
 ## Capabilities
 
