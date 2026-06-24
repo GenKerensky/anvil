@@ -546,48 +546,11 @@ global.__anvil_extWm = this.extWm;
 global.__anvil_settings = this.settings;
 ```
 
-### `--headless` vs `--devkit`
+### Devkit vs Headless sessions (see gnome-shell-debug skill)
 
-| Flag         | Behavior                                          | Use case              |
-| ------------ | ------------------------------------------------- | --------------------- |
-| `--headless` | Headless compositor only, no GUI                  | CI / automated tests  |
-| `--devkit`   | Headless compositor + mutter-devkit viewer window | Interactive debugging |
+See the `gnome-shell-debug` skill for the complete, non-duplicated facts on both seams (Devkit default; Headless when explicitly needed or self-sufficient for things like settings toggles).
 
-**Key differences:**
-
-- `--devkit` always adds a 1280×800 dummy monitor in addition to any `--virtual-monitor` you specify.
-- `--headless` gives you exactly the monitors you ask for.
-- `--devkit` calls `run()` on the automation script; `--headless` does **not**.
-- Screenshots work in `--devkit` but not `--headless`.
-- Keyboard injection via `wtype` works in both.
-
-**Always use `--headless --virtual-monitor 1920x1080` for automated tests.**
-
-### Virtual monitor configuration
-
-```bash
-# CORRECT: single 1920×1080 monitor
-gnome-shell --wayland --headless --virtual-monitor 1920x1080
-
-# WRONG: creates a second 1280×800 monitor alongside your desired size
-gnome-shell --wayland --devkit --virtual-monitor 1920x1080
-
-# Multi-monitor tests
---virtual-monitor 1920x1080 --virtual-monitor 1280x720
-```
-
-**Do NOT use `MUTTER_DEBUG_DUMMY_MODE_SPECS`** — it only works for the legacy `--nested` (X11) backend.
-
-### Work area vs monitor geometry
-
-The top panel (32 px) reduces the work area:
-
-```
-Monitor geometry:  x=0, y=0, width=1920, height=1080
-Work area:         x=0, y=32, width=1920, height=1048
-```
-
-Always use `getMonitorWorkArea()` for window assertions, not raw monitor geometry.
+Use `--headless --virtual-monitor 1920x1080` (exact monitors) for automated tests.
 
 ### `Shell.Eval` is dead
 
@@ -703,7 +666,7 @@ npm test
 
 - `AGENTS.md` — Router to `.agents/context/` and `.agents/rules/`
 - `.agents/context/build.md` — Build and test commands
-- `.agents/context/debugging.md` — Headless/devkit sessions
+- `.agents/context/debugging.md` — High-level pointers (seams owned by debug skill)
 - `.agents/rules/workflow.md` — Agent workflow and test gates
 - `.agents/skills/review/` — Pre-submission review checklist
-- `.agents/skills/gnome-shell-debug/` — Looking Glass, GDB, nested sessions
+- `.agents/skills/gnome-shell-debug/` — Devkit Seam (default) and Headless Seam, launchers, LG, GDB, logs

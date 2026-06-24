@@ -40,3 +40,14 @@ briefly focuses `wl-clipboard` at the compositor level; the extension cannot sup
 ## Shared test commands
 
 - `test/lib/shared-commands.js` is single source of truth for integration + E2E helpers.
+
+## Agent skills: gnome-shell-debug module (2026-06-24)
+
+The debug skill module was deepened with two explicit seams:
+
+- **Devkit Seam** (default): interactive debugging, LG, visual, rebuild loops. Primary deep launcher is `run-devkit-session.sh`.
+- **Headless Seam**: only when explicitly called for or when the task can be handled independently by headless (e.g. settings toggles / GSettings changes without UI/LG).
+
+The module owns the facts for both (locality). SKILL.md is now the deep implementation with common content inlined. Cross-references in context/debugging.md and testing/SKILL.md were reduced to thin pointers. Legacy scripts remain for rare cases but are subordinated in docs.
+
+This improves depth, leverage (one load for the default path), and removes duplication while preserving progressive disclosure for rare paths (GDB) and the "execute scripts yourself" rule.

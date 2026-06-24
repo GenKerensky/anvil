@@ -32,7 +32,7 @@ Domain guides in `.agents/skills/<name>/SKILL.md` — load the relevant skill fo
 | ------------------------ | -------------------------------------------- |
 | `testing`                | Unit, integration, or E2E tests              |
 | `review`                 | Pre-submission for extensions.gnome.org      |
-| `gnome-shell-debug`      | Looking Glass, GDB, nested/headless sessions |
+| `gnome-shell-debug`      | GJS logs, Looking Glass, GDB, devkit scripts |
 | `gnome-shell-upgrade`    | New GNOME Shell / Fedora release port        |
 | `meta-window-management` | Meta.Window tiling, resize, focus            |
 | `preferences-window`     | GTK4/Adwaita prefs dialog                    |
