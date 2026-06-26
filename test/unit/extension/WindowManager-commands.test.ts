@@ -134,7 +134,7 @@ describe("WindowManager - Commands", () => {
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
       const swapSpy = vi.spyOn(ctx.tree, "swap");
-      const pointerSpy = vi.spyOn(wm().pointerPolicy, "onFocusChanged");
+      const pointerSpy = vi.spyOn(wm(), "notifyFocusChanged");
 
       wm().command({ name: "Swap", direction: "RIGHT" });
 

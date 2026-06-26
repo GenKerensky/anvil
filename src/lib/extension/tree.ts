@@ -969,7 +969,7 @@ export class Tree extends Node<string> {
       safeFocus(metaWindow, global.display.get_current_time());
       safeActivate(metaWindow, global.display.get_current_time());
 
-      this.extWm.pointerPolicy.onFocusChanged({ node: next, source: "keyboard" });
+      this.extWm.notifyFocusChanged(next, "keyboard");
       this.debugParentNodes(next);
     }
     return next;
@@ -1031,7 +1031,7 @@ export class Tree extends Node<string> {
         // If same parent, swap
         if (next === node.previousSibling || next === node.nextSibling) {
           this.swapPairs(node, next);
-          this.extWm.pointerPolicy.onFocusChanged({ node, source: "move" });
+          this.extWm.notifyFocusChanged(node, "move");
           this.debugParentNodes(node);
           // do not reset percent when swapped
           return true;
@@ -1080,7 +1080,7 @@ export class Tree extends Node<string> {
           }
           const rect = targetMonRect;
           this.extWm.move(node.nodeValue as Meta.Window, rect);
-          this.extWm.pointerPolicy.onFocusChanged({ node, source: "move" });
+          this.extWm.notifyFocusChanged(node, "move");
           this.debugParentNodes(node);
         } else {
           if (position === POSITION.AFTER) {

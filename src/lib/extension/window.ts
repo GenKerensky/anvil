@@ -87,7 +87,7 @@ export class WindowManager extends GObject.Object {
   declare _tree: Tree;
   declare eventQueue: Queue;
   declare theme: import("./extension-theme-manager.js").ExtensionThemeManager;
-  declare _pointerPolicy: PointerPolicy;
+  declare _pointerPolicy: PointerPolicy | null;
   declare _tilingRender: TilingRender;
   declare nodeWinAtPointer: Node<any> | null;
   declare _draggedNodeWindow: Node<any> | null;
@@ -133,14 +133,10 @@ export class WindowManager extends GObject.Object {
     this._tree = new Tree(this);
     this.eventQueue = new Queue();
     this.theme = this.ext.theme;
-    this._pointerPolicy = new PointerPolicy({
-      settings: this.ext.settings,
-      isWorkspaceChanging: () => this._workspaceChanging,
-      isDisabled: () => this.disabled,
-    });
-    this._pointerPolicy.setHoverFocusEnabled(
-      !!this.ext.settings?.get_boolean("focus-on-hover-enabled")
-    );
+    this._pointerPolicy = null;
+    if (this._pointerPolicyNeeded()) {
+      this._ensurePointerPolicy();
+    }
     this._tilingRender = new TilingRender({
       settings: this.ext.settings,
       getTree: () => this.tree,
@@ -168,41 +164,60 @@ export class WindowManager extends GObject.Object {
     return this._tilingRender;
   }
 
-  get lastFocusedWindow() {
-    return this._pointerPolicy.lastFocusedWindow;
-  }
-
-  set lastFocusedWindow(node: Node<any> | null) {
-    this._pointerPolicy.lastFocusedWindow = node;
-  }
-
-  get lastFocusedWindowMonitor() {
-    return this._pointerPolicy.lastFocusedWindowMonitor;
-  }
-
-  set lastFocusedWindowMonitor(monitor: number) {
-    this._pointerPolicy.lastFocusedWindowMonitor = monitor;
-  }
-
-  get lastFocusedWindowWorkspace() {
-    return this._pointerPolicy.lastFocusedWindowWorkspace;
-  }
-
-  set lastFocusedWindowWorkspace(ws: number) {
-    this._pointerPolicy.lastFocusedWindowWorkspace = ws;
-  }
-
   get shouldFocusOnHover() {
-    return this._pointerPolicy.hoverFocusEnabled;
+    return this._pointerPolicy?.hoverFocusEnabled ?? false;
   }
 
   set shouldFocusOnHover(enabled: boolean) {
-    this._pointerPolicy.setHoverFocusEnabled(enabled);
+    if (!enabled) {
+      if (this._pointerPolicy) {
+        this._pointerPolicy.setHoverFocusEnabled(false);
+      }
+      if (!this._pointerPolicyNeeded()) {
+        this._teardownPointerPolicy();
+      }
+      return;
+    }
+    this._ensurePointerPolicy();
+    this._pointerPolicy!.setHoverFocusEnabled(true);
   }
 
-  private _onPointerFocusChanged(node: Node<any> | null, source: PointerFocusSource) {
-    this._pointerPolicy.onFocusChanged({ node, source });
+  private _pointerPolicyNeeded(): boolean {
+    const settings = this.ext.settings;
+    if (!settings) return false;
+    return (
+      settings.get_boolean("focus-on-hover-enabled") ||
+      settings.get_boolean("move-pointer-focus-enabled")
+    );
+  }
+
+  private _ensurePointerPolicy(): void {
+    if (this._pointerPolicy) return;
+    this._pointerPolicy = new PointerPolicy({
+      settings: this.ext.settings,
+      isWorkspaceChanging: () => this._workspaceChanging,
+      isDisabled: () => this.disabled,
+    });
+    this._pointerPolicy.setHoverFocusEnabled(
+      !!this.ext.settings?.get_boolean("focus-on-hover-enabled")
+    );
+  }
+
+  private _teardownPointerPolicy(): void {
+    if (!this._pointerPolicy) return;
+    this._pointerPolicy.disable();
+    this._pointerPolicy = null;
+  }
+
+  notifyFocusChanged(node: Node<any> | null, source: PointerFocusSource) {
+    if (this._pointerPolicy) {
+      this._pointerPolicy.onFocusChanged({ node, source });
+    }
     if (node) this.tree.debugParentNodes(node);
+  }
+
+  notifyWorkspaceSettled() {
+    this._pointerPolicy?.onWorkspaceSettled();
   }
 
   addFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
@@ -410,7 +425,7 @@ export class WindowManager extends GObject.Object {
           this._workspaceChangingTimeoutId = 0;
           this._workspaceChanging = false;
           // Tree should have rendered by now (idle_add runs before 300ms timeout)
-          this._pointerPolicy.onWorkspaceSettled();
+          this.notifyWorkspaceSettled();
           return false;
         });
       }),
@@ -445,7 +460,15 @@ export class WindowManager extends GObject.Object {
           }
           break;
         case "focus-on-hover-enabled":
-          this._pointerPolicy.setHoverFocusEnabled(settings.get_boolean(settingName));
+        case "move-pointer-focus-enabled":
+          if (this._pointerPolicyNeeded()) {
+            this._ensurePointerPolicy();
+            if (settingName === "focus-on-hover-enabled") {
+              this._pointerPolicy!.setHoverFocusEnabled(settings.get_boolean(settingName));
+            }
+          } else {
+            this._teardownPointerPolicy();
+          }
           break;
         case "tiling-mode-enabled":
           this.renderTree(settingName);
@@ -522,7 +545,7 @@ export class WindowManager extends GObject.Object {
             const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
             this.updateStackedFocus(focusNodeWindow);
             this.updateTabbedFocus(focusNodeWindow);
-            this._onPointerFocusChanged(focusNodeWindow, "overview");
+            this.notifyFocusChanged(focusNodeWindow, "overview");
           },
         };
         this.queueEvent(eventObj);
@@ -686,7 +709,7 @@ export class WindowManager extends GObject.Object {
                 if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
                 this.renderTree("move-tabbed-queue");
               }
-              this._onPointerFocusChanged(focusNodeWindow, "move");
+              this.notifyFocusChanged(focusNodeWindow, "move");
             }
           },
         });
@@ -723,7 +746,7 @@ export class WindowManager extends GObject.Object {
         safeActivate(swapWin, global.display.get_current_time());
         this.updateTabbedFocus(focusNodeWindow);
         this.updateStackedFocus(focusNodeWindow);
-        this._onPointerFocusChanged(focusNodeWindow, "swap");
+        this.notifyFocusChanged(focusNodeWindow, "swap");
         this.renderTree("swap", true);
         break;
       }
@@ -755,7 +778,7 @@ export class WindowManager extends GObject.Object {
           safeRaise(win);
           safeActivate(win, global.display.get_current_time());
         }
-        this._onPointerFocusChanged(focusNodeWindow, "command");
+        this.notifyFocusChanged(focusNodeWindow, "command");
         break;
       case "FocusBorderToggle": {
         const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
@@ -893,7 +916,7 @@ export class WindowManager extends GObject.Object {
           );
           const lastActiveNodeWindow = this.tree.findNode(lastActiveWindow);
           this.tree.swapPairs(lastActiveNodeWindow!, focusNodeWindow);
-          this._onPointerFocusChanged(focusNodeWindow, "swap");
+          this.notifyFocusChanged(focusNodeWindow, "swap");
           this.renderTree("swap-last-active");
         }
         break;
@@ -1389,7 +1412,7 @@ export class WindowManager extends GObject.Object {
       this._queueSourceId = 0;
     }
 
-    this._pointerPolicy.disable();
+    this._teardownPointerPolicy();
 
     if (this._prefsOpenSrcId) {
       GLib.Source.remove(this._prefsOpenSrcId);
@@ -1739,7 +1762,7 @@ export class WindowManager extends GObject.Object {
                   this.updateStackedFocus(undefined);
                   this.updateTabbedFocus(undefined);
                   const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-                  this._onPointerFocusChanged(focusNodeWindow, "signal");
+                  this.notifyFocusChanged(focusNodeWindow, "signal");
                 },
               });
               const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
@@ -1816,7 +1839,7 @@ export class WindowManager extends GObject.Object {
           .activate_with_focus(metaWindow, global.display.get_current_time());
         this.moveCenter(metaWindow);
       } else {
-        this._onPointerFocusChanged(nodeWindow, "window-create");
+        this.notifyFocusChanged(nodeWindow, "window-create");
       }
     }
   }

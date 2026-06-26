@@ -53,7 +53,7 @@ describe("TilingRender Layout Algorithms", () => {
       },
       determineSplitLayout: vi.fn(() => LAYOUT_TYPES.HSPLIT),
       bindWorkspaceSignals: vi.fn(),
-      pointerPolicy: { onFocusChanged: vi.fn() },
+      notifyFocusChanged: vi.fn(),
     };
 
     tree = new Tree(mockWindowManager as any);

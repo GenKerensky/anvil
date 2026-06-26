@@ -121,9 +121,7 @@ describe("WindowManager - Lifecycle", () => {
     });
 
     it("should move pointer to window node", () => {
-      const pointerSpy = vi
-        .spyOn(wm().pointerPolicy, "onFocusChanged")
-        .mockImplementation(() => {});
+      const pointerSpy = vi.spyOn(wm(), "notifyFocusChanged").mockImplementation(() => {});
       const metaWindow = createMockWindow({
         wm_class: "TestApp",
         title: "Test Window",
@@ -133,9 +131,7 @@ describe("WindowManager - Lifecycle", () => {
 
       wm().postProcessWindow(nodeWindow);
 
-      expect(pointerSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ node: nodeWindow, source: "window-create" })
-      );
+      expect(pointerSpy).toHaveBeenCalledWith(nodeWindow, "window-create");
     });
   });
 

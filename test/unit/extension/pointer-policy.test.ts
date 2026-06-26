@@ -23,7 +23,34 @@ describe("PointerPolicy", () => {
   });
 
   const wm = () => ctx.windowManager;
-  const pointerPolicy = () => wm().pointerPolicy;
+  const pointerPolicy = () => wm().pointerPolicy!;
+
+  describe("lazy initialization", () => {
+    it("should not construct PointerPolicy when both pointer prefs are disabled", () => {
+      ctx = createWindowManagerFixture();
+      expect(wm().pointerPolicy).toBeNull();
+    });
+
+    it("should construct PointerPolicy when focus-on-hover is enabled", () => {
+      ctx = createWindowManagerFixture();
+      expect(wm().pointerPolicy).toBeNull();
+
+      wm().shouldFocusOnHover = true;
+
+      expect(wm().pointerPolicy).not.toBeNull();
+      expect(wm().shouldFocusOnHover).toBe(true);
+    });
+
+    it("should tear down PointerPolicy when both pointer prefs are disabled", () => {
+      ctx = createWindowManagerFixture({ settings: { "focus-on-hover-enabled": true } });
+      expect(wm().pointerPolicy).not.toBeNull();
+
+      ctx.settings.set_boolean("focus-on-hover-enabled", false);
+      wm().shouldFocusOnHover = false;
+
+      expect(wm().pointerPolicy).toBeNull();
+    });
+  });
 
   describe("runHoverFocusPoll", () => {
     it("should return false when hover focus is disabled", () => {

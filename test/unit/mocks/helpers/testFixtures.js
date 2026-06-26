@@ -187,7 +187,7 @@ export function createTreeFixture(options = {}) {
         calculateGaps: vi.fn(() => 0),
         enforceUltrawideSize: vi.fn((_, r) => r),
       },
-      pointerPolicy: { onFocusChanged: vi.fn() },
+      notifyFocusChanged: vi.fn(),
     });
   }
 
