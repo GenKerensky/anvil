@@ -16,7 +16,7 @@ test pipeline before marking work complete.
 | Starting any task / unfamiliar with the project   | `.agents/context/overview.md`          |
 | Building, installing, or running tests            | `.agents/context/build.md`             |
 | Navigating source layout or tsconfigs             | `.agents/context/architecture.md`      |
-| Headless/devkit sessions, monitor resolution      | `.agents/context/debugging.md`         |
+| Devkit / agent-loop sessions, monitors            | `.agents/context/debugging.md`         |
 | Before finishing a code change                    | `.agents/rules/workflow.md`            |
 | Pre-submission review for extensions.gnome.org    | `.agents/rules/review.md`              |
 | Upgrading for new GNOME Shell / Fedora release    | `.agents/rules/gnome-shell-upgrade.md` |
@@ -30,24 +30,24 @@ test pipeline before marking work complete.
 
 Domain guides in `.agents/skills/<name>/SKILL.md` — load the relevant skill for deep how-tos:
 
-| Skill                    | Use when                                     |
-| ------------------------ | -------------------------------------------- |
-| `testing`                | Unit, integration, or E2E tests              |
-| `gnome-shell-debug`      | GJS logs, Looking Glass, GDB, devkit scripts |
-| `meta-window-management` | Meta.Window tiling, resize, focus            |
-| `preferences-window`     | GTK4/Adwaita prefs dialog                    |
-| `quick-settings`         | Quick Settings panel                         |
-| `popup-menu`             | Shell popup menus                            |
-| `dialogs`                | ModalDialog / Dialog                         |
-| `notifications`          | MessageTray / Main.notify                    |
-| `search-provider`        | Overview search provider                     |
-| `translations`           | gettext POT/PO/MO                            |
+| Skill                    | Use when                                |
+| ------------------------ | --------------------------------------- |
+| `testing`                | Unit, integration, or E2E tests         |
+| `gnome-shell-debug`      | Devkit, agent loop, GJS shell debugging |
+| `meta-window-management` | Meta.Window tiling, resize, focus       |
+| `preferences-window`     | GTK4/Adwaita prefs dialog               |
+| `quick-settings`         | Quick Settings panel                    |
+| `popup-menu`             | Shell popup menus                       |
+| `dialogs`                | ModalDialog / Dialog                    |
+| `notifications`          | MessageTray / Main.notify               |
+| `search-provider`        | Overview search provider                |
+| `translations`           | gettext POT/PO/MO                       |
 
 ## Commits
 
 Use [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/) for every commit message:
 
-```
+```text
 <type>[optional scope]: <description>
 
 [optional body]

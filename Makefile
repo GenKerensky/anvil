@@ -7,7 +7,8 @@ MSGSRC = $(wildcard src/po/*.po)
         potfile compilemsgs metadata schemas format lint check \
         test-unit test-integration test-integration-build-all test-integration-all \
         test-integration-parallel test-integration-run-shard-% \
-        test-e2e-container test-e2e-all-container test-e2e-build-container test-e2e
+        test-e2e-container test-e2e-all-container test-e2e-build-container test-e2e \
+        test-debug-loop-lib
 
 all: build install
 
@@ -167,6 +168,10 @@ test-e2e-build-container: test-integration-build-all
 # Usage: make test-e2e
 test-e2e: dist
 	python3 test/e2e/run.py
+
+# Agent debug loop shared library (stdlib unittest; smoke tests skip without gnome-shell)
+test-debug-loop-lib:
+	python3 -m unittest discover -s test/lib -p 'test_*.py' -v
 
 format:
 	npm run format

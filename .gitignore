@@ -11,6 +11,7 @@ src/lib/prefs/metadata.js
 test/integration/output
 test/e2e/.venv
 test/e2e/output
+test/debug/local/
 __pycache__
 *.pyc
 dist/.types/

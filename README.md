@@ -109,7 +109,8 @@ User is encouraged to bind the following:
 
 Anvil has three levels of automated tests: **unit tests** (fast, no GNOME runtime needed),
 **integration tests** (full GNOME Shell session in a Podman container), and
-**E2E tests** (local devkit compositor).
+**E2E tests** (local headless compositor). For agent-driven debugging of behavioral and
+layout bugs, use the **agent debug loop** (headless, JSON artifacts) — see below.
 
 ### Unit Tests
 
@@ -170,6 +171,43 @@ same application title.
 - Mouse drag-and-drop (no pointer device)
 - Pixel-level visual rendering (no GPU framebuffer)
 
+### Agent Debug Loop (headless)
+
+For tight repro → log analysis → code edit cycles (especially behavioral and layout bugs),
+the **Agent Loop** launches an isolated headless GNOME Shell session with guardrails so your
+real session is never touched. One invocation = one iteration; the agent (or you) owns the
+outer loop.
+
+**Prerequisites:** `gnome-shell` with `--headless` and `--virtual-monitor` (GNOME 49+),
+`python3`, `dbusmock` (recommended — same as integration/E2E), built `dist/` (`make build debug`)
+
+```bash
+# First iteration (builds dist/)
+.agents/skills/gnome-shell-debug/scripts/run-debug-loop.sh \
+  --script test/debug/examples/minimal-repro.js --json --iteration 1
+
+# Later iterations — session dir persists by default
+SESSION_DIR=$(jq -r .session.dir iteration-001.json)
+.agents/skills/gnome-shell-debug/scripts/run-debug-loop.sh \
+  --no-build --session-dir "$SESSION_DIR" \
+  --script test/debug/local/my-repro.js --json --iteration 2
+```
+
+Copy `repro-template.js` to `test/debug/local/` for local repro scripts (gitignored).
+Human visual debugging (flicker, Looking Glass) uses the devkit launcher instead:
+
+```bash
+.agents/skills/gnome-shell-debug/scripts/run-devkit-session.sh
+```
+
+**Library tests** (guardrails, log analysis, session smoke — no full loop required):
+
+```bash
+make test-debug-loop-lib
+```
+
+Full documentation: `.agents/skills/gnome-shell-debug/SKILL.md` (v3.0).
+
 **Prerequisites:**
 
 - [Podman](https://podman.io/docs/installation) installed
@@ -193,7 +231,7 @@ same application title.
 make test-integration-build-all
 ```
 
-**Step 2: Run the tests**
+#### Step 2: Run the tests
 
 ```bash
 # Run against Fedora 44 (default)
@@ -206,7 +244,7 @@ make test-integration FEDORA_VERSION=43
 make test-integration-all
 ```
 
-**Step 3: Run a subset of spec files**
+#### Step 3: Run a subset of spec files
 
 Use `SPEC=<name>` to run only specific spec(s) by exact filename match (`.js` extension
 is optional). Supports comma-separated values:
@@ -242,12 +280,18 @@ python3 test/integration/run.py -v 44 -k
 podman exec -it --user gnomeshell <container-id> set-env.sh bash
 ```
 
-**Test structure:**
+#### Test structure
 
-```
+```text
 test/
 ├── lib/
-│   └── shared-commands.js       # Shared GJS helpers (both E2E + integration)
+│   ├── shared-commands.js       # Shared GJS helpers (E2E + integration + debug loop)
+│   ├── shell_session.py         # HeadlessShellSession (E2E parity + agent loop)
+│   ├── host_guard.py            # Host-session guardrails for debug loop
+│   └── log_analysis.py          # Anvil log signatures for debug loop
+├── debug/
+│   ├── examples/                # Checked-in repro scripts (e.g. minimal-repro.js)
+│   └── local/                   # Gitignored local repro scripts
 └── integration/
     ├── run.py                   # Python orchestrator (container lifecycle, results polling)
     ├── runner.js                # Jasmine automation-script loaded by gnome-shell
@@ -275,19 +319,20 @@ test/
     └── output/                  # Test artifacts (journal, screenshots, results JSON)
 ```
 
-### E2E Tests (Devkit)
+### E2E Tests (Headless)
 
-E2E tests run on the host GNOME Shell using `gnome-shell --devkit --wayland` with
-a local devkit compositor. They support keyboard injection via `wtype` and screen
-capture via `gnome-screenshot`.
+E2E tests run on the host using `gnome-shell --headless --wayland --virtual-monitor`
+with an isolated session bus. They use the same Jasmine automation-script pattern as
+integration tests.
 
 ```bash
-# Run devkit E2E tests
+# Run E2E tests
 make test-e2e
 ```
 
 E2E specs live in `test/e2e/suites/` and cover extension lifecycle, tiling geometry,
-keyboard shortcuts, and window operations (7 tests).
+keyboard shortcuts, and window operations. For interactive visual debugging, use
+`run-devkit-session.sh` (see Agent Debug Loop section above).
 
 ## Local Development Setup
 

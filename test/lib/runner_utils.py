@@ -255,3 +255,19 @@ def print_results(results: dict, title: str = "Anvil Test Results") -> int:
     print("")
 
     return 0 if total_failed == 0 else 1
+
+
+# ── Debug-loop repro results ───────────────────────────────────────────────────
+
+
+def parse_repro_results(data: dict) -> tuple[bool, str]:
+    """Return (passed, message). Supports debug-loop-v1 and Jasmine fallback."""
+
+    if "passed" in data:
+        return bool(data["passed"]), str(data.get("message", ""))
+
+    if "totalFailed" in data:
+        failed = int(data.get("totalFailed", 1))
+        return failed == 0, f"Jasmine: {data.get('totalPassed', 0)} passed, {failed} failed"
+
+    return False, "Unrecognized results schema"

@@ -51,3 +51,18 @@ The debug skill module was deepened with two explicit seams:
 The module owns the facts for both (locality). SKILL.md is now the deep implementation with common content inlined. Cross-references in context/debugging.md and testing/SKILL.md were reduced to thin pointers. Legacy scripts remain for rare cases but are subordinated in docs.
 
 This improves depth, leverage (one load for the default path), and removes duplication while preserving progressive disclosure for rare paths (GDB) and the "execute scripts yourself" rule.
+
+## Agent debug loop (gnome-shell-debug v3, 2026-06-26)
+
+- **Evolve in place** — Agent Loop is the third seam in `gnome-shell-debug` v3.0, not a sibling skill.
+- **Headless-only v1** — `--headless --virtual-monitor 1920x1080`; devkit escalation via `run-devkit-session.sh`.
+- **Launcher-style XDG** — temp `XDG_*` under session dir + symlink `dist/`; never install to `~/.local` in the loop.
+- **One `run` = one iteration** — agent owns outer loop; `--max-iterations` is agent policy (~10), not CLI.
+- **Build in bash wrapper only** — `run-debug-loop.sh` owns `make build debug`; Python always gets `--no-build` from wrapper.
+- **`ANVIL_DEBUG_LOOP_ON_HOST=1`** — distrobox re-exec sentinel (parallel to `ANVIL_DEVKIT_ON_HOST`).
+- **Extension enable before READY** — `HeadlessShellSession.__enter__` enables + polls ACTIVE before automation script work.
+- **Staged repro execution** — author under `test/debug/`; orchestrator stages into session dir and runs staged copy (symlinks rejected); audit snapshot at `$SESSION_DIR/repro.js`.
+- **Session-scoped results** — default `$SESSION_DIR/repro-results.json` via `ANVIL_DEBUG_RESULTS`.
+- **No `--force-host-session`** — fail-closed host bus / XDG guardrails in `host_guard.py`.
+- **Post-fix devkit is user-opt-in** — agent asks; never auto-launches devkit after headless fix.
+- **Shared library** — `test/lib/shell_session.py` extracted from E2E; E2E migration optional (PR 6).
