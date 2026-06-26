@@ -77,7 +77,7 @@ export class Keybindings extends GObject.Object {
   }
 
   get modifierState() {
-    const pointer = this.extWm.getPointer();
+    const pointer = global.get_pointer();
     return (pointer as unknown as number[])[2] ?? 0;
   }
 

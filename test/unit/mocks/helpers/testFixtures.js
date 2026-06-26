@@ -174,8 +174,6 @@ export function createTreeFixture(options = {}) {
   if (fullExtWm) {
     Object.assign(mockWindowManager, {
       move: vi.fn(),
-      movePointerWith: vi.fn(),
-      getPointer: vi.fn(() => [100, 100]),
       focusMetaWindow: null,
       currentMonWsNode: null,
       rectForMonitor: vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1080 })),

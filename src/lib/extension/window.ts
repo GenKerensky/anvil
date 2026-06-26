@@ -2147,31 +2147,9 @@ export class WindowManager extends GObject.Object {
     return node.nodeType === NODE_TYPES.WINDOW && node.mode === WINDOW_MODES.FLOAT;
   }
 
-  /** @deprecated Use pointerPolicy.onFocusChanged — kept for test compatibility */
-  movePointerWith(nodeWindow: Node<any> | null) {
-    this._onPointerFocusChanged(nodeWindow, "command");
-  }
-
-  getPointer(): [number, number] {
-    return this._pointerPolicy.getPointer();
-  }
-
-  /** @deprecated Use pointerPolicy.onWorkspaceSettled */
-  refocusPointerMonitor() {
-    this._pointerPolicy.onWorkspaceSettled();
-  }
-
   minimizedWindow(node: Node<any> | null) {
     if (!node) return false;
     return node._type === NODE_TYPES.WINDOW && node._data && (node._data as Meta.Window).minimized;
-  }
-
-  swapWindowsUnderPointer(focusNodeWindow: Node<any>) {
-    if (this.cancelGrab) {
-      return;
-    }
-    const nodeWinAtPointer = this.findNodeWindowAtPointer(focusNodeWindow);
-    if (nodeWinAtPointer) this.tree.swapPairs(focusNodeWindow, nodeWinAtPointer);
   }
 
   /**
@@ -2190,7 +2168,7 @@ export class WindowManager extends GObject.Object {
     if (nodeWinAtPointer) {
       const targetRect = (nodeWinAtPointer.nodeValue as Meta.Window).get_frame_rect();
       const parentNodeTarget = nodeWinAtPointer.parentNode;
-      const currPointer = this.getPointer();
+      const currPointer = global.get_pointer() as unknown as [number, number];
       const horizontal = parentNodeTarget!.isHSplit() || parentNodeTarget!.isTabbed();
       const isMonParent = parentNodeTarget!.nodeType === NODE_TYPES.MONITOR;
       const isConParent = parentNodeTarget!.nodeType === NODE_TYPES.CON;
@@ -2544,18 +2522,6 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  canMovePointerInsideNodeWindow(nodeWindow: Node<any> | null) {
-    return this._pointerPolicy.canWarpToNode(nodeWindow);
-  }
-
-  getPointerPositionInside(nodeWindow: Node<any> | null) {
-    return this._pointerPolicy.getPointerPositionInside(nodeWindow);
-  }
-
-  storePointerLastPosition(nodeWindow: Node<any> | null) {
-    this._pointerPolicy.storePointerLastPosition(nodeWindow);
-  }
-
   findNodeWindowAtPointer(focusNodeWindow: Node<any>) {
     const pointerCoord = global.get_pointer() as unknown as [number, number];
 
@@ -2564,10 +2530,6 @@ export class WindowManager extends GObject.Object {
       pointerCoord
     );
     return nodeWinAtPointer;
-  }
-
-  _focusWindowUnderPointer(): boolean {
-    return this._pointerPolicy.runHoverFocusPoll();
   }
 
   _findNodeWindowAtPointer(metaWindow: Meta.Window, pointer: [number, number]) {
