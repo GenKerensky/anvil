@@ -50,39 +50,16 @@ import { production } from "../shared/settings.js";
 import { safeRaise, safeFocus, safeActivate } from "./mutter-safe.js";
 import { PointerPolicy, type PointerFocusSource } from "./pointer-policy.js";
 import { TilingRender } from "./tiling-render.js";
+import { WINDOW_MODES, GRAB_TYPES, INVALID_WINDOW_TYPES } from "./window/constants.js";
+import type {
+  AnvilMetaWindow,
+  AnvilWindowActor,
+  AnvilMetaWorkspace,
+  AnvilExtension,
+} from "./window/types.js";
 
-type AnvilExtension = import("../../extension.js").default;
-
-export const WINDOW_MODES = Utils.createEnum(["FLOAT", "TILE", "GRAB_TILE", "DEFAULT"]);
-
-// Simplify the grab modes
-export const GRAB_TYPES = Utils.createEnum(["RESIZING", "MOVING", "UNKNOWN"]);
-
-// Bug #351 fix: Window types that shouldn't be tiled (browser popups, tooltips, etc.)
-// Ported from jcrussell/forge
-const INVALID_WINDOW_TYPES = new Set([
-  Meta.WindowType.UTILITY,
-  Meta.WindowType.POPUP_MENU,
-  Meta.WindowType.DROPDOWN_MENU,
-  Meta.WindowType.TOOLTIP,
-]);
-
-// Runtime-monkey-patched Meta types — these properties are set by anvil at runtime
-// and are not present in @girs type declarations.
-type AnvilMetaWindow = Meta.Window & {
-  windowSignals?: number[];
-  firstRender?: boolean;
-  /** @deprecated pre-GNOME 49 fallback, removed from @girs types */
-  get_maximized(): number;
-};
-type AnvilWindowActor = Clutter.Actor & {
-  actorSignals?: number[];
-  border?: St.Bin;
-  splitBorder?: St.Bin;
-};
-type AnvilMetaWorkspace = Meta.Workspace & {
-  workspaceSignals?: number[];
-};
+export { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
+export type { AnvilMetaWindow, AnvilWindowActor, AnvilMetaWorkspace } from "./window/types.js";
 
 export class WindowManager extends GObject.Object {
   static {

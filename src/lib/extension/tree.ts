@@ -34,7 +34,8 @@ import { Logger } from "../shared/logger.js";
 
 // App imports
 import * as Utils from "./utils.js";
-import * as Window from "./window.js";
+import { WINDOW_MODES } from "./window/constants.js";
+import type { WindowManager } from "./window.js";
 
 export const NODE_TYPES = Utils.createEnum([
   "ROOT",
@@ -136,7 +137,7 @@ export class Node<T extends string> extends GObject.Object {
     this._data = data;
     this._parent = null;
     this._nodes = []; // Child elements of this node
-    this.mode = Window.WINDOW_MODES.DEFAULT as string;
+    this.mode = WINDOW_MODES.DEFAULT as string;
     this.percent = 0.0;
     this._rect = null;
     this.tab = null;
@@ -404,15 +405,15 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   isFloat() {
-    return this.isMode(Window.WINDOW_MODES.FLOAT);
+    return this.isMode(WINDOW_MODES.FLOAT);
   }
 
   isTile() {
-    return this.isMode(Window.WINDOW_MODES.TILE);
+    return this.isMode(WINDOW_MODES.TILE);
   }
 
   isGrabTile() {
-    return this.isMode(Window.WINDOW_MODES.GRAB_TILE);
+    return this.isMode(WINDOW_MODES.GRAB_TILE);
   }
 
   removeChild(node: Node<any>) {
@@ -631,7 +632,7 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   get float(): boolean {
-    return this.isWindow() && this.mode === Window.WINDOW_MODES.FLOAT;
+    return this.isWindow() && this.mode === WINDOW_MODES.FLOAT;
   }
 
   set float(value: boolean) {
@@ -639,12 +640,12 @@ export class Node<T extends string> extends GObject.Object {
       const metaWindow = this.nodeValue;
       const floatAlwaysOnTop = this.settings?.get_boolean("float-always-on-top-enabled") ?? false;
       if (value) {
-        this.mode = Window.WINDOW_MODES.FLOAT;
+        this.mode = WINDOW_MODES.FLOAT;
         if (!metaWindow.is_above()) {
           if (floatAlwaysOnTop) metaWindow.make_above();
         }
       } else {
-        this.mode = Window.WINDOW_MODES.TILE;
+        this.mode = WINDOW_MODES.TILE;
         if (metaWindow.is_above()) {
           metaWindow.unmake_above();
         }
@@ -700,14 +701,14 @@ export class Tree extends Node<string> {
   static {
     GObject.registerClass(this);
   }
-  _extWm!: import("./window.js").WindowManager;
+  _extWm!: WindowManager;
   ext!: import("../../extension.js").default;
   windows: Record<string, any> = {};
   allNodeWindows: any[] = [];
   attachNode: Node<any> | null = null;
   defaultStackHeight!: number;
 
-  constructor(extWm: Window.WindowManager) {
+  constructor(extWm: WindowManager) {
     const rootBin = new St.Bin();
     super(NODE_TYPES.ROOT, rootBin);
     this._extWm = extWm;
@@ -719,7 +720,7 @@ export class Tree extends Node<string> {
     this._initWorkspaces();
   }
 
-  get extWm(): Window.WindowManager {
+  get extWm(): WindowManager {
     return this._extWm;
   }
 
@@ -833,7 +834,7 @@ export class Tree extends Node<string> {
     parentObj: unknown,
     type: string,
     value: unknown,
-    mode: string = Window.WINDOW_MODES.TILE as string
+    mode: string = WINDOW_MODES.TILE as string
   ) {
     const parentNode = this.findNode(parentObj);
     let child;
@@ -1212,7 +1213,7 @@ export class Tree extends Node<string> {
     if (!node) return;
     const type = node.nodeType;
 
-    if (type === NODE_TYPES.WINDOW && node.mode === Window.WINDOW_MODES.FLOAT) {
+    if (type === NODE_TYPES.WINDOW && node.mode === WINDOW_MODES.FLOAT) {
       return;
     }
 
@@ -1267,7 +1268,7 @@ export class Tree extends Node<string> {
       case NODE_TYPES.CON:
       case NODE_TYPES.MONITOR: {
         const childWindowNodes = nextSwapNode
-          .getNodeByMode(Window.WINDOW_MODES.TILE)
+          .getNodeByMode(WINDOW_MODES.TILE)
           .filter((t: Node<any>) => t.nodeType === NODE_TYPES.WINDOW);
         if (nextSwapNode.layout === LAYOUT_TYPES.STACKED) {
           nextSwapNode = childWindowNodes[childWindowNodes.length - 1];
@@ -1403,7 +1404,7 @@ export class Tree extends Node<string> {
     const orientation = Utils.orientationFromLayout(node.layout!);
     const rect = node.rect!;
     const totalSize = orientation === ORIENTATION_TYPES.HORIZONTAL ? rect.width : rect.height;
-    const grabTiled = node.getNodeByMode(Window.WINDOW_MODES.GRAB_TILE).length > 0;
+    const grabTiled = node.getNodeByMode(WINDOW_MODES.GRAB_TILE).length > 0;
     childItems.forEach((childNode: Node<any>, index: number) => {
       const percent =
         childNode.percent && childNode.percent > 0.0 && !grabTiled
