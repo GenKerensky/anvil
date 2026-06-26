@@ -435,8 +435,14 @@ export class WindowManager extends GObject.Object {
           this.reloadWindowOverrides();
           break;
         case "focus-border-toggle":
+        case "split-border-toggle":
         case "focus-border-hidden-on-single":
-          this.renderTree(settingName);
+          if (this._bordersEnabled()) {
+            this.ensureAllBorderActors();
+            this.updateBorderLayout();
+          } else {
+            this.destroyAllBorderActors();
+          }
           break;
         case "focus-on-hover-enabled":
           this._pointerPolicy.setHoverFocusEnabled(settings.get_boolean(settingName));
@@ -1118,6 +1124,53 @@ export class WindowManager extends GObject.Object {
     });
   }
 
+  _bordersEnabled() {
+    const settings = this.ext.settings;
+    return (
+      settings.get_boolean("focus-border-toggle") || settings.get_boolean("split-border-toggle")
+    );
+  }
+
+  ensureBorderActors(windowActor: AnvilWindowActor | null) {
+    if (!windowActor || !this._bordersEnabled()) return;
+    if (!windowActor.border) {
+      const border = new St.Bin({ style_class: "window-tiled-border" });
+      if (global.window_group) global.window_group.add_child(border);
+      windowActor.border = border;
+      border.show();
+    }
+  }
+
+  ensureAllBorderActors() {
+    this.tree.nodeWindows.forEach((nodeWindow) => {
+      const actor = nodeWindow.windowActor as AnvilWindowActor | null;
+      if (actor) {
+        this.ensureBorderActors(actor);
+      }
+    });
+  }
+
+  destroyAllBorderActors() {
+    this.tree.nodeWindows.forEach((nodeWindow) => {
+      const actor = nodeWindow.windowActor as AnvilWindowActor | null;
+      if (!actor) return;
+      if (actor.border) {
+        if (global.window_group) {
+          global.window_group.remove_child(actor.border);
+        }
+        actor.border.hide();
+        actor.border = undefined;
+      }
+      if (actor.splitBorder) {
+        if (global.window_group) {
+          global.window_group.remove_child(actor.splitBorder);
+        }
+        actor.splitBorder.hide();
+        actor.splitBorder = undefined;
+      }
+    });
+  }
+
   hideActorBorder(actor: AnvilWindowActor | null) {
     if (!actor) return;
     if (actor.border) {
@@ -1129,6 +1182,7 @@ export class WindowManager extends GObject.Object {
   }
 
   hideWindowBorders() {
+    if (!this._bordersEnabled()) return;
     this.tree.nodeWindows.forEach((nodeWindow) => {
       const actor = nodeWindow.windowActor;
       if (actor) {
@@ -1418,10 +1472,12 @@ export class WindowManager extends GObject.Object {
   }
 
   showWindowBorders() {
+    if (!this._bordersEnabled()) return;
     const metaWindow = this.focusMetaWindow;
     if (!metaWindow) return;
     const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
     if (!windowActor) return;
+    this.ensureBorderActors(windowActor);
     const nodeWindow = this.findNodeWindow(metaWindow);
     if (!nodeWindow) return;
     if (metaWindow.get_wm_class() === null) return;
@@ -1533,7 +1589,7 @@ export class WindowManager extends GObject.Object {
       focusBorderEnabled &&
       tilingModeEnabled &&
       !nodeWindow.isFloat() &&
-      !maximized &&
+      !maximized() &&
       parentNode.childNodes.length === 1 &&
       (parentNode.isCon() || parentNode.isMonitor()) &&
       !(parentNode.isTabbed() || parentNode.isStacked())
@@ -1574,6 +1630,7 @@ export class WindowManager extends GObject.Object {
   }
 
   updateBorderLayout() {
+    if (!this._bordersEnabled()) return;
     this.hideWindowBorders();
     this.showWindowBorders();
   }
@@ -1714,13 +1771,8 @@ export class WindowManager extends GObject.Object {
           windowActor.actorSignals = actorSignals;
         }
 
-        if (windowActor && !windowActor.border) {
-          const border = new St.Bin({ style_class: "window-tiled-border" });
-
-          if (global.window_group) global.window_group.add_child(border);
-
-          windowActor.border = border;
-          border.show();
+        if (windowActor) {
+          this.ensureBorderActors(windowActor);
         }
 
         this.postProcessWindow(nodeWindow as Node<any> | null);

@@ -75,6 +75,14 @@ export function createMockWindowGroup() {
         children.push(child);
       }
     }),
+    insert_child_above: vi.fn((child, sibling) => {
+      const index = sibling ? children.indexOf(sibling) : -1;
+      if (index >= 0) {
+        children.splice(index + 1, 0, child);
+      } else {
+        children.push(child);
+      }
+    }),
   };
 }
 
