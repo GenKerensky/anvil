@@ -250,6 +250,19 @@ export function rectContainsPoint(
   );
 }
 
+export function metaWindowAtPoint(
+  pointer: [number, number],
+  windows: Meta.Window[]
+): Meta.Window | null {
+  for (const metaWindow of windows) {
+    const metaRect = metaWindow.get_frame_rect();
+    if (rectContainsPoint(metaRect, pointer)) {
+      return metaWindow;
+    }
+  }
+  return null;
+}
+
 export function orientationFromGrab(grabOp: Meta.GrabOp) {
   if (
     grabOp === Meta.GrabOp.RESIZING_N ||

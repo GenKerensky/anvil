@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   createEnum,
   isEphemeralHelperWindow,
+  metaWindowAtPoint,
   rectContainsPoint,
   monitorIndex,
   removeGapOnRect,
@@ -21,6 +22,7 @@ import {
   isGnomeGTE,
 } from "../../../src/lib/extension/utils.js";
 import Meta from "gi://Meta";
+import { createMockWindow } from "../mocks/helpers/index.js";
 
 // Replicate the string enums from tree.js / window.js for use in assertions.
 // These are created via createEnum() in the source, so values are the key names.
@@ -131,6 +133,29 @@ describe("rectContainsPoint", () => {
 
   it("returns false when rect is undefined", () => {
     expect(rectContainsPoint(undefined as any, [50, 40] as Point)).toBe(false);
+  });
+});
+
+describe("metaWindowAtPoint", () => {
+  it("returns null for an empty window list", () => {
+    expect(metaWindowAtPoint([50, 50], [])).toBeNull();
+  });
+
+  it("returns the window when the point is inside its frame", () => {
+    const metaWindow = createMockWindow({ rect: { x: 0, y: 0, width: 200, height: 200 } });
+    expect(metaWindowAtPoint([100, 100], [metaWindow])).toBe(metaWindow);
+  });
+
+  it("returns the first matching window when windows overlap", () => {
+    const bottom = createMockWindow({ rect: { x: 0, y: 0, width: 200, height: 200 } });
+    const top = createMockWindow({ rect: { x: 50, y: 50, width: 100, height: 100 } });
+    expect(metaWindowAtPoint([100, 100], [top, bottom])).toBe(top);
+    expect(metaWindowAtPoint([100, 100], [bottom, top])).toBe(bottom);
+  });
+
+  it("returns null when the point is outside all windows", () => {
+    const metaWindow = createMockWindow({ rect: { x: 0, y: 0, width: 100, height: 100 } });
+    expect(metaWindowAtPoint([200, 200], [metaWindow])).toBeNull();
   });
 });
 

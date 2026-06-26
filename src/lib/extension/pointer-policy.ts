@@ -191,21 +191,16 @@ export class PointerPolicy extends GObject.Object {
 
   private _getMetaWindowAtPointer(pointer: [number, number]) {
     const windows = global.get_window_actors();
-    const [x, y] = pointer;
+    const metaWindows: Meta.Window[] = [];
 
     for (let i = windows.length - 1; i >= 0; i--) {
-      const window = windows[i];
-      const metaWindow = window.meta_window;
-      if (!metaWindow) continue;
-
-      const { x: wx, y: wy, width, height } = metaWindow.get_frame_rect();
-
-      if (x >= wx && x <= wx + width && y >= wy && y <= wy + height) {
-        return metaWindow;
+      const metaWindow = windows[i].meta_window;
+      if (metaWindow) {
+        metaWindows.push(metaWindow);
       }
     }
 
-    return null;
+    return Utils.metaWindowAtPoint(pointer, metaWindows);
   }
 
   private _canWarpToNode(nodeWindow: Node<any>) {

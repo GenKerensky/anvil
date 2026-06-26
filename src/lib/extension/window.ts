@@ -2542,12 +2542,8 @@ export class WindowManager extends GObject.Object {
       return;
     }
 
-    for (let i = 0, n = sortedWindows.length; i < n; i++) {
-      const w = sortedWindows[i];
-      const metaRect = w.get_frame_rect();
-      const atPointer = Utils.rectContainsPoint(metaRect, pointer);
-      if (atPointer) return this.tree.getNodeByValue(w);
-    }
+    const w = Utils.metaWindowAtPoint(pointer, sortedWindows);
+    if (w) return this.tree.getNodeByValue(w);
 
     return null;
   }
