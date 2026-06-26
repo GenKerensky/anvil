@@ -66,6 +66,7 @@
     "eslint-config-prettier": "^10.1.8",
     "husky": "^8.0.1",
     "lint-staged": "^13.0.3",
+    "markdownlint-cli2": "^0.22.1",
     "prettier": "^2.7.1",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.59.2",
@@ -73,6 +74,7 @@
   },
   "lint-staged": {
     "*.{js,ts,tsx}": "eslint --fix",
+    "*.md": "markdownlint-cli2 --fix",
     "**/*": "prettier --write --ignore-unknown"
   }
 }
