@@ -7,6 +7,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
@@ -260,6 +261,34 @@ describe("WindowManager - Lifecycle", () => {
       const afterCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
 
       expect(afterCount).toBe(initialCount);
+    });
+  });
+
+  describe("bindWorkspaceSignals", () => {
+    it("should track valid windows from delayed workspace window-added callbacks", () => {
+      let scheduledCallback: Parameters<typeof GLib.timeout_add>[2] | null = null;
+      vi.spyOn(GLib, "timeout_add").mockImplementation((_priority, _interval, callback) => {
+        scheduledCallback = callback;
+        return 1;
+      });
+
+      const workspace = ctx.workspaces[0];
+      const window = createMockWindow({
+        id: 42,
+        wm_class: "org.gnome.TextEditor",
+        title: "New Document - Text Editor",
+        workspace,
+      });
+
+      wm().bindWorkspaceSignals(workspace);
+      workspace.emit("window-added", workspace, window);
+
+      expect(ctx.tree.findNode(window)).toBeNull();
+      expect(scheduledCallback).not.toBeNull();
+
+      (scheduledCallback as unknown as () => boolean)();
+
+      expect(ctx.tree.findNode(window)).not.toBeNull();
     });
   });
 });

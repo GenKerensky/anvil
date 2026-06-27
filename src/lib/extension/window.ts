@@ -621,6 +621,7 @@ export class WindowManager extends GObject.Object {
           metaWorkspace.connect("window-added", (_, metaWindow) => {
             if (!this._wsWindowAddSrcId) {
               this._wsWindowAddSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
+                this.trackWindow(global.display, metaWindow);
                 this.updateMetaWorkspaceMonitor(
                   "window-added",
                   metaWindow.get_monitor(),
