@@ -72,7 +72,12 @@ export {
   waitForWindowCount,
 };
 
-// AT‑SPI helpers
+/**
+ * @param {Atspi.Accessible} node
+ * @param {(node: Atspi.Accessible) => boolean} predicate
+ * @param {number} [maxDepth]
+ * @returns {Atspi.Accessible | null}
+ */
 export function findAccessible(node, predicate, maxDepth = 12) {
   if (maxDepth < 0) return null;
   try {
@@ -81,6 +86,7 @@ export function findAccessible(node, predicate, maxDepth = 12) {
     for (let i = 0; i < count; i++) {
       const child = node.get_child_at_index(i);
       if (!child) continue;
+      /** @type {Atspi.Accessible | null} */
       const found = findAccessible(child, predicate, maxDepth - 1);
       if (found) return found;
     }
@@ -88,10 +94,20 @@ export function findAccessible(node, predicate, maxDepth = 12) {
   return null;
 }
 
+/**
+ * @param {Atspi.Accessible} node
+ * @param {(node: Atspi.Accessible) => boolean} predicate
+ * @param {number} [maxDepth]
+ * @returns {Atspi.Accessible[]}
+ */
 export function findAllAccessibles(node, predicate, maxDepth = 12) {
   /** @type {Atspi.Accessible[]} */
   const results = [];
 
+  /**
+   * @param {Atspi.Accessible} n
+   * @param {number} depth
+   */
   function walk(n, depth) {
     if (depth < 0) return;
     try {
@@ -107,6 +123,11 @@ export function findAllAccessibles(node, predicate, maxDepth = 12) {
   return results;
 }
 
+/**
+ * @param {(node: Atspi.Accessible) => boolean} predicate
+ * @param {number} [timeoutMs]
+ * @returns {Promise<Atspi.Accessible>}
+ */
 export async function waitForAccessible(predicate, timeoutMs = 10000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -120,6 +141,11 @@ export async function waitForAccessible(predicate, timeoutMs = 10000) {
   throw new Error("Timed out waiting for accessible node after " + timeoutMs + "ms");
 }
 
+/**
+ * @param {Atspi.Accessible} node
+ * @param {Atspi.StateType} stateType
+ * @returns {boolean}
+ */
 export function hasState(node, stateType) {
   try {
     return node.get_state_set().contains(stateType);
@@ -128,6 +154,11 @@ export function hasState(node, stateType) {
   }
 }
 
+/**
+ * @param {Atspi.Accessible} node
+ * @param {string} roleName
+ * @returns {boolean}
+ */
 export function hasRole(node, roleName) {
   try {
     return (node.get_role_name() || "").toLowerCase() === roleName.toLowerCase();
@@ -136,6 +167,10 @@ export function hasRole(node, roleName) {
   }
 }
 
+/**
+ * @param {Atspi.Accessible} node
+ * @returns {string}
+ */
 export function getName(node) {
   try {
     return node.get_name() || "";
@@ -144,6 +179,10 @@ export function getName(node) {
   }
 }
 
+/**
+ * @param {Atspi.Accessible} node
+ * @returns {boolean}
+ */
 export function doAction(node) {
   try {
     const iface = node.get_action_iface();
@@ -156,6 +195,10 @@ export function doAction(node) {
 }
 
 // Preferences window helpers
+/**
+ * @param {number} [timeoutMs]
+ * @returns {Promise<Atspi.Accessible>}
+ */
 export async function openPrefsWindow(timeoutMs = 10000) {
   // Initialize AT‑SPI
   Atspi.init();
@@ -184,7 +227,9 @@ export async function openPrefsWindow(timeoutMs = 10000) {
   }, timeoutMs);
 
   if (!atspiResult) {
-    const ext = global.extensionManager.lookup(UUID);
+    const ext = /** @type {{ openPreferences?: () => void } | null} */ (
+      Main.extensionManager.lookup(UUID)
+    );
     if (ext && typeof ext.openPreferences === "function") {
       try {
         ext.openPreferences();
@@ -202,6 +247,11 @@ export async function openPrefsWindow(timeoutMs = 10000) {
   return atspiResult;
 }
 
+/**
+ * @param {Atspi.Accessible} prefsWindow
+ * @param {string} tabName
+ * @returns {Promise<void>}
+ */
 export async function navigateToTab(prefsWindow, tabName) {
   const tab = findAccessible(prefsWindow, (node) => {
     return hasRole(node, "page tab") && getName(node) === tabName;
@@ -211,6 +261,11 @@ export async function navigateToTab(prefsWindow, tabName) {
   await sleep(500);
 }
 
+/**
+ * @param {Atspi.Accessible} prefsWindow
+ * @param {string} switchName
+ * @returns {Atspi.Accessible | null}
+ */
 export function findSwitch(prefsWindow, switchName) {
   return findAccessible(prefsWindow, (node) => {
     const role = (node.get_role_name() || "").toLowerCase();
