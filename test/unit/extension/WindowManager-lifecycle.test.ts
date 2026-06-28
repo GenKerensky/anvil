@@ -295,14 +295,89 @@ describe("WindowManager - Lifecycle", () => {
     });
   });
 
-  describe("bindWorkspaceSignals", () => {
-    it("should track valid windows from delayed workspace window-added callbacks", () => {
-      let scheduledCallback: Parameters<typeof GLib.timeout_add>[2] | null = null;
+  describe("pending window tracking", () => {
+    it("should track an initially invalid window as soon as Meta marks it tileable", () => {
+      const window = createMockWindow({
+        wm_class: null,
+        title: null,
+        window_type: Meta.WindowType.UTILITY,
+      });
+      const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+
+      wm()._trackWindowWhenReady(ctx.display, window);
+
+      expect(ctx.tree.findNode(window)).toBeNull();
+      expect(window.getHandlerCount("notify::window-type")).toBe(1);
+
+      window._window_type = Meta.WindowType.NORMAL;
+      window.wm_class = "org.inkscape.Inkscape";
+      window.title = "New Document 1 - Inkscape";
+      window.emit("notify::window-type");
+
+      expect(ctx.tree.findNode(window)?.mode).toBe(WINDOW_MODES.TILE);
+      expect(window.getHandlerCount("notify::window-type")).toBe(0);
+      expect(renderSpy).toHaveBeenCalledWith("window-create", true);
+    });
+
+    it("should track valid windows immediately when their actor maps", () => {
+      const window = createMockWindow({
+        wm_class: "Brave-browser",
+        title: "New Tab - Brave",
+        window_type: Meta.WindowType.NORMAL,
+      });
+      const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+
+      wm()._trackMappedWindowActor({ meta_window: window });
+
+      expect(ctx.tree.findNode(window)?.mode).toBe(WINDOW_MODES.TILE);
+      expect(renderSpy).toHaveBeenCalledWith("window-create", true);
+    });
+
+    it("should reconcile valid windows already present before their actor maps", () => {
+      let reconcileCallback: (() => boolean) | null = null;
       vi.spyOn(GLib, "timeout_add").mockImplementation((_priority, _interval, callback) => {
-        scheduledCallback = callback;
+        reconcileCallback = callback as () => boolean;
         return 1;
       });
 
+      const window = createMockWindow({
+        wm_class: "org.inkscape.Inkscape",
+        title: "New Document 1 - Inkscape",
+        window_type: Meta.WindowType.NORMAL,
+      });
+      ctx.display.get_tab_list.mockReturnValue([window]);
+      const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+
+      wm()._scheduleCurrentWindowReconcile();
+
+      expect(ctx.tree.findNode(window)).toBeNull();
+      expect(reconcileCallback).not.toBeNull();
+
+      reconcileCallback!();
+
+      expect(ctx.tree.findNode(window)?.mode).toBe(WINDOW_MODES.TILE);
+      expect(renderSpy).toHaveBeenCalledWith("window-create", true);
+    });
+
+    it("should reconcile valid actor windows before they appear in the tab list", () => {
+      const window = createMockWindow({
+        wm_class: "org.inkscape.Inkscape",
+        title: "New Document 1 - Inkscape",
+        window_type: Meta.WindowType.NORMAL,
+      });
+      ctx.display.get_tab_list.mockReturnValue([]);
+      (global as any).get_window_actors.mockReturnValue([{ meta_window: window }]);
+      const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+
+      wm()._reconcileCurrentWindows("test-reconcile");
+
+      expect(ctx.tree.findNode(window)?.mode).toBe(WINDOW_MODES.TILE);
+      expect(renderSpy).toHaveBeenCalledWith("window-create", true);
+    });
+  });
+
+  describe("bindWorkspaceSignals", () => {
+    it("should track valid windows immediately from workspace window-added callbacks", () => {
       const workspace = ctx.workspaces[0];
       const window = createMockWindow({
         id: 42,
@@ -313,11 +388,6 @@ describe("WindowManager - Lifecycle", () => {
 
       wm().bindWorkspaceSignals(workspace);
       workspace.emit("window-added", workspace, window);
-
-      expect(ctx.tree.findNode(window)).toBeNull();
-      expect(scheduledCallback).not.toBeNull();
-
-      (scheduledCallback as unknown as () => boolean)();
 
       expect(ctx.tree.findNode(window)).not.toBeNull();
     });

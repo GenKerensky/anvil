@@ -61,6 +61,28 @@ import type {
 export { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 export type { AnvilMetaWindow, AnvilWindowActor, AnvilMetaWorkspace } from "./window/types.js";
 
+function windowTitleMatchesOverride(windowTitle: string | null, overrideTitle: string): boolean {
+  if (overrideTitle === " ") {
+    return overrideTitle === windowTitle;
+  }
+
+  const lowerWindowTitle = (windowTitle || "").toLowerCase();
+  if (!lowerWindowTitle) return false;
+
+  return (
+    overrideTitle.split(",").filter((titlePattern: string) => {
+      const lowerPattern = titlePattern.toLowerCase();
+      if (lowerPattern.startsWith("!")) {
+        return !lowerWindowTitle.includes(lowerPattern.slice(1));
+      }
+      if (lowerPattern.startsWith("=")) {
+        return lowerWindowTitle === lowerPattern.slice(1);
+      }
+      return lowerWindowTitle.includes(lowerPattern);
+    }).length > 0
+  );
+}
+
 export class WindowManager extends GObject.Object {
   static {
     GObject.registerClass(this);
@@ -103,7 +125,7 @@ export class WindowManager extends GObject.Object {
   declare _queueSourceId: number;
   declare _renderTreeSrcId: number;
   declare _reloadTreeSrcId: number;
-  declare _wsWindowAddSrcId: number;
+  declare _windowReconcileSrcId: number;
   declare _workspaceChangingTimeoutId: number;
   declare _prefsOpenSrcId: number;
   declare _liveResizeSrcId: number;
@@ -322,16 +344,10 @@ export class WindowManager extends GObject.Object {
     const shellWm = global.window_manager;
 
     this._displaySignals = [
-      // Delay tracking + the subsequent render to tolerate late-arriving window metadata
-      // (wm_class, title, etc.) for apps like Inkscape/Brave. Classification logic is now
-      // tolerant of missing identity (defaults to tile for NORMAL windows; only explicit
-      // matching rules or strong signals like transient/dialog force float).
-      extDisplay.connect("window-created", (_d, w) =>
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
-          this.trackWindow(_d, w);
-          return false;
-        })
-      ),
+      extDisplay.connect("window-created", (_d, w) => {
+        this._trackWindowWhenReady(_d, w);
+        this._scheduleCurrentWindowReconcile();
+      }),
       extDisplay.connect("grab-op-begin", (_d, m, g) => this._handleGrabOpBegin(_d, m, g)),
       extDisplay.connect("window-entered-monitor", (_, monitor, metaWindow) => {
         this.updateMetaWorkspaceMonitor("window-entered-monitor", monitor, metaWindow);
@@ -364,6 +380,9 @@ export class WindowManager extends GObject.Object {
     ];
 
     this._windowManagerSignals = [
+      shellWm.connect("map", (_, actor) => {
+        this._trackMappedWindowActor(actor);
+      }),
       shellWm.connect("minimize", () => {
         this.hideWindowBorders();
         const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
@@ -628,18 +647,16 @@ export class WindowManager extends GObject.Object {
       if (!ws.workspaceSignals) {
         const workspaceSignals = [
           metaWorkspace.connect("window-added", (_, metaWindow) => {
-            if (!this._wsWindowAddSrcId) {
-              this._wsWindowAddSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 200, () => {
-                this.trackWindow(global.display, metaWindow);
+            this._trackWindowWhenReady(global.display, metaWindow, () => {
+              if (this._validWindow(metaWindow)) {
                 this.updateMetaWorkspaceMonitor(
                   "window-added",
                   metaWindow.get_monitor(),
                   metaWindow
                 );
-                this._wsWindowAddSrcId = 0;
-                return false;
-              });
-            }
+              }
+            });
+            this._scheduleCurrentWindowReconcile();
           }),
         ];
         ws.workspaceSignals = workspaceSignals;
@@ -1370,6 +1387,8 @@ export class WindowManager extends GObject.Object {
           metaWindow.windowSignals = undefined;
         }
 
+        this._clearPendingWindowSignals(metaWindow);
+
         const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
         if (windowActor && windowActor.actorSignals) {
           for (const actorSignal of windowActor.actorSignals) {
@@ -1412,9 +1431,9 @@ export class WindowManager extends GObject.Object {
       this._reloadTreeSrcId = 0;
     }
 
-    if (this._wsWindowAddSrcId) {
-      GLib.Source.remove(this._wsWindowAddSrcId);
-      this._wsWindowAddSrcId = 0;
+    if (this._windowReconcileSrcId) {
+      GLib.Source.remove(this._windowReconcileSrcId);
+      this._windowReconcileSrcId = 0;
     }
 
     if (this._queueSourceId) {
@@ -1673,6 +1692,135 @@ export class WindowManager extends GObject.Object {
     return this._tilingRender.calculateGaps(node);
   }
 
+  _clearPendingWindowSignals(metaWindow: AnvilMetaWindow) {
+    if (metaWindow.pendingWindowSignals) {
+      for (const signal of metaWindow.pendingWindowSignals) {
+        metaWindow.disconnect(signal);
+      }
+      metaWindow.pendingWindowSignals.length = 0;
+      metaWindow.pendingWindowSignals = undefined;
+    }
+
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+    if (windowActor && metaWindow.pendingActorSignals) {
+      for (const signal of metaWindow.pendingActorSignals) {
+        windowActor.disconnect(signal);
+      }
+    }
+    if (metaWindow.pendingActorSignals) {
+      metaWindow.pendingActorSignals.length = 0;
+      metaWindow.pendingActorSignals = undefined;
+    }
+  }
+
+  _trackWindowWhenReady(display: Meta.Display, metaWindow: Meta.Window, afterTrack?: () => void) {
+    if (this.tree.findNode(metaWindow)) {
+      this._clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
+      return;
+    }
+
+    if (this._validWindow(metaWindow)) {
+      this._clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
+      this.trackWindow(display, metaWindow);
+      afterTrack?.();
+      return;
+    }
+
+    const anvilMetaWin = metaWindow as AnvilMetaWindow;
+    if (anvilMetaWin.pendingWindowSignals) return;
+
+    const retry = () => {
+      this._trackWindowWhenReady(display, metaWindow, afterTrack);
+    };
+
+    anvilMetaWin.pendingWindowSignals = [
+      metaWindow.connect("notify::wm-class", retry),
+      metaWindow.connect("notify::title", retry),
+      metaWindow.connect("notify::window-type", retry),
+      metaWindow.connect("workspace-changed", retry),
+      metaWindow.connect("unmanaged", () => this._clearPendingWindowSignals(anvilMetaWin)),
+    ];
+
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+    if (windowActor) {
+      anvilMetaWin.pendingActorSignals = [windowActor.connect("first-frame", retry)];
+    }
+  }
+
+  _unmaximizeWindow(metaWindow: Meta.Window) {
+    try {
+      // GNOME 49+
+      metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
+      metaWindow.unmaximize();
+    } catch {
+      // pre-49 fallback
+      (metaWindow as any).unmaximize(Meta.MaximizeFlags.HORIZONTAL);
+      (metaWindow as any).unmaximize(Meta.MaximizeFlags.VERTICAL);
+      (metaWindow as any).unmaximize(Meta.MaximizeFlags.BOTH);
+    }
+  }
+
+  _trackMappedWindowActor(
+    actor:
+      | (AnvilWindowActor & {
+          meta_window?: Meta.Window | null;
+          get_meta_window?: () => Meta.Window | null;
+        })
+      | null
+  ) {
+    const metaWindow = actor?.meta_window ?? actor?.get_meta_window?.();
+    if (metaWindow) {
+      this._trackWindowWhenReady(global.display, metaWindow);
+    }
+    this._scheduleCurrentWindowReconcile();
+  }
+
+  _scheduleCurrentWindowReconcile() {
+    if (this._windowReconcileSrcId) return;
+
+    let attemptsRemaining = 120;
+    this._windowReconcileSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
+      this._reconcileCurrentWindows("window-reconcile");
+      attemptsRemaining--;
+      if (attemptsRemaining <= 0) {
+        this._windowReconcileSrcId = 0;
+        return false;
+      }
+      return true;
+    });
+  }
+
+  _currentWindowCandidates() {
+    const byId = new Map<number, Meta.Window>();
+    for (const metaWindow of this.windowsAllWorkspaces) {
+      byId.set(metaWindow.get_id(), metaWindow);
+    }
+
+    const actors = global.get_window_actors?.() ?? [];
+    for (const actor of actors as Array<
+      AnvilWindowActor & {
+        meta_window?: Meta.Window | null;
+        get_meta_window?: () => Meta.Window | null;
+      }
+    >) {
+      const metaWindow = actor.meta_window ?? actor.get_meta_window?.();
+      if (metaWindow) byId.set(metaWindow.get_id(), metaWindow);
+    }
+
+    return [...byId.values()].sort((w1, w2) => {
+      return w1.get_stable_sequence() - w2.get_stable_sequence();
+    });
+  }
+
+  _reconcileCurrentWindows(from: string) {
+    for (const metaWindow of this._currentWindowCandidates()) {
+      if (this.tree.findNode(metaWindow) || !this._validWindow(metaWindow)) continue;
+
+      this.trackWindow(global.display, metaWindow);
+      this.updateMetaWorkspaceMonitor(from, metaWindow.get_monitor(), metaWindow);
+    }
+  }
+
   /**
    * Track meta/mutter windows and append them to the tree.
    * Windows can be attached on any of the following Node Types:
@@ -1699,14 +1847,6 @@ export class WindowManager extends GObject.Object {
     if (this._validWindow(metaWindow)) {
       const existNodeWindow = this.tree.findNode(metaWindow);
       Logger.debug(`Meta Window ${metaWindow.get_title()} ${metaWindow.get_window_type()}`);
-      const _wmC = metaWindow.get_wm_class();
-      if (_wmC && _wmC.toLowerCase().includes("inkscape")) {
-        Logger.info(
-          `[INKSCAPE-TRACK] title=${JSON.stringify(
-            metaWindow.get_title()
-          )} type=${metaWindow.get_window_type()} class=${_wmC}`
-        );
-      }
       if (!existNodeWindow) {
         let attachTarget;
 
@@ -1743,23 +1883,20 @@ export class WindowManager extends GObject.Object {
           }
         }
 
+        const initialMode =
+          this.isFloatingExempt(metaWindow) || !this.isActiveWindowWorkspaceTiled(metaWindow)
+            ? WINDOW_MODES.FLOAT
+            : WINDOW_MODES.TILE;
+
         const nodeWindow = this.tree.createNode(
           attachTarget.nodeValue,
           NODE_TYPES.WINDOW,
           metaWindow,
-          WINDOW_MODES.FLOAT
+          initialMode
         );
 
-        const _wmC2 = metaWindow.get_wm_class();
-        if (_wmC2 && _wmC2.toLowerCase().includes("inkscape")) {
-          Logger.info(
-            `[INKSCAPE-CREATE] id=${metaWindow.get_id()} title=${JSON.stringify(
-              metaWindow.get_title()
-            )} class=${_wmC2} initialMode=FLOAT`
-          );
-        }
-
         const anvilMetaWin = metaWindow as AnvilMetaWindow;
+        this._clearPendingWindowSignals(anvilMetaWin);
         anvilMetaWin.firstRender = true;
 
         const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
@@ -1777,25 +1914,9 @@ export class WindowManager extends GObject.Object {
             // Re-classify on property changes so late-arriving metadata (for
             // Inkscape, Brave, etc.) causes a re-render + processFloats.
             metaWindow.connect("notify::wm-class", () => {
-              const _c = metaWindow.get_wm_class();
-              if (_c && _c.toLowerCase().includes("inkscape")) {
-                Logger.info(
-                  `[INKSCAPE-RECLASS] wm-class-notify id=${metaWindow.get_id()} title=${JSON.stringify(
-                    metaWindow.get_title()
-                  )}`
-                );
-              }
               this.renderTree("wm-class-notify", true);
             }),
             metaWindow.connect("notify::title", () => {
-              const _c = metaWindow.get_wm_class();
-              if (_c && _c.toLowerCase().includes("inkscape")) {
-                Logger.info(
-                  `[INKSCAPE-RECLASS] title-notify id=${metaWindow.get_id()} title=${JSON.stringify(
-                    metaWindow.get_title()
-                  )}`
-                );
-              }
               this.renderTree("title-notify", true);
             }),
             metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
@@ -1854,39 +1975,14 @@ export class WindowManager extends GObject.Object {
           // properties (class, title, resize hints, etc.). Helps for slow
           // starting apps like Inkscape and Brave.
           const reclassify = () => {
-            const _c = metaWindow.get_wm_class();
-            if (_c && _c.toLowerCase().includes("inkscape")) {
-              Logger.info(
-                `[INKSCAPE-RECLASS] first-frame id=${metaWindow.get_id()} title=${JSON.stringify(
-                  metaWindow.get_title()
-                )}`
-              );
-            }
             this.renderTree("first-frame-reclassify", true);
           };
           windowActor.connect("first-frame", reclassify);
         }
 
         this.postProcessWindow(nodeWindow as Node<any> | null);
-        this.queueEvent(
-          {
-            name: "window-create-queue",
-            callback: () => {
-              try {
-                // GNOME 49+
-                metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
-                metaWindow.unmaximize();
-              } catch {
-                // pre-49 fallback
-                (metaWindow as any).unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-                (metaWindow as any).unmaximize(Meta.MaximizeFlags.VERTICAL);
-                (metaWindow as any).unmaximize(Meta.MaximizeFlags.BOTH);
-              }
-              this.renderTree("window-create", true);
-            },
-          },
-          350
-        );
+        this._unmaximizeWindow(metaWindow);
+        this.renderTree("window-create", true);
 
         if (nodeWindow?.parentNode) {
           const childNodes = this.tree.getTiledChildren(nodeWindow!.parentNode!.childNodes);
@@ -1894,28 +1990,6 @@ export class WindowManager extends GObject.Object {
             n.percent = 0.0;
           });
         }
-
-        // Give slow-to-initialize apps (Inkscape, Brave, other GTK/Electron) more
-        // time for final metadata (class, title, resize hints, transient) before
-        // we do the final layout decision. The early render+unmax still happens;
-        // this forces a re-classification via processFloats later.
-        this.queueEvent(
-          {
-            name: "new-window-stabilize",
-            callback: () => {
-              const _c = metaWindow.get_wm_class();
-              if (_c && _c.toLowerCase().includes("inkscape")) {
-                Logger.info(
-                  `[INKSCAPE-RECLASS] stabilize-800ms id=${metaWindow.get_id()} title=${JSON.stringify(
-                    metaWindow.get_title()
-                  )}`
-                );
-              }
-              this.renderTree("new-window-stabilize", true);
-            },
-          },
-          800
-        );
       }
     }
   }
@@ -3260,65 +3334,22 @@ export class WindowManager extends GObject.Object {
     const windowTitle = metaWindow.get_title();
     const windowType = metaWindow.get_window_type();
     const wmClass = metaWindow.get_wm_class();
-    const lowerClass = (wmClass || "").toLowerCase();
-    const lowerTitle = (windowTitle || "").toLowerCase();
-    const looksLikeInk = lowerClass.includes("inkscape") || lowerTitle.includes("inkscape");
-    if (looksLikeInk) {
-      const rect = metaWindow.get_frame_rect ? metaWindow.get_frame_rect() : null;
-      Logger.info(
-        `[INKSCAPE-EXEMPT-ENTRY] id=${metaWindow.get_id()} rawClass=${JSON.stringify(
-          wmClass
-        )} rawTitle=${JSON.stringify(windowTitle)} typeNum=${windowType} rect=${JSON.stringify(
-          rect
-        )} allowsResize=${
-          metaWindow.allows_resize ? metaWindow.allows_resize() : "n/a"
-        } transient=${!!metaWindow.get_transient_for()}`
-      );
-    }
 
     // Bug #294 fix: explicit TILE overrides take precedence over all
     // built-in float rules. Ported from jcrussell/forge
     for (const override of this.windowProps.overrides) {
       if (override.mode !== "tile") continue;
 
-      let matchTitle: boolean;
-      let matchId: boolean;
-
       if (override.wmClass) {
         const reported = (wmClass || "").toLowerCase();
         const cfg = override.wmClass.toLowerCase();
         if (reported.length === 0 || !cfg.includes(reported)) continue;
       }
-      if (wmClass && wmClass.toLowerCase().includes("inkscape") && override.mode === "tile") {
-        Logger.info(
-          `[INKSCAPE-TILE-OVERRIDE] considering tile rule ${JSON.stringify(
-            override
-          )} for title=${JSON.stringify(windowTitle)}`
-        );
-      }
       if (override.wmTitle) {
-        if (override.wmTitle === " ") {
-          matchTitle = override.wmTitle === windowTitle;
-        } else {
-          const lowerWindowTitle = (windowTitle || "").toLowerCase();
-          const titles = override.wmTitle.split(",");
-          matchTitle =
-            titles.filter((t: string) => {
-              if (lowerWindowTitle) {
-                const lt = t.toLowerCase();
-                if (lt.startsWith("!")) {
-                  return !lowerWindowTitle.includes(lt.slice(1));
-                } else {
-                  return lowerWindowTitle.includes(lt);
-                }
-              }
-              return false;
-            }).length > 0;
-        }
-        if (!matchTitle) continue;
+        if (!windowTitleMatchesOverride(windowTitle, override.wmTitle)) continue;
       }
       if (override.wmId) {
-        matchId = override.wmId === String(metaWindow.get_id());
+        const matchId = override.wmId === String(metaWindow.get_id());
         if (!matchId) continue;
       }
 
@@ -3359,22 +3390,10 @@ export class WindowManager extends GObject.Object {
       windowType === Meta.WindowType.DIALOG || windowType === Meta.WindowType.MODAL_DIALOG;
     const hasTransient = hasIdentity && trans !== null;
     const noResize = hasIdentity && !resizable;
-    const typeName =
-      Object.keys(Meta.WindowType).find((k) => (Meta.WindowType as any)[k] === windowType) ||
-      windowType;
-    if (looksLikeInk) {
-      Logger.info(
-        `[INKSCAPE-DEBUG] class=${wmClass} title=${JSON.stringify(
-          windowTitle
-        )} type=${windowType}(${typeName}) transient=${!!trans} allows_resize=${resizable} hasIdentity=${hasIdentity} isDialogType=${isDialogType} hasTransient=${hasTransient} noResize=${noResize}`
-      );
-    }
     const floatByType = isDialogType || hasTransient || noResize;
 
     const knownFloats = this.windowProps.overrides.filter((wprop) => wprop.mode === "float");
 
-    let matchedFloatRule: any = null;
-    const floatOverrideMatches: any[] = [];
     const floatOverride =
       knownFloats.filter((kf) => {
         let matchTitle = false;
@@ -3382,24 +3401,7 @@ export class WindowManager extends GObject.Object {
         let matchId = false;
 
         if (kf.wmTitle) {
-          if (kf.wmTitle === " ") {
-            matchTitle = kf.wmTitle === windowTitle;
-          } else {
-            const lowerWindowTitle = (windowTitle || "").toLowerCase();
-            const titles = kf.wmTitle.split(",");
-            matchTitle =
-              titles.filter((t: string) => {
-                if (lowerWindowTitle) {
-                  const lt = t.toLowerCase();
-                  if (lt.startsWith("!")) {
-                    return !lowerWindowTitle.includes(lt.slice(1));
-                  } else {
-                    return lowerWindowTitle.includes(lt);
-                  }
-                }
-                return false;
-              }).length > 0;
-          }
+          matchTitle = windowTitleMatchesOverride(windowTitle, kf.wmTitle);
         }
         if (kf.wmClass) {
           const reported = (metaWindow.get_wm_class() || "").toLowerCase();
@@ -3414,34 +3416,10 @@ export class WindowManager extends GObject.Object {
         const titleOk = !kf.wmTitle || matchTitle;
         const idOk = !kf.wmId || matchId;
         const ok = classOk && titleOk && idOk;
-        if (wmClass && wmClass.toLowerCase().includes("inkscape")) {
-          floatOverrideMatches.push({
-            rule: kf,
-            matchTitle,
-            matchClass,
-            matchId,
-            classOk,
-            titleOk,
-            idOk,
-            ok,
-          });
-          if (ok && !matchedFloatRule) matchedFloatRule = kf;
-        }
         return ok;
       }).length > 0;
 
-    const willFloat = floatByType || floatOverride;
-    if (looksLikeInk) {
-      Logger.info(
-        `[INKSCAPE-DECIDE] title=${JSON.stringify(
-          windowTitle
-        )} floatByType=${floatByType}(dialog=${isDialogType} transient=${hasTransient} noResize=${noResize}) floatOverride=${floatOverride} willFloat=${willFloat} matchedFloat=${
-          matchedFloatRule ? JSON.stringify(matchedFloatRule) : "none"
-        } allFloatMatches=${JSON.stringify(floatOverrideMatches)}`
-      );
-    }
-
-    return willFloat;
+    return floatByType || floatOverride;
   }
 
   _getDragDropCenterPreviewStyle() {

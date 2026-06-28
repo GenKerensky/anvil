@@ -107,62 +107,62 @@
     },
     {
       "wmClass": "inkscape",
-      "wmTitle": "New Document",
+      "wmTitle": " - Inkscape",
+      "mode": "tile"
+    },
+    {
+      "wmClass": "org.inkscape.Inkscape",
+      "wmTitle": " - Inkscape",
+      "mode": "tile"
+    },
+    {
+      "wmClass": "inkscape",
+      "wmTitle": "=Open",
       "mode": "float"
     },
     {
       "wmClass": "org.inkscape.Inkscape",
-      "wmTitle": "New Document",
+      "wmTitle": "=Open",
       "mode": "float"
     },
     {
       "wmClass": "inkscape",
-      "wmTitle": "Open",
+      "wmTitle": "=Welcome",
       "mode": "float"
     },
     {
       "wmClass": "org.inkscape.Inkscape",
-      "wmTitle": "Open",
+      "wmTitle": "=Welcome",
       "mode": "float"
     },
     {
       "wmClass": "inkscape",
-      "wmTitle": "Welcome",
+      "wmTitle": "=Save",
       "mode": "float"
     },
     {
       "wmClass": "org.inkscape.Inkscape",
-      "wmTitle": "Welcome",
+      "wmTitle": "=Save",
       "mode": "float"
     },
     {
       "wmClass": "inkscape",
-      "wmTitle": "Save",
+      "wmTitle": "=Export",
       "mode": "float"
     },
     {
       "wmClass": "org.inkscape.Inkscape",
-      "wmTitle": "Save",
+      "wmTitle": "=Export",
       "mode": "float"
     },
     {
       "wmClass": "inkscape",
-      "wmTitle": "Export",
+      "wmTitle": "=Preferences",
       "mode": "float"
     },
     {
       "wmClass": "org.inkscape.Inkscape",
-      "wmTitle": "Export",
-      "mode": "float"
-    },
-    {
-      "wmClass": "inkscape",
-      "wmTitle": "Preferences",
-      "mode": "float"
-    },
-    {
-      "wmClass": "org.inkscape.Inkscape",
-      "wmTitle": "Preferences",
+      "wmTitle": "=Preferences",
       "mode": "float"
     }
   ]

@@ -218,6 +218,87 @@ describe("WindowManager - Floating Mode", () => {
       expect(wm().isFloatingExempt(window1)).toBe(true);
       expect(wm().isFloatingExempt(window2)).toBe(false);
     });
+
+    it("should support exact title matching with = prefix", () => {
+      configMgr().windowProps.overrides = [{ wmClass: "Test", wmTitle: "=Open", mode: "float" }];
+
+      const dialogWindow = createMockWindow({
+        wm_class: "Test",
+        title: "Open",
+        allows_resize: true,
+      });
+      const documentWindow = createMockWindow({
+        wm_class: "Test",
+        title: "Open plan.svg - Test",
+        allows_resize: true,
+      });
+
+      expect(wm().isFloatingExempt(dialogWindow)).toBe(true);
+      expect(wm().isFloatingExempt(documentWindow)).toBe(false);
+    });
+  });
+
+  describe("isFloatingExempt - Inkscape default overrides", () => {
+    const inkscapeDefaultOverrides = [
+      { wmClass: "inkscape", wmTitle: " - Inkscape", mode: "tile" },
+      { wmClass: "org.inkscape.Inkscape", wmTitle: " - Inkscape", mode: "tile" },
+      { wmClass: "inkscape", wmTitle: "=Open", mode: "float" },
+      { wmClass: "org.inkscape.Inkscape", wmTitle: "=Open", mode: "float" },
+      { wmClass: "inkscape", wmTitle: "=Welcome", mode: "float" },
+      { wmClass: "org.inkscape.Inkscape", wmTitle: "=Welcome", mode: "float" },
+      { wmClass: "inkscape", wmTitle: "=Save", mode: "float" },
+      { wmClass: "org.inkscape.Inkscape", wmTitle: "=Save", mode: "float" },
+      { wmClass: "inkscape", wmTitle: "=Export", mode: "float" },
+      { wmClass: "org.inkscape.Inkscape", wmTitle: "=Export", mode: "float" },
+      { wmClass: "inkscape", wmTitle: "=Preferences", mode: "float" },
+      { wmClass: "org.inkscape.Inkscape", wmTitle: "=Preferences", mode: "float" },
+    ];
+
+    beforeEach(() => {
+      configMgr().windowProps.overrides = inkscapeDefaultOverrides;
+    });
+
+    it("should tile new Inkscape document windows", () => {
+      for (const wmClass of ["inkscape", "org.inkscape.Inkscape"]) {
+        const window = createMockWindow({
+          wm_class: wmClass,
+          title: "New Document 1 - Inkscape",
+          allows_resize: true,
+        });
+
+        expect(wm().isFloatingExempt(window)).toBe(false);
+      }
+    });
+
+    it("should not float Inkscape documents whose title contains a dialog keyword", () => {
+      const window = createMockWindow({
+        wm_class: "org.inkscape.Inkscape",
+        title: "Open plan.svg - Inkscape",
+        allows_resize: true,
+      });
+
+      expect(wm().isFloatingExempt(window)).toBe(false);
+    });
+
+    it("should tile non-resizable Inkscape Flatpak document windows", () => {
+      const window = createMockWindow({
+        wm_class: "org.inkscape.Inkscape",
+        title: "anvil-inkscape-flatpak-repro.svg - Inkscape",
+        allows_resize: false,
+      });
+
+      expect(wm().isFloatingExempt(window)).toBe(false);
+    });
+
+    it("should float exact Inkscape dialog title overrides", () => {
+      const window = createMockWindow({
+        wm_class: "org.inkscape.Inkscape",
+        title: "Open",
+        allows_resize: true,
+      });
+
+      expect(wm().isFloatingExempt(window)).toBe(true);
+    });
   });
 
   describe("isFloatingExempt - Override by wmId", () => {

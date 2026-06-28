@@ -8,6 +8,8 @@ export type AnvilExtension = import("../../../extension.js").default;
 // and are not present in @girs type declarations.
 export type AnvilMetaWindow = Meta.Window & {
   windowSignals?: number[];
+  pendingWindowSignals?: number[];
+  pendingActorSignals?: number[];
   firstRender?: boolean;
   /** @deprecated pre-GNOME 49 fallback, removed from @girs types */
   get_maximized(): number;

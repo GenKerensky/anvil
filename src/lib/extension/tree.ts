@@ -638,9 +638,7 @@ export class Node<T extends string> extends GObject.Object {
   set float(value: boolean) {
     if (this.isWindow()) {
       const metaWindow = this.nodeValue;
-      const wmClass = metaWindow?.get_wm_class?.() || "";
       const floatAlwaysOnTop = this.settings?.get_boolean("float-always-on-top-enabled") ?? false;
-      const beforeMode = this.mode;
       if (value) {
         this.mode = WINDOW_MODES.FLOAT;
         if (!metaWindow.is_above()) {
@@ -661,13 +659,6 @@ export class Node<T extends string> extends GObject.Object {
             c.percent = 0;
           });
         }
-      }
-      if (wmClass.toLowerCase().includes("inkscape")) {
-        Logger.info(
-          `[INKSCAPE-MODE-SET] id=${metaWindow.get_id()} title=${JSON.stringify(
-            metaWindow.get_title()
-          )} beforeMode=${beforeMode} afterMode=${this.mode} float=${this.float} value=${value}`
-        );
       }
     }
   }
@@ -1003,18 +994,9 @@ export class Tree extends Node<string> {
       if (node.isWindow()) {
         const floating = node.isFloat();
         const grabTiling = node.isGrabTile();
-        const mw = node.nodeValue as any;
-        const c = mw?.get_wm_class?.() || "";
-        const isInk = c.toLowerCase().includes("inkscape");
+        const metaWindow = node.nodeValue as Meta.Window;
         // A Node[Window]._data is a Meta.Window
-        const included = !mw.minimized && !(floating || grabTiling);
-        if (isInk) {
-          Logger.info(
-            `[INKSCAPE-TILED-CHILD] id=${mw.get_id?.()} title=${JSON.stringify(
-              mw.get_title?.()
-            )} floating=${floating} included=${included}`
-          );
-        }
+        const included = !metaWindow.minimized && !(floating || grabTiling);
         if (included) {
           return true;
         }
