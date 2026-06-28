@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-23 23:11-0400\n"
+"POT-Creation-Date: 2026-06-26 02:30-0400\n"
 "PO-Revision-Date: 2021-09-18 16:25-0400\n"
 "Last-Translator: Juarez Rudsatz <juarezr@gmail.com>\n"
 "Language-Team: \n"
@@ -37,7 +37,7 @@ msgstr "Sinalizador de Foco Flutuante"
 msgid "Move Pointer with the Focus"
 msgstr "Mover o Ponteiro com o Foco"
 
-#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:151
+#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:128
 msgid "Settings"
 msgstr "Configurações"
 

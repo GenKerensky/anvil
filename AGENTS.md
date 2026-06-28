@@ -42,6 +42,7 @@ Domain guides in `.agents/skills/<name>/SKILL.md` — load the relevant skill fo
 | `notifications`          | MessageTray / Main.notify               |
 | `search-provider`        | Overview search provider                |
 | `translations`           | gettext POT/PO/MO                       |
+| `dream`                  | Distill session logs; wipe local/       |
 
 ## Commits
 
@@ -70,4 +71,33 @@ Examples: `fix(window): ignore wl-clipboard ephemeral helpers`, `test: add lifec
 - Use **Context7** MCP (`context7` in `~/.grok/config.toml`) for up-to-date library docs —
   tools: `resolve-library-id`, `query-docs`. Authenticate via `/mcps` on first use (OAuth).
 - Append new decisions to `.agents/memory/decisions.md` when making architectural choices.
-- Append session notes to `.agents/logs/` for significant debugging sessions.
+- Follow **session log conventions** (below) when recording debug work.
+- Run `/dream` (or load the `dream` skill) to distill session logs into memory, delete them, and
+  clean ephemeral files under `.agents/logs/local/`.
+
+## Session logs
+
+Two tiers under `.agents/logs/`:
+
+| Tier            | Path                  | Naming                                                      | Git                              | Lifecycle                                                            |
+| --------------- | --------------------- | ----------------------------------------------------------- | -------------------------------- | -------------------------------------------------------------------- |
+| **Session log** | `.agents/logs/`       | `session-YYYY-MM-DD.md` only                                | Committed until distilled        | Written after significant debug; distilled by `/dream`, then deleted |
+| **Ephemeral**   | `.agents/logs/local/` | Any filename (e.g. `debug-loop-001.json`, `grep-anvil.txt`) | **Never** committed (gitignored) | Scratch, raw debug output, log excerpts; **wiped by `/dream`**       |
+
+### Session log rules (enforced)
+
+- **Filename:** exactly `session-YYYY-MM-DD.md` (ISO date, lowercase `session-`, `.md` extension).
+- **Location:** directly under `.agents/logs/` — not in subfolders.
+- **Content:** postmortem narrative (symptom, root cause, fix, tests) — not raw log dumps.
+- **Do not** add `AGENTS.md` routing rows for session logs; `/dream` promotes insights to
+  `decisions.md` / context / rules instead.
+- One file per calendar day; if a second session occurs the same day, append to the existing file
+  or wait until the prior log is distilled.
+
+### Ephemeral / local rules (enforced)
+
+- Put **raw debug output** here: gnome-shell excerpts, `iteration-NNN.json` copies, grep results,
+  agent scratch notes, temporary repro transcripts.
+- **Never** commit files in `local/` (only `.gitkeep` is tracked).
+- Do not distill `local/` — `/dream` **deletes all contents** (except `.gitkeep`) after processing
+  session logs.

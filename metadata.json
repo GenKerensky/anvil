@@ -2,6 +2,7 @@
   "name": "Anvil",
   "version": "0.1.0",
   "description": "Tiling and window manager for GNOME",
+  "icon": "org.gnome.shell.extensions.anvil-regular.svg",
   "gettext-domain": "anvil",
   "uuid": "anvil@GenKerensky.github.com",
   "settings-schema": "org.gnome.shell.extensions.anvil",

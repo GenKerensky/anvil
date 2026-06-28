@@ -12,6 +12,8 @@ test/integration/output
 test/e2e/.venv
 test/e2e/output
 test/debug/local/
+.agents/logs/local/*
+!.agents/logs/local/.gitkeep
 __pycache__
 *.pyc
 dist/.types/
