@@ -322,7 +322,14 @@ export class WindowManager extends GObject.Object {
     const shellWm = global.window_manager;
 
     this._displaySignals = [
-      extDisplay.connect("window-created", (_d, w) => this.trackWindow(_d, w)),
+      // Delay tracking to tolerate late-arriving window metadata (wm_class, title, etc.)
+      // for apps like Inkscape whose Wayland/X11 properties populate after "window-created".
+      extDisplay.connect("window-created", (_d, w) =>
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
+          this.trackWindow(_d, w);
+          return false;
+        })
+      ),
       extDisplay.connect("grab-op-begin", (_d, m, g) => this._handleGrabOpBegin(_d, m, g)),
       extDisplay.connect("window-entered-monitor", (_, monitor, metaWindow) => {
         this.updateMetaWorkspaceMonitor("window-entered-monitor", monitor, metaWindow);
@@ -1647,8 +1654,9 @@ export class WindowManager extends GObject.Object {
       if (global.window_group && global.window_group.contains(border)) {
         // TODO - sort the borders with split border being on top
         global.window_group.remove_child(border);
-        // Add the border just above the focused window
-        global.window_group.insert_child_above(border, metaWindow.get_compositor_private());
+        // Insert below the window actor so the outline does not paint over
+        // the window's client content (e.g. app menus, popovers, dropdowns).
+        global.window_group.insert_child_below(border, metaWindow.get_compositor_private());
       }
     });
   }
@@ -3240,10 +3248,12 @@ export class WindowManager extends GObject.Object {
       windowType === Meta.WindowType.DIALOG ||
       windowType === Meta.WindowType.MODAL_DIALOG ||
       metaWindow.get_transient_for() !== null ||
-      metaWindow.get_wm_class() === null ||
-      windowTitle === null ||
-      windowTitle === "" ||
-      windowTitle.length === 0 ||
+      // Do not force-float solely due to transiently missing wm_class or title.
+      // These are often unset at "window-created" (and even 80-200ms later) for
+      // complex apps (Inkscape, etc.). processFloats() re-evaluates on every render
+      // using live values, so once identity arrives the correct float/tile decision
+      // (overrides + strong signals) will be applied. Dropping the null checks fixes
+      // permanent auto-float for windows that should tile.
       !metaWindow.allows_resize();
 
     const knownFloats = this.windowProps.overrides.filter((wprop) => wprop.mode === "float");

@@ -59,22 +59,37 @@ describe("WindowManager - Floating Mode", () => {
       expect(wm().isFloatingExempt(childWindow)).toBe(true);
     });
 
-    it("should float windows without wm_class", () => {
-      const window = createMockWindow({ wm_class: null });
+    it("should NOT float windows solely because wm_class is null (late population for valid NORMAL windows)", () => {
+      const window = createMockWindow({
+        wm_class: null,
+        title: "Some Title",
+        window_type: Meta.WindowType.NORMAL,
+        allows_resize: true,
+      });
 
-      expect(wm().isFloatingExempt(window)).toBe(true);
+      // Removed over-eager null check; fixes Inkscape etc. not auto-tiling on open.
+      // Windows are still floated for dialog types, transient, !resize, or float overrides.
+      expect(wm().isFloatingExempt(window)).toBe(false);
     });
 
-    it("should float windows without title", () => {
-      const window = createMockWindow({ title: null });
-
-      expect(wm().isFloatingExempt(window)).toBe(true);
+    it("should NOT float windows solely because title is null (late population)", () => {
+      const window = createMockWindow({
+        title: null,
+        wm_class: "TestApp",
+        window_type: Meta.WindowType.NORMAL,
+        allows_resize: true,
+      });
+      expect(wm().isFloatingExempt(window)).toBe(false);
     });
 
-    it("should float windows with empty title", () => {
-      const window = createMockWindow({ title: "" });
-
-      expect(wm().isFloatingExempt(window)).toBe(true);
+    it("should NOT float windows solely because title is empty string", () => {
+      const window = createMockWindow({
+        title: "",
+        wm_class: "TestApp",
+        window_type: Meta.WindowType.NORMAL,
+        allows_resize: true,
+      });
+      expect(wm().isFloatingExempt(window)).toBe(false);
     });
 
     it("should float windows that do not allow resize", () => {

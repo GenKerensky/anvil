@@ -264,6 +264,37 @@ describe("WindowManager - Lifecycle", () => {
     });
   });
 
+  describe("isFloatingExempt (late metadata)", () => {
+    it("should not force-float a NORMAL window when wm_class and title are null (e.g. Inkscape at window-created)", () => {
+      const window = createMockWindow({
+        wm_class: null,
+        title: null,
+        window_type: Meta.WindowType.NORMAL,
+        allows_resize: true,
+      });
+      // Critical for delayed tracking: previously this returned true, forcing the window
+      // to stay floating even though it is a regular app window.
+      expect(wm().isFloatingExempt(window)).toBe(false);
+    });
+
+    it("should not force-float a NORMAL window with empty title when class is present", () => {
+      const window = createMockWindow({
+        title: "",
+        window_type: Meta.WindowType.NORMAL,
+      });
+      expect(wm().isFloatingExempt(window)).toBe(false);
+    });
+
+    it("should still float DIALOG windows regardless of class/title", () => {
+      const window = createMockWindow({
+        wm_class: null,
+        title: null,
+        window_type: Meta.WindowType.DIALOG,
+      });
+      expect(wm().isFloatingExempt(window)).toBe(true);
+    });
+  });
+
   describe("bindWorkspaceSignals", () => {
     it("should track valid windows from delayed workspace window-added callbacks", () => {
       let scheduledCallback: Parameters<typeof GLib.timeout_add>[2] | null = null;
