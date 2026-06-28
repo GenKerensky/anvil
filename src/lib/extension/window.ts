@@ -322,8 +322,10 @@ export class WindowManager extends GObject.Object {
     const shellWm = global.window_manager;
 
     this._displaySignals = [
-      // Delay tracking to tolerate late-arriving window metadata (wm_class, title, etc.)
-      // for apps like Inkscape whose Wayland/X11 properties populate after "window-created".
+      // Delay tracking + the subsequent render to tolerate late-arriving window metadata
+      // (wm_class, title, etc.) for apps like Inkscape/Brave. Classification logic is now
+      // tolerant of missing identity (defaults to tile for NORMAL windows; only explicit
+      // matching rules or strong signals like transient/dialog force float).
       extDisplay.connect("window-created", (_d, w) =>
         GLib.timeout_add(GLib.PRIORITY_DEFAULT, 80, () => {
           this.trackWindow(_d, w);
@@ -1697,6 +1699,14 @@ export class WindowManager extends GObject.Object {
     if (this._validWindow(metaWindow)) {
       const existNodeWindow = this.tree.findNode(metaWindow);
       Logger.debug(`Meta Window ${metaWindow.get_title()} ${metaWindow.get_window_type()}`);
+      const _wmC = metaWindow.get_wm_class();
+      if (_wmC && _wmC.toLowerCase().includes("inkscape")) {
+        Logger.info(
+          `[INKSCAPE-TRACK] title=${JSON.stringify(
+            metaWindow.get_title()
+          )} type=${metaWindow.get_window_type()} class=${_wmC}`
+        );
+      }
       if (!existNodeWindow) {
         let attachTarget;
 
@@ -1740,6 +1750,15 @@ export class WindowManager extends GObject.Object {
           WINDOW_MODES.FLOAT
         );
 
+        const _wmC2 = metaWindow.get_wm_class();
+        if (_wmC2 && _wmC2.toLowerCase().includes("inkscape")) {
+          Logger.info(
+            `[INKSCAPE-CREATE] id=${metaWindow.get_id()} title=${JSON.stringify(
+              metaWindow.get_title()
+            )} class=${_wmC2} initialMode=FLOAT`
+          );
+        }
+
         const anvilMetaWin = metaWindow as AnvilMetaWindow;
         anvilMetaWin.firstRender = true;
 
@@ -1754,6 +1773,30 @@ export class WindowManager extends GObject.Object {
             metaWindow.connect("size-changed", (_metaWindow: Meta.Window) => {
               const from = "size-changed";
               this.updateMetaPositionSize(_metaWindow, from);
+            }),
+            // Re-classify on property changes so late-arriving metadata (for
+            // Inkscape, Brave, etc.) causes a re-render + processFloats.
+            metaWindow.connect("notify::wm-class", () => {
+              const _c = metaWindow.get_wm_class();
+              if (_c && _c.toLowerCase().includes("inkscape")) {
+                Logger.info(
+                  `[INKSCAPE-RECLASS] wm-class-notify id=${metaWindow.get_id()} title=${JSON.stringify(
+                    metaWindow.get_title()
+                  )}`
+                );
+              }
+              this.renderTree("wm-class-notify", true);
+            }),
+            metaWindow.connect("notify::title", () => {
+              const _c = metaWindow.get_wm_class();
+              if (_c && _c.toLowerCase().includes("inkscape")) {
+                Logger.info(
+                  `[INKSCAPE-RECLASS] title-notify id=${metaWindow.get_id()} title=${JSON.stringify(
+                    metaWindow.get_title()
+                  )}`
+                );
+              }
+              this.renderTree("title-notify", true);
             }),
             metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
               this.hideActorBorder(windowActor);
@@ -1805,6 +1848,23 @@ export class WindowManager extends GObject.Object {
 
         if (windowActor) {
           this.ensureBorderActors(windowActor);
+
+          // Re-classify on first-frame: this is when the client has provided
+          // its first buffer, which is typically after it has set final
+          // properties (class, title, resize hints, etc.). Helps for slow
+          // starting apps like Inkscape and Brave.
+          const reclassify = () => {
+            const _c = metaWindow.get_wm_class();
+            if (_c && _c.toLowerCase().includes("inkscape")) {
+              Logger.info(
+                `[INKSCAPE-RECLASS] first-frame id=${metaWindow.get_id()} title=${JSON.stringify(
+                  metaWindow.get_title()
+                )}`
+              );
+            }
+            this.renderTree("first-frame-reclassify", true);
+          };
+          windowActor.connect("first-frame", reclassify);
         }
 
         this.postProcessWindow(nodeWindow as Node<any> | null);
@@ -1825,7 +1885,7 @@ export class WindowManager extends GObject.Object {
               this.renderTree("window-create", true);
             },
           },
-          200
+          350
         );
 
         if (nodeWindow?.parentNode) {
@@ -1834,6 +1894,28 @@ export class WindowManager extends GObject.Object {
             n.percent = 0.0;
           });
         }
+
+        // Give slow-to-initialize apps (Inkscape, Brave, other GTK/Electron) more
+        // time for final metadata (class, title, resize hints, transient) before
+        // we do the final layout decision. The early render+unmax still happens;
+        // this forces a re-classification via processFloats later.
+        this.queueEvent(
+          {
+            name: "new-window-stabilize",
+            callback: () => {
+              const _c = metaWindow.get_wm_class();
+              if (_c && _c.toLowerCase().includes("inkscape")) {
+                Logger.info(
+                  `[INKSCAPE-RECLASS] stabilize-800ms id=${metaWindow.get_id()} title=${JSON.stringify(
+                    metaWindow.get_title()
+                  )}`
+                );
+              }
+              this.renderTree("new-window-stabilize", true);
+            },
+          },
+          800
+        );
       }
     }
   }
@@ -3178,32 +3260,56 @@ export class WindowManager extends GObject.Object {
     const windowTitle = metaWindow.get_title();
     const windowType = metaWindow.get_window_type();
     const wmClass = metaWindow.get_wm_class();
+    const lowerClass = (wmClass || "").toLowerCase();
+    const lowerTitle = (windowTitle || "").toLowerCase();
+    const looksLikeInk = lowerClass.includes("inkscape") || lowerTitle.includes("inkscape");
+    if (looksLikeInk) {
+      const rect = metaWindow.get_frame_rect ? metaWindow.get_frame_rect() : null;
+      Logger.info(
+        `[INKSCAPE-EXEMPT-ENTRY] id=${metaWindow.get_id()} rawClass=${JSON.stringify(
+          wmClass
+        )} rawTitle=${JSON.stringify(windowTitle)} typeNum=${windowType} rect=${JSON.stringify(
+          rect
+        )} allowsResize=${
+          metaWindow.allows_resize ? metaWindow.allows_resize() : "n/a"
+        } transient=${!!metaWindow.get_transient_for()}`
+      );
+    }
 
     // Bug #294 fix: explicit TILE overrides take precedence over all
     // built-in float rules. Ported from jcrussell/forge
     for (const override of this.windowProps.overrides) {
       if (override.mode !== "tile") continue;
 
-      let matchClass = false;
       let matchTitle: boolean;
       let matchId: boolean;
 
       if (override.wmClass) {
-        matchClass = override.wmClass.includes(wmClass ?? "");
-        if (!matchClass) continue;
+        const reported = (wmClass || "").toLowerCase();
+        const cfg = override.wmClass.toLowerCase();
+        if (reported.length === 0 || !cfg.includes(reported)) continue;
+      }
+      if (wmClass && wmClass.toLowerCase().includes("inkscape") && override.mode === "tile") {
+        Logger.info(
+          `[INKSCAPE-TILE-OVERRIDE] considering tile rule ${JSON.stringify(
+            override
+          )} for title=${JSON.stringify(windowTitle)}`
+        );
       }
       if (override.wmTitle) {
         if (override.wmTitle === " ") {
           matchTitle = override.wmTitle === windowTitle;
         } else {
+          const lowerWindowTitle = (windowTitle || "").toLowerCase();
           const titles = override.wmTitle.split(",");
           matchTitle =
             titles.filter((t: string) => {
-              if (windowTitle) {
-                if (t.startsWith("!")) {
-                  return !windowTitle.includes(t.slice(1));
+              if (lowerWindowTitle) {
+                const lt = t.toLowerCase();
+                if (lt.startsWith("!")) {
+                  return !lowerWindowTitle.includes(lt.slice(1));
                 } else {
-                  return windowTitle.includes(t);
+                  return lowerWindowTitle.includes(lt);
                 }
               }
               return false;
@@ -3216,7 +3322,9 @@ export class WindowManager extends GObject.Object {
         if (!matchId) continue;
       }
 
-      if (matchClass) return false;
+      // All specified criteria (class/title/id) for this tile override matched.
+      // (matchClass may be false for title/id-only rules, but we passed the guards.)
+      return false;
     }
 
     if (Utils.isEphemeralHelperWindow(metaWindow)) {
@@ -3244,20 +3352,29 @@ export class WindowManager extends GObject.Object {
       return true;
     }
 
-    const floatByType =
-      windowType === Meta.WindowType.DIALOG ||
-      windowType === Meta.WindowType.MODAL_DIALOG ||
-      metaWindow.get_transient_for() !== null ||
-      // Do not force-float solely due to transiently missing wm_class or title.
-      // These are often unset at "window-created" (and even 80-200ms later) for
-      // complex apps (Inkscape, etc.). processFloats() re-evaluates on every render
-      // using live values, so once identity arrives the correct float/tile decision
-      // (overrides + strong signals) will be applied. Dropping the null checks fixes
-      // permanent auto-float for windows that should tile.
-      !metaWindow.allows_resize();
+    const hasIdentity = !!(wmClass || windowTitle);
+    const trans = metaWindow.get_transient_for();
+    const resizable = metaWindow.allows_resize();
+    const isDialogType =
+      windowType === Meta.WindowType.DIALOG || windowType === Meta.WindowType.MODAL_DIALOG;
+    const hasTransient = hasIdentity && trans !== null;
+    const noResize = hasIdentity && !resizable;
+    const typeName =
+      Object.keys(Meta.WindowType).find((k) => (Meta.WindowType as any)[k] === windowType) ||
+      windowType;
+    if (looksLikeInk) {
+      Logger.info(
+        `[INKSCAPE-DEBUG] class=${wmClass} title=${JSON.stringify(
+          windowTitle
+        )} type=${windowType}(${typeName}) transient=${!!trans} allows_resize=${resizable} hasIdentity=${hasIdentity} isDialogType=${isDialogType} hasTransient=${hasTransient} noResize=${noResize}`
+      );
+    }
+    const floatByType = isDialogType || hasTransient || noResize;
 
     const knownFloats = this.windowProps.overrides.filter((wprop) => wprop.mode === "float");
 
+    let matchedFloatRule: any = null;
+    const floatOverrideMatches: any[] = [];
     const floatOverride =
       knownFloats.filter((kf) => {
         let matchTitle = false;
@@ -3268,14 +3385,16 @@ export class WindowManager extends GObject.Object {
           if (kf.wmTitle === " ") {
             matchTitle = kf.wmTitle === windowTitle;
           } else {
+            const lowerWindowTitle = (windowTitle || "").toLowerCase();
             const titles = kf.wmTitle.split(",");
             matchTitle =
               titles.filter((t: string) => {
-                if (windowTitle) {
-                  if (t.startsWith("!")) {
-                    return !windowTitle.includes(t.slice(1));
+                if (lowerWindowTitle) {
+                  const lt = t.toLowerCase();
+                  if (lt.startsWith("!")) {
+                    return !lowerWindowTitle.includes(lt.slice(1));
                   } else {
-                    return windowTitle.includes(t);
+                    return lowerWindowTitle.includes(lt);
                   }
                 }
                 return false;
@@ -3283,16 +3402,46 @@ export class WindowManager extends GObject.Object {
           }
         }
         if (kf.wmClass) {
-          matchClass = kf.wmClass.includes(metaWindow.get_wm_class() ?? "");
+          const reported = (metaWindow.get_wm_class() || "").toLowerCase();
+          const cfg = kf.wmClass.toLowerCase();
+          matchClass = reported.length > 0 && cfg.includes(reported);
         }
         if (kf.wmId) {
           matchId = kf.wmId === String(metaWindow.get_id());
         }
 
-        return (!kf.wmId || matchId) && (!kf.wmTitle || matchTitle) && matchClass;
+        const classOk = !kf.wmClass || matchClass;
+        const titleOk = !kf.wmTitle || matchTitle;
+        const idOk = !kf.wmId || matchId;
+        const ok = classOk && titleOk && idOk;
+        if (wmClass && wmClass.toLowerCase().includes("inkscape")) {
+          floatOverrideMatches.push({
+            rule: kf,
+            matchTitle,
+            matchClass,
+            matchId,
+            classOk,
+            titleOk,
+            idOk,
+            ok,
+          });
+          if (ok && !matchedFloatRule) matchedFloatRule = kf;
+        }
+        return ok;
       }).length > 0;
 
-    return floatByType || floatOverride;
+    const willFloat = floatByType || floatOverride;
+    if (looksLikeInk) {
+      Logger.info(
+        `[INKSCAPE-DECIDE] title=${JSON.stringify(
+          windowTitle
+        )} floatByType=${floatByType}(dialog=${isDialogType} transient=${hasTransient} noResize=${noResize}) floatOverride=${floatOverride} willFloat=${willFloat} matchedFloat=${
+          matchedFloatRule ? JSON.stringify(matchedFloatRule) : "none"
+        } allFloatMatches=${JSON.stringify(floatOverrideMatches)}`
+      );
+    }
+
+    return willFloat;
   }
 
   _getDragDropCenterPreviewStyle() {

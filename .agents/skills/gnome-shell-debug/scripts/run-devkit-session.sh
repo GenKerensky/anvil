@@ -224,13 +224,14 @@ wait_for_shell_dbus() {
 
 wait_for_extension_active() {
   local info=""
-  for _ in $(seq 1 100); do
+  for _ in $(seq 1 150); do
     info="$(gdbus call --session \
       --dest org.gnome.Shell \
       --object-path /org/gnome/Shell \
       --method org.gnome.Shell.Extensions.GetExtensionInfo \
       "${UUID}" 2>&1 || true)"
-    if [[ "${info}" == *"state"* && ( "${info}" == *"<1>"* || "${info}" == *"<uint32 1>"* ) ]]; then
+    # Accept state 1 / 1.0 (GVariant repr in some versions) or enabled true
+    if [[ "${info}" == *"state"* && ( "${info}" == *"<1>"* || "${info}" == *"<uint32 1>"* || "${info}" == *"<1.0>"* ) ]] || [[ "${info}" == *"enabled': <true>"* ]]; then
       return 0
     fi
     sleep 0.2
@@ -295,6 +296,10 @@ gsettings set org.gnome.mutter center-new-windows true >/dev/null 2>&1 || true
 gsettings set org.gnome.mutter auto-maximize false >/dev/null 2>&1 || true
 gsettings set org.gnome.shell.extensions.anvil test-mode true >/dev/null 2>&1 || true
 
+# Disable all other extensions (GSConnect, Blur My Shell, etc.) to reduce
+# crashes, St criticals, and flakiness in the nested devkit session.
+gsettings set org.gnome.shell enabled-extensions "['${UUID}']" >/dev/null 2>&1 || true
+
 echo "==> Starting nested GNOME Shell devkit"
 echo "==> Log: ${LOG_FILE}"
 
@@ -316,6 +321,21 @@ gdbus call --session \
 wait_for_extension_active
 
 echo "==> ${UUID} is ACTIVE"
+
+echo "==> Disabling all extensions except ${UUID} at runtime"
+OTHER_EXTS=$(gdbus call --session \
+  --dest org.gnome.Shell \
+  --object-path /org/gnome/Shell \
+  --method org.gnome.Shell.Extensions.ListExtensions 2>/dev/null | \
+  grep -oE "'[a-zA-Z0-9@._-]+'" | tr -d "'" | grep -v "^${UUID}$" | sort -u || true)
+for ext in $OTHER_EXTS; do
+  gdbus call --session \
+    --dest org.gnome.Shell \
+    --object-path /org/gnome/Shell \
+    --method org.gnome.Shell.Extensions.DisableExtension \
+    "$ext" >/dev/null 2>&1 || true
+done
+
 launch_terminal
 
 cat <<EOF

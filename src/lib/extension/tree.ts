@@ -638,7 +638,9 @@ export class Node<T extends string> extends GObject.Object {
   set float(value: boolean) {
     if (this.isWindow()) {
       const metaWindow = this.nodeValue;
+      const wmClass = metaWindow?.get_wm_class?.() || "";
       const floatAlwaysOnTop = this.settings?.get_boolean("float-always-on-top-enabled") ?? false;
+      const beforeMode = this.mode;
       if (value) {
         this.mode = WINDOW_MODES.FLOAT;
         if (!metaWindow.is_above()) {
@@ -649,6 +651,23 @@ export class Node<T extends string> extends GObject.Object {
         if (metaWindow.is_above()) {
           metaWindow.unmake_above();
         }
+        // If a window is changing from float -> tile (e.g. late classification
+        // after metadata arrives for Inkscape/Brave etc.), zero percents on the
+        // parent's children so the layout engine will give the newcomer proper
+        // space on the next processNode/apply.
+        const p = this.parentNode;
+        if (p) {
+          p.childNodes.forEach((c: any) => {
+            c.percent = 0;
+          });
+        }
+      }
+      if (wmClass.toLowerCase().includes("inkscape")) {
+        Logger.info(
+          `[INKSCAPE-MODE-SET] id=${metaWindow.get_id()} title=${JSON.stringify(
+            metaWindow.get_title()
+          )} beforeMode=${beforeMode} afterMode=${this.mode} float=${this.float} value=${value}`
+        );
       }
     }
   }
@@ -984,8 +1003,19 @@ export class Tree extends Node<string> {
       if (node.isWindow()) {
         const floating = node.isFloat();
         const grabTiling = node.isGrabTile();
+        const mw = node.nodeValue as any;
+        const c = mw?.get_wm_class?.() || "";
+        const isInk = c.toLowerCase().includes("inkscape");
         // A Node[Window]._data is a Meta.Window
-        if (!node.nodeValue.minimized && !(floating || grabTiling)) {
+        const included = !mw.minimized && !(floating || grabTiling);
+        if (isInk) {
+          Logger.info(
+            `[INKSCAPE-TILED-CHILD] id=${mw.get_id?.()} title=${JSON.stringify(
+              mw.get_title?.()
+            )} floating=${floating} included=${included}`
+          );
+        }
+        if (included) {
           return true;
         }
       }

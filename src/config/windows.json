@@ -104,6 +104,66 @@
     {
       "wmClass": "brave-browser",
       "mode": "tile"
+    },
+    {
+      "wmClass": "inkscape",
+      "wmTitle": "New Document",
+      "mode": "float"
+    },
+    {
+      "wmClass": "org.inkscape.Inkscape",
+      "wmTitle": "New Document",
+      "mode": "float"
+    },
+    {
+      "wmClass": "inkscape",
+      "wmTitle": "Open",
+      "mode": "float"
+    },
+    {
+      "wmClass": "org.inkscape.Inkscape",
+      "wmTitle": "Open",
+      "mode": "float"
+    },
+    {
+      "wmClass": "inkscape",
+      "wmTitle": "Welcome",
+      "mode": "float"
+    },
+    {
+      "wmClass": "org.inkscape.Inkscape",
+      "wmTitle": "Welcome",
+      "mode": "float"
+    },
+    {
+      "wmClass": "inkscape",
+      "wmTitle": "Save",
+      "mode": "float"
+    },
+    {
+      "wmClass": "org.inkscape.Inkscape",
+      "wmTitle": "Save",
+      "mode": "float"
+    },
+    {
+      "wmClass": "inkscape",
+      "wmTitle": "Export",
+      "mode": "float"
+    },
+    {
+      "wmClass": "org.inkscape.Inkscape",
+      "wmTitle": "Export",
+      "mode": "float"
+    },
+    {
+      "wmClass": "inkscape",
+      "wmTitle": "Preferences",
+      "mode": "float"
+    },
+    {
+      "wmClass": "org.inkscape.Inkscape",
+      "wmTitle": "Preferences",
+      "mode": "float"
     }
   ]
 }

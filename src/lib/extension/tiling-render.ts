@@ -42,6 +42,27 @@ export class TilingRender extends GObject.Object {
     const tree = this._deps.getTree();
     Logger.debug(`render tree ${from ? "from " + from : ""}`);
     this.processFloats();
+
+    // Extra inkscape state dump on every render
+    try {
+      const all = this._deps.getAllNodeWindows();
+      const inks = all.filter((n: any) => {
+        const m = n.nodeValue as Meta.Window;
+        const c = m?.get_wm_class?.() || "";
+        return c.toLowerCase().includes("inkscape");
+      });
+      if (inks.length > 0) {
+        inks.forEach((n: any) => {
+          const m = n.nodeValue as Meta.Window;
+          Logger.info(
+            `[INKSCAPE-RENDER-STATE] from=${from} id=${m.get_id()} title=${JSON.stringify(
+              m.get_title()
+            )} float=${n.float} mode=${(n as any).mode} rect=${JSON.stringify(n.rect)}`
+          );
+        });
+      }
+    } catch (e) {}
+
     this.processNode(tree);
     this.apply(tree);
     this.cleanTree();
@@ -52,13 +73,22 @@ export class TilingRender extends GObject.Object {
   processFloats() {
     this._deps.getAllNodeWindows().forEach((nodeWindow) => {
       const metaWindow = nodeWindow.nodeValue as Meta.Window;
-      if (
-        this._deps.isFloatingExempt(metaWindow) ||
-        !this._deps.isActiveWindowWorkspaceTiled(metaWindow)
-      ) {
+      const wmClass = metaWindow?.get_wm_class?.() || "";
+      const isInk = wmClass.toLowerCase().includes("inkscape");
+      const exempt = this._deps.isFloatingExempt(metaWindow);
+      const wsTiled = this._deps.isActiveWindowWorkspaceTiled(metaWindow);
+      const before = nodeWindow.float;
+      if (exempt || !wsTiled) {
         nodeWindow.float = true;
       } else {
         nodeWindow.float = false;
+      }
+      if (isInk) {
+        Logger.info(
+          `[INKSCAPE-FLOAT-SET] id=${metaWindow.get_id()} title=${JSON.stringify(
+            metaWindow.get_title()
+          )} before=${before} after=${nodeWindow.float} exempt=${exempt} wsTiled=${wsTiled}`
+        );
       }
     });
   }
@@ -305,7 +335,16 @@ export class TilingRender extends GObject.Object {
     }
 
     if (node.isWindow()) {
-      if (!node.rect) node.rect = (node.nodeValue as Meta.Window).get_work_area_current_monitor();
+      const m = node.nodeValue as Meta.Window;
+      const c = m?.get_wm_class?.() || "";
+      if (c.toLowerCase().includes("inkscape")) {
+        Logger.info(
+          `[INKSCAPE-PROCESS-WINDOW] id=${m.get_id()} title=${JSON.stringify(
+            m.get_title()
+          )} float=${node.float} hasRect=${!!node.rect}`
+        );
+      }
+      if (!node.rect) node.rect = m.get_work_area_current_monitor();
       node.renderRect = this.processGap(node);
       node.renderRect = this.enforceUltrawideSize(node, node.renderRect);
     }
