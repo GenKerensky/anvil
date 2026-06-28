@@ -34,7 +34,7 @@ packages listed below are for the original Forge extension and are provided for 
 - Upstream Forge: [AUR Package](https://aur.archlinux.org/packages/gnome-shell-extension-forge) — thanks to [@Radeox](https://github.com/Radeox) _(Forge, not Anvil)_
 - Upstream Forge: [Fedora Package](https://packages.fedoraproject.org/pkgs/gnome-shell-extension-forge/gnome-shell-extension-forge/) — thanks to [@carlwgeorge](https://github.com/carlwgeorge) _(Forge, not Anvil)_
 
-![image](https://user-images.githubusercontent.com/348125/146386593-8f53ea8b-2cf3-4d44-a613-bbcaf89f9d4a.png)
+![Anvil](assets/org.gnome.shell.extensions.anvil-regular.svg)
 
 ## Anvil Keybinding Defaults
 
