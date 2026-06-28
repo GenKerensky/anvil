@@ -1,5 +1,9 @@
-# Anvil
+# Anvil WM
 
+![Anvil](assets/org.gnome.shell.extensions.anvil-regular.svg)
+
+> Anvil is a Tiling Window Manager Gnome Extension
+>
 > **Anvil** is a fork of [Forge](https://github.com/forge-ext/forge) by [Jose Maranan](https://github.com/jmmaranan), licensed under GPL v3. The original project and all its contributors are gratefully credited — see the Credits section below.
 
 ## Features
@@ -33,8 +37,6 @@ packages listed below are for the original Forge extension and are provided for 
 - Upstream Forge: [GNOME extensions website](https://extensions.gnome.org/extension/4481/forge/) _(Forge, not Anvil)_
 - Upstream Forge: [AUR Package](https://aur.archlinux.org/packages/gnome-shell-extension-forge) — thanks to [@Radeox](https://github.com/Radeox) _(Forge, not Anvil)_
 - Upstream Forge: [Fedora Package](https://packages.fedoraproject.org/pkgs/gnome-shell-extension-forge/gnome-shell-extension-forge/) — thanks to [@carlwgeorge](https://github.com/carlwgeorge) _(Forge, not Anvil)_
-
-![Anvil](assets/org.gnome.shell.extensions.anvil-regular.svg)
 
 ## Anvil Keybinding Defaults
 
