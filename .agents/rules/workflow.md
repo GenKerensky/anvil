@@ -1,18 +1,14 @@
 # Agent Workflow
 
-## After every `.ts` or `.js` source file change
+## After finishing a `.ts` or `.js` change
 
-Run in order before considering the task complete:
+Run this before considering the task complete:
 
 ```bash
-npm run typecheck    # must pass with 0 errors
-npm run lint         # must pass with 0 errors
+npm run test # run lint, typecheck and unit tests, must pass with 0 errors
 ```
 
-If either fails, fix errors before proceeding. Acceptable warnings only:
-
-- `@typescript-eslint/no-explicit-any` (tracked in `TODO.md`)
-- `eslint-disable` mismatches on files being converted from `@ts-nocheck`
+fix errors before proceeding.
 
 ## Comment preservation
 

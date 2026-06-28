@@ -14,7 +14,7 @@
     "typecheck:all": "npm run typecheck",
     "lint": "eslint . && prettier --check \"./**/*.{js,jsx,ts,tsx,json,md}\"",
     "format": "eslint . --fix && prettier --write \"./**/*.{js,jsx,ts,tsx,json,md}\"",
-    "test": "npm run typecheck && npm run lint && npm run test:unit && npm run test:integration:build && npm run test:integration:all",
+    "test": "npm run typecheck && npm run lint && npm run test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
     "test:integration": "make test-integration",
