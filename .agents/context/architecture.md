@@ -36,8 +36,9 @@ Source in `src/lib/extension/*.ts` → tests in `test/unit/extension/*.test.ts`.
 
 ## Target seams / freeze
 
-`WindowManager` (`window.ts`) is a **frozen facade** for new features — see
-`.agents/rules/architecture.md` (rules 1–4) and `codebase-review.md` F3–F5.
+`WindowManager` (`window.ts`) is a **frozen facade** for new features — enforceable
+rules live in **`.agents/rules/architecture.md`** (synthesized from `codebase-review.md`
+F3–F4 + extractions). Read that file before changing tiling core.
 
 | Seam (today)             | Notes                                                           |
 | ------------------------ | --------------------------------------------------------------- |

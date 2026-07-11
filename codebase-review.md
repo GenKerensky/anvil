@@ -3,7 +3,10 @@
 **Date:** 2026-07-10  
 **Scope:** Full architecture and maintainability review of the Anvil GNOME Shell tiling extension (Forge fork).  
 **Method:** Section-by-section read of `src/`, inventories of commands/signals/methods, unit-test surface as design docs, and comparison to Hyprland/Sway dispatchers/rules, GNOME extension lifecycle guidelines, and Mutter/Wayland async realities.  
-**Out of scope:** Implementing refactors in this pass—recommendations only.
+**Out of scope (original pass):** Implementing refactors—recommendations only.  
+**Status:** F5 stages 0–8 and residual stages 9–21 are **done**. Day-to-day agent rules live in
+**`.agents/rules/architecture.md`** (synthesized from F3–F4 + extractions). Prefer that file for
+implementation; keep this document as historical findings and roadmap.
 
 ---
 

@@ -60,6 +60,18 @@ Full findings in **`codebase-review.md`** (repo root). Direction of travel witho
 - Enforce architecture rules listed in that document (lifecycle purity, one owner per state, typed
   actions, ~500 LOC module budget).
 
+### Architecture rules synthesis (2026-07-11)
+
+Full review (`codebase-review.md` F3–F4 + F5/residual extractions) synthesized into
+**`.agents/rules/architecture.md`** — the agent-facing source of truth for:
+
+- Owner table (CommandBus, RulesEngine, WindowTracker, LayoutEngine, TilingRender, …)
+- All 12 F4 rules expanded with do/don’t and file paths
+- Tree/render invariants, feature checklist, anti-patterns
+- Prefs↔shell contract and dependency direction
+
+`codebase-review.md` remains historical. Route: `AGENTS.md` → architecture rules on tiling-core work.
+
 ### F5 Stage 0 — rules adopted (2026-07-10)
 
 Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from `AGENTS.md`):

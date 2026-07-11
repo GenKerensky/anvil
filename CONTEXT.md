@@ -36,4 +36,5 @@ _Avoid_: window resize, mutter grab
 4. **Tiling Render** is the only path that writes frame geometry (constraints clamp applied rects).
 5. User actions are **AnvilAction** values handled by **CommandBus**.
 
-See `.agents/context/architecture.md` and `codebase-review.md` for module seams.
+See `.agents/rules/architecture.md` (agent rules), `.agents/context/architecture.md`
+(seams map), and `codebase-review.md` (historical review).
