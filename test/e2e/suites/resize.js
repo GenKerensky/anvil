@@ -214,7 +214,7 @@ async function testDirection(layout, constraint, dir) {
 
   // ── Helper: do one resize ──
   async function resize() {
-    sendAnvilCommand({ name: "WindowResize" + dir, amount });
+    sendAnvilCommand({ name: "WindowResize", direction: dir, amount });
     await settle(COMMAND_DELAY);
   }
 
@@ -300,9 +300,9 @@ describe("Resize", function () {
     expect(before.length).toBeGreaterThanOrEqual(2);
 
     // Prefer the right-hand leaf if percents are equal
-    sendAnvilCommand({ name: "WindowResizeRight", amount: 200 });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: 200 });
     await settle(COMMAND_DELAY * 2);
-    sendAnvilCommand({ name: "WindowResizeRight", amount: 200 });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: 200 });
     await settle(COMMAND_DELAY * 2);
 
     const after = getNodePercents();
@@ -321,9 +321,9 @@ describe("Resize", function () {
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
-    sendAnvilCommand({ name: "WindowResizeRight", amount: 200 });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: 200 });
     await settle(COMMAND_DELAY * 2);
-    sendAnvilCommand({ name: "WindowResizeRight", amount: 200 });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: 200 });
     await settle(COMMAND_DELAY * 2);
 
     const after = getWindowGeometries();

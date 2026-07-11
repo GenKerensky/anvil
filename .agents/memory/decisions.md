@@ -133,6 +133,11 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 12 — WindowResize + snap layout (2026-07-11)
+
+- Single **`WindowResize`** action with `direction` enum (B3-5); keybindings/tests/e2e updated.
+- **`computeSnapLayout`** pure helper in `snap-layout.ts` for SnapLayoutMove (B3-4).
+
 ### Residual Stage 11 — SessionFlags (2026-07-11)
 
 - Transient overview/workspace/freeze booleans grouped in

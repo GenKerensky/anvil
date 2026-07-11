@@ -53,6 +53,7 @@ import { WindowTracker } from "./window-tracker.js";
 import { LayoutEngine } from "./layout-engine.js";
 import { GrabResizeSession } from "./grab-resize-session.js";
 import { SettingsBridge } from "./settings-bridge.js";
+import { computeSnapLayout } from "./snap-layout.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type {
   AnvilMetaWindow,
@@ -727,10 +728,7 @@ export class WindowManager extends GObject.Object {
       WindowSwapLastActive: () => this._handleWindowSwapLastActive(),
       SnapLayoutMove: (a) => this._handleSnapLayoutMove(a),
       ShowTabDecorationToggle: () => this._handleShowTabDecorationToggle(),
-      WindowResizeRight: (a) => this._handleWindowResize(a),
-      WindowResizeLeft: (a) => this._handleWindowResize(a),
-      WindowResizeTop: (a) => this._handleWindowResize(a),
-      WindowResizeBottom: (a) => this._handleWindowResize(a),
+      WindowResize: (a) => this._handleWindowResize(a),
       WindowClose: () => this._handleWindowClose(),
     };
   }
@@ -1036,50 +1034,30 @@ export class WindowManager extends GObject.Object {
     const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
     if (!focusNodeWindow) return;
 
-    const workareaRect = (focusNodeWindow.nodeValue as Meta.Window).get_work_area_current_monitor();
-    const layoutAmount = action.amount;
-    const layoutDirection = action.direction.toUpperCase();
-    let layout = {} as Record<string, string | number | undefined>;
-    let processGap = false;
+    const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
+    const workareaRect = metaWindow.get_work_area_current_monitor();
+    const currentFrame = this.focusMetaWindow?.get_frame_rect() ?? null;
+    const snap = computeSnapLayout(action.direction, workareaRect, action.amount, currentFrame);
+    if (!snap) return;
 
-    switch (layoutDirection) {
-      case "LEFT":
-        layout.width = layoutAmount! * workareaRect.width;
-        layout.height = workareaRect.height;
-        layout.x = workareaRect.x;
-        layout.y = workareaRect.y;
-        processGap = true;
-        break;
-      case "RIGHT":
-        layout.width = layoutAmount! * workareaRect.width;
-        layout.height = workareaRect.height;
-        layout.x = workareaRect.x + (workareaRect.width - (layout.width as number));
-        layout.y = workareaRect.y;
-        processGap = true;
-        break;
-      case "CENTER": {
-        const metaRect = this.focusMetaWindow.get_frame_rect();
-        layout.x = "center";
-        layout.y = "center";
-        layout = {
-          x: Utils.resolveX(layout, this.focusMetaWindow),
-          y: Utils.resolveY(layout, this.focusMetaWindow),
-          width: metaRect.width,
-          height: metaRect.height,
-        };
-        break;
-      }
-      default:
-        break;
+    let rect: RectLike | { x: string | number; y: string | number; width: number; height: number } =
+      snap.rect;
+    if ("x" in rect && rect.x === "center" && this.focusMetaWindow) {
+      rect = {
+        x: Utils.resolveX(rect as { x?: string | number }, this.focusMetaWindow),
+        y: Utils.resolveY(rect as { y?: string | number }, this.focusMetaWindow),
+        width: rect.width,
+        height: rect.height,
+      };
     }
-    focusNodeWindow.rect = layout as any;
-    if (processGap) {
-      focusNodeWindow.rect = this._tilingRender.processGap(focusNodeWindow) as any;
+    focusNodeWindow.rect = rect as RectLike;
+    if (snap.processGap) {
+      focusNodeWindow.rect = this._tilingRender.processGap(focusNodeWindow) as RectLike;
     }
     if (!focusNodeWindow.isFloat()) {
-      this.addFloatOverride(focusNodeWindow.nodeValue as Meta.Window, false);
+      this.addFloatOverride(metaWindow, false);
     }
-    this.move(focusNodeWindow.nodeValue as Meta.Window, focusNodeWindow.rect!);
+    this.move(metaWindow, focusNodeWindow.rect!);
     this.queueEvent({
       name: "snap-layout-move",
       callback: () => {
@@ -1102,19 +1080,15 @@ export class WindowManager extends GObject.Object {
   }
 
   private _handleWindowResize(action: WindowResizeAction) {
-    switch (action.name) {
-      case "WindowResizeRight":
-        this.resize(Meta.GrabOp.KEYBOARD_RESIZING_E, action.amount);
-        break;
-      case "WindowResizeLeft":
-        this.resize(Meta.GrabOp.KEYBOARD_RESIZING_W, action.amount);
-        break;
-      case "WindowResizeTop":
-        this.resize(Meta.GrabOp.KEYBOARD_RESIZING_N, action.amount);
-        break;
-      case "WindowResizeBottom":
-        this.resize(Meta.GrabOp.KEYBOARD_RESIZING_S, action.amount);
-        break;
+    const grabByDir: Record<WindowResizeAction["direction"], Meta.GrabOp> = {
+      Right: Meta.GrabOp.KEYBOARD_RESIZING_E,
+      Left: Meta.GrabOp.KEYBOARD_RESIZING_W,
+      Top: Meta.GrabOp.KEYBOARD_RESIZING_N,
+      Bottom: Meta.GrabOp.KEYBOARD_RESIZING_S,
+    };
+    const grabOp = grabByDir[action.direction];
+    if (grabOp !== undefined) {
+      this.resize(grabOp, action.amount);
     }
   }
 

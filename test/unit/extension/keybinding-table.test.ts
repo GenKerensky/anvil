@@ -38,6 +38,6 @@ describe("KEYBINDING_TABLE", () => {
       settings: { get_uint: () => 42 },
       kbdSettings: {},
     });
-    expect(action).toEqual({ name: "WindowResizeTop", amount: 42 });
+    expect(action).toEqual({ name: "WindowResize", direction: "Top", amount: 42 });
   });
 });

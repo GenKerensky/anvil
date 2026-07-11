@@ -36,13 +36,17 @@ export type GapSizeAction = {
 
 export type SnapLayoutMoveAction = {
   name: "SnapLayoutMove";
-  direction: string;
+  direction: "Left" | "Right" | "Center" | string;
   /** Fraction of workarea for LEFT/RIGHT snaps; omitted for CENTER. */
   amount?: number;
 };
 
+/** Keyboard resize edge (B3-5): single action + direction, not four name variants. */
+export type ResizeDirection = "Left" | "Right" | "Top" | "Bottom";
+
 export type WindowResizeAction = {
-  name: "WindowResizeLeft" | "WindowResizeRight" | "WindowResizeTop" | "WindowResizeBottom";
+  name: "WindowResize";
+  direction: ResizeDirection;
   amount: number;
 };
 

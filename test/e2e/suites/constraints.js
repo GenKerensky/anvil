@@ -59,7 +59,7 @@ describe("Monitor Constraints", function () {
     const before = focusedRect();
     expect(before).not.toBeNull();
 
-    sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: RESIZE_AMOUNT });
     await waitForGeometryStable(2000);
 
     const after = focusedRect();
@@ -84,14 +84,14 @@ describe("Monitor Constraints", function () {
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, true);
     await sleep(300);
 
-    sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: RESIZE_AMOUNT });
     await waitForGeometryStable(2000);
     const afterFirst = focusedRect();
     expect(afterFirst).not.toBeNull();
 
-    sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: RESIZE_AMOUNT });
     await waitForGeometryStable(2000);
-    sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: RESIZE_AMOUNT });
     await waitForGeometryStable(2000);
 
     const afterExempt = focusedRect();
@@ -113,7 +113,7 @@ describe("Monitor Constraints", function () {
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, false);
     await sleep(300);
 
-    sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: RESIZE_AMOUNT });
     await waitForGeometryStable(2000);
     const withConstraint = focusedRect();
     expect(withConstraint).not.toBeNull();
@@ -122,7 +122,7 @@ describe("Monitor Constraints", function () {
     clearResizedWindows();
     await sleep(300);
 
-    sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: RESIZE_AMOUNT });
     await waitForGeometryStable(2000);
     const without = focusedRect();
     expect(without).not.toBeNull();
@@ -144,7 +144,7 @@ describe("Monitor Constraints", function () {
     expect(before).not.toBeNull();
     expect(/** @type {{width:number}} */ (before).width).toBeGreaterThan(0);
 
-    sendAnvilCommand({ name: "WindowResizeRight", amount: RESIZE_AMOUNT });
+    sendAnvilCommand({ name: "WindowResize", direction: "Right", amount: RESIZE_AMOUNT });
     await waitForGeometryStable(2000);
 
     const after = focusedRect();

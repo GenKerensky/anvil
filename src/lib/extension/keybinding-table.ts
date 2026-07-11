@@ -96,34 +96,50 @@ export const KEYBINDING_TABLE: BindingSpec[] = [
   },
   {
     key: "window-resize-top-increase",
-    action: (ctx) => ({ name: "WindowResizeTop", amount: resizeAmount(ctx) }),
+    action: (ctx) => ({ name: "WindowResize", direction: "Top", amount: resizeAmount(ctx) }),
   },
   {
     key: "window-resize-top-decrease",
-    action: (ctx) => ({ name: "WindowResizeTop", amount: -1 * resizeAmount(ctx) }),
+    action: (ctx) => ({
+      name: "WindowResize",
+      direction: "Top",
+      amount: -1 * resizeAmount(ctx),
+    }),
   },
   {
     key: "window-resize-bottom-increase",
-    action: (ctx) => ({ name: "WindowResizeBottom", amount: resizeAmount(ctx) }),
+    action: (ctx) => ({ name: "WindowResize", direction: "Bottom", amount: resizeAmount(ctx) }),
   },
   {
     key: "window-resize-bottom-decrease",
-    action: (ctx) => ({ name: "WindowResizeBottom", amount: -1 * resizeAmount(ctx) }),
+    action: (ctx) => ({
+      name: "WindowResize",
+      direction: "Bottom",
+      amount: -1 * resizeAmount(ctx),
+    }),
   },
   {
     key: "window-resize-left-increase",
-    action: (ctx) => ({ name: "WindowResizeLeft", amount: resizeAmount(ctx) }),
+    action: (ctx) => ({ name: "WindowResize", direction: "Left", amount: resizeAmount(ctx) }),
   },
   {
     key: "window-resize-left-decrease",
-    action: (ctx) => ({ name: "WindowResizeLeft", amount: -1 * resizeAmount(ctx) }),
+    action: (ctx) => ({
+      name: "WindowResize",
+      direction: "Left",
+      amount: -1 * resizeAmount(ctx),
+    }),
   },
   {
     key: "window-resize-right-increase",
-    action: (ctx) => ({ name: "WindowResizeRight", amount: resizeAmount(ctx) }),
+    action: (ctx) => ({ name: "WindowResize", direction: "Right", amount: resizeAmount(ctx) }),
   },
   {
     key: "window-resize-right-decrease",
-    action: (ctx) => ({ name: "WindowResizeRight", amount: -1 * resizeAmount(ctx) }),
+    action: (ctx) => ({
+      name: "WindowResize",
+      direction: "Right",
+      amount: -1 * resizeAmount(ctx),
+    }),
   },
 ];

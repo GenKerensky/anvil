@@ -128,7 +128,7 @@ describe("WindowManager - Resize", () => {
       const spy = vi.spyOn(ctx.windowManager, "resize");
       const metaWindow = setupFocusWindow(ctx);
 
-      wm().command({ name: "WindowResizeRight", amount: 10 });
+      wm().command({ name: "WindowResize", direction: "Right", amount: 10 });
 
       expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
     });
@@ -137,7 +137,7 @@ describe("WindowManager - Resize", () => {
       const spy = vi.spyOn(ctx.windowManager, "resize");
       const metaWindow = setupFocusWindow(ctx);
 
-      wm().command({ name: "WindowResizeLeft", amount: -10 });
+      wm().command({ name: "WindowResize", direction: "Left", amount: -10 });
 
       expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_W, -10);
     });
@@ -146,7 +146,7 @@ describe("WindowManager - Resize", () => {
       const spy = vi.spyOn(ctx.windowManager, "resize");
       const metaWindow = setupFocusWindow(ctx);
 
-      wm().command({ name: "WindowResizeTop", amount: 10 });
+      wm().command({ name: "WindowResize", direction: "Top", amount: 10 });
 
       expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_N, 10);
     });
@@ -155,7 +155,7 @@ describe("WindowManager - Resize", () => {
       const spy = vi.spyOn(ctx.windowManager, "resize");
       const metaWindow = setupFocusWindow(ctx);
 
-      wm().command({ name: "WindowResizeBottom", amount: -10 });
+      wm().command({ name: "WindowResize", direction: "Bottom", amount: -10 });
 
       expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_S, -10);
     });
@@ -163,7 +163,7 @@ describe("WindowManager - Resize", () => {
     it("should return early in resize when no focus window", () => {
       const spy = vi.spyOn(ctx.windowManager, "move");
 
-      wm().command({ name: "WindowResizeRight", amount: 10 });
+      wm().command({ name: "WindowResize", direction: "Right", amount: 10 });
 
       expect(spy).not.toHaveBeenCalled();
     });
