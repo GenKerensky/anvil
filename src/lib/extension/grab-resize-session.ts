@@ -2,8 +2,11 @@
  * GrabResizeSession — grab-op begin/end, live resize, keyboard resize, exemption counts.
  *
  * Sole owner of grab session state (grabOp, cancelGrab, resizedWindows map, live loop).
- * Node still stores grabMode/initRect/initGrabOp during a grab for position-size dispatch
- * (parity with existing code paths).
+ * Grab per-window fields (initRect / grabMode / initGrabOp) live on this session (B8-6);
+ * Node still mirrors them during a grab for residual position-size readers.
+ *
+ * Live 16ms poll is a **Wayland fallback** only (B8-5). On X11, size-changed drives
+ * handleResizing; the poll is not started.
  *
  * Geometry apply for neighbors uses TilingRender via host; percent delta math is pure.
  *
@@ -83,6 +86,25 @@ export function percentsFromSizeDelta(args: {
   };
 }
 
+type NodeGrabState = {
+  initRect: RectLike | null;
+  initGrabOp: Meta.GrabOp | null;
+  grabMode: string | null;
+};
+
+function isWaylandCompositor(): boolean {
+  try {
+    const m = Meta as typeof Meta & { is_wayland_compositor?: () => boolean };
+    if (typeof m.is_wayland_compositor === "function") {
+      return m.is_wayland_compositor();
+    }
+  } catch {
+    /* ignore */
+  }
+  // Prefer poll when we cannot detect — safer for nested/headless Wayland.
+  return true;
+}
+
 export class GrabResizeSession {
   private _host: GrabResizeHost;
   grabOp: Meta.GrabOp = Meta.GrabOp.NONE;
@@ -91,9 +113,39 @@ export class GrabResizeSession {
   private _lastResizePair: Node<any> | null = null;
   private _liveResizeSrcId = 0;
   private _draggedNodeWindow: Node<any> | null = null;
+  /** Session-owned grab fields (B8-6); mirrored onto Node for residual readers. */
+  private _nodeGrab = new Map<number, NodeGrabState>();
 
   constructor(host: GrabResizeHost) {
     this._host = host;
+  }
+
+  private _winId(node: Node<any>): number | null {
+    const w = node.nodeValue as Meta.Window | null;
+    return w ? w.get_id() : null;
+  }
+
+  /** Write grab fields to session map + mirror onto Node (legacy). */
+  private _setNodeGrab(node: Node<any>, patch: Partial<NodeGrabState>): void {
+    const id = this._winId(node);
+    const prev: NodeGrabState = (id !== null ? this._nodeGrab.get(id) : undefined) ?? {
+      initRect: node.initRect ?? null,
+      initGrabOp: node.initGrabOp ?? null,
+      grabMode: node.grabMode ?? null,
+    };
+    const next = { ...prev, ...patch };
+    if (id !== null) this._nodeGrab.set(id, next);
+    node.initRect = next.initRect;
+    node.initGrabOp = next.initGrabOp;
+    node.grabMode = next.grabMode;
+  }
+
+  private _clearNodeGrab(node: Node<any>): void {
+    const id = this._winId(node);
+    if (id !== null) this._nodeGrab.delete(id);
+    node.initRect = null;
+    node.initGrabOp = null;
+    node.grabMode = null;
   }
 
   getResizeCount(id: number): number {
@@ -168,27 +220,26 @@ export class GrabResizeSession {
       const frameRect = focusMetaWindow.get_frame_rect();
       const gaps = host.calculateGaps(focusNodeWindow);
 
-      focusNodeWindow.grabMode = Utils.grabMode(grabOp);
-      if (
-        focusNodeWindow.grabMode === GRAB_TYPES.MOVING &&
-        focusNodeWindow.mode === WINDOW_MODES.TILE
-      ) {
+      const mode = Utils.grabMode(grabOp);
+      this._setNodeGrab(focusNodeWindow, {
+        grabMode: mode,
+        initGrabOp: grabOp,
+        // Only set initRect if not already tracking a resize (preserves original during key repeat)
+        initRect: focusNodeWindow.initRect
+          ? focusNodeWindow.initRect
+          : Utils.removeGapOnRect(frameRect, gaps),
+      });
+      if (mode === GRAB_TYPES.MOVING && focusNodeWindow.mode === WINDOW_MODES.TILE) {
         host.freezeRender();
         focusNodeWindow.mode = WINDOW_MODES.GRAB_TILE;
-      }
-
-      focusNodeWindow.initGrabOp = grabOp;
-      // Only set initRect if not already tracking a resize (preserves original during key repeat)
-      if (!focusNodeWindow.initRect) {
-        focusNodeWindow.initRect = Utils.removeGapOnRect(frameRect, gaps);
       }
 
       // Bug #433 fix: Track the window being dragged for preview hint cleanup
       // Ported from jcrussell/forge
       this._draggedNodeWindow = focusNodeWindow;
 
-      // Start live-resize polling loop for resize grabs
-      if (focusNodeWindow.grabMode === GRAB_TYPES.RESIZING) {
+      // Live poll only on Wayland (B8-5). X11 relies on size-changed → handleResizing.
+      if (mode === GRAB_TYPES.RESIZING && isWaylandCompositor()) {
         this._startLiveResizeLoop(focusNodeWindow);
       }
     }
@@ -289,9 +340,7 @@ export class GrabResizeSession {
     this.cancelGrab = false;
     this._lastResizePair = null;
     if (!focusNodeWindow) return;
-    focusNodeWindow.initRect = null;
-    focusNodeWindow.grabMode = null;
-    focusNodeWindow.initGrabOp = null;
+    this._clearNodeGrab(focusNodeWindow);
 
     // Bug #175 fix: Ensure preview hint is always cleaned up (add try-catch)
     // Ported from jcrussell/forge
@@ -584,7 +633,7 @@ export class GrabResizeSession {
 
       // Update initRect so next tick delta is relative to current frame,
       // not the grab start (prevents percent accumulation)
-      focusNodeWindow.initRect = currentRect;
+      this._setNodeGrab(focusNodeWindow, { initRect: currentRect });
 
       this._liveResizeNeighbors(focusNodeWindow);
 

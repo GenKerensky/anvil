@@ -173,11 +173,12 @@ export class Node<T extends string> extends GObject.Object {
   prevLayout?: string;
   /** Was floating before mass-float operation */
   prevFloat?: boolean;
-  /** Grab mode during grab operations (GRAB_TYPES) */
+  /**
+   * Grab fields — owned by GrabResizeSession (B8-6). Mirrored onto Node only
+   * during an active grab for residual position-size readers; prefer session state.
+   */
   grabMode?: string | null;
-  /** Initial grab op code */
   initGrabOp?: Meta.GrabOp | null;
-  /** Initial rect before resize/drag */
   initRect?: RectLike | null;
   /** Tab style marker for background windows */
   backgroundTab?: boolean;

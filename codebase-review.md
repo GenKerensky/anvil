@@ -586,7 +586,7 @@ Address remaining individual findings (including P2/P3) beyond the prioritized F
 | **15** | Tree pure: percent unset, focus loop, typed search                 | B5-3, B5-4, B5-5, B5-6                                       | **done** (2026-07-11) |
 | **16** | setLayout, PointerPolicy always-on, FocusController                | B6-2, B6-3, B9-1, B9-2, B9-3                                 | **done** (2026-07-11) |
 | **17** | Float classification cache + BorderController                      | B7-1, B7-2                                                   | **done** (2026-07-11) |
-| **18** | Grab residual: size-changed drive, initRect off Node               | B8-5, B8-6                                                   | pending               |
+| **18** | Grab residual: size-changed drive, initRect off Node               | B8-5, B8-6                                                   | **done** (2026-07-11) |
 | **19** | Split utils + class match policy                                   | B11-1, B12-3                                                 | pending               |
 | **20** | CommandBus modules + WindowConfig schema + reduce `any`            | B3-1 full, B10-2, C4-1, D3-1, C1-1                           | pending               |
 | **21** | Tree/render invariants docs + E2E notes                            | B5 invariants, D2-1, D2-2                                    | pending               |

@@ -133,6 +133,11 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 18 — grab session ownership (2026-07-11)
+
+- Grab initRect/grabMode/initGrabOp owned by GrabResizeSession map (mirrored on Node) (B8-6).
+- Live 16ms resize poll only on Wayland; X11 uses size-changed path (B8-5).
+
 ### Residual Stage 17 — float cache + BorderController (2026-07-11)
 
 - RulesEngine caches match() by window id + identity until override reload (B7-1).
