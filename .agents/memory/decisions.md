@@ -133,6 +133,16 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 9 — hygiene (2026-07-11)
+
+- Documented **test-mode / unsafe_mode** danger (B1-1); never for end users.
+- **wireKeybindings()** after Keybindings construct; `kbd` getter no longer lazy-creates (B4-9, B2-2 partial).
+- **enable()** sets `disabled = false` (B4-8).
+- Empty **show-tile-preview** handler documented (suppress Mutter default preview) (B4-6).
+- Freeze protocol + constraints clamp-applied-rect docs on TilingRender (B7-3, B8-3).
+- **Logger.isDebugEnabled()** gates debugTree on render hot path (B7-4).
+- Prefs→shell GSettings contract documented on SettingsBridge (C3-1).
+
 ## Agent skills: gnome-shell-debug module (2026-06-24)
 
 The debug skill module was deepened with two explicit seams:

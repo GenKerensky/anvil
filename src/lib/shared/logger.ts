@@ -78,6 +78,11 @@ export class Logger {
     if (this.#level > Logger.LOG_LEVELS.INFO) this.#emit("DEBUG", args);
   }
 
+  /** True when DEBUG (or finer) would emit. Used to skip expensive debug-only work. */
+  static isDebugEnabled(): boolean {
+    return this.#level > Logger.LOG_LEVELS.INFO;
+  }
+
   static trace(...args: unknown[]) {
     if (this.#level > Logger.LOG_LEVELS.DEBUG) this.#emit("TRACE", args);
   }

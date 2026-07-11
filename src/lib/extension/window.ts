@@ -138,7 +138,8 @@ export class WindowManager extends GObject.Object {
     }`;
     this._rules = new RulesEngine();
     this.reloadWindowOverrides();
-    this._kbd = this.ext.keybindings;
+    this.disabled = false;
+    // Keybindings wired after construction via wireKeybindings() (B4-9).
     // Host getters use `self` so lazy tree access works during/after construction.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
@@ -511,8 +512,12 @@ export class WindowManager extends GObject.Object {
         this.renderTree("unminimize");
         if (prevFrozen) this.freezeRender();
       }),
-      shellWm.connect("show-tile-preview", (_, _metaWindow, _rect, _num) => {
-        // Empty
+      // Empty handler: connect to suppress Mutter's built-in edge-tile preview
+      // while Anvil owns tiling. Do not disconnect — an empty slot blocks the
+      // default preview side effects without drawing our own overlay.
+      // @see codebase-review.md B4-6
+      shellWm.connect("show-tile-preview", (_wm, _metaWindow, _rect, _num) => {
+        /* intentionally empty — suppress default tile preview */
       }),
     ];
 
@@ -1138,9 +1143,20 @@ export class WindowManager extends GObject.Object {
   }
 
   enable() {
+    // Pair with disable(): re-enable after a prior disable (B4-8).
+    this.disabled = false;
     this._bindSignals();
     this.reloadTree("enable");
     Logger.debug(`extension:enable`);
+  }
+
+  /**
+   * Wire keybindings after both WM and Keybindings are constructed.
+   * Call from AnvilExtension.enable — never create Keybindings in a getter.
+   * @see codebase-review.md B2-2, B4-9
+   */
+  wireKeybindings(kbd: Keybindings) {
+    this._kbd = kbd;
   }
 
   findNodeWindow(metaWindow: Meta.Window) {
@@ -1172,11 +1188,11 @@ export class WindowManager extends GObject.Object {
   }
 
   get kbd() {
+    // No lazy construction (B4-9). Must be wired via wireKeybindings() after
+    // AnvilExtension constructs Keybindings.
     if (!this._kbd) {
-      this._kbd = new Keybindings(this.ext);
-      this.ext.keybindings = this._kbd;
+      throw new Error("WindowManager.kbd used before wireKeybindings()");
     }
-
     return this._kbd;
   }
 

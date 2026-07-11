@@ -101,6 +101,11 @@ export default class AnvilExtension extends Extension {
       g.__anvil_settings = this.settings;
     }
 
+    // DANGEROUS — test-mode only. Sets GNOME Shell `global.context.unsafe_mode`
+    // so automation can Eval/drive the session. Must NEVER be enabled for
+    // end users (security: allows unrestricted shell evaluation). Prefer
+    // harness flags over hanging production behavior on this global long-term.
+    // @see codebase-review.md B1-1
     if (this.settings.get_boolean("test-mode")) {
       const g = global as unknown as {
         context: { unsafe_mode: boolean };
@@ -138,12 +143,15 @@ export default class AnvilExtension extends Extension {
 
     this.configMgr = new ConfigManager(this as { dir: Gio.File });
     this.theme = new ExtensionThemeManager(this);
+    // Construct WM first (Keybindings needs ext.extWm), then wire keybindings
+    // explicitly so getters never lazy-create subsystems (B2-2, B4-9).
     this.extWm = new WindowManager(this);
     {
       const g = global as unknown as { __anvil_extWm?: WindowManager | null };
       g.__anvil_extWm = this.extWm;
     }
     this.keybindings = new Keybindings(this);
+    this.extWm.wireKeybindings(this.keybindings);
 
     this._onSessionModeChanged(Main.sessionMode);
     this._sessionId = Main.sessionMode.connect("updated", this._onSessionModeChanged.bind(this));

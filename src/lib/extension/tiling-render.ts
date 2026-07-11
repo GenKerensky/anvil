@@ -9,6 +9,15 @@
  * enforceUltrawideSize / getMonitor*). WM.renderTree only schedules idle
  * coalesce, freeze, tiling-mode gate, then borders/decorations.
  *
+ * Freeze protocol (B7-3):
+ *   - freezeRender() pauses layout apply during grab/minimize transitions.
+ *   - renderTree(from, force=true) may temporarily unfreeze for one pass, then
+ *     restore freeze if it was frozen (balanced freeze/unfreeze).
+ *   - Callers that freeze must unfreeze on the same control path.
+ *
+ * Constraints (B8-3): enforceUltrawideSize clamps the **applied frame rect**,
+ * not tree percents. Percents stay in LayoutEngine; constraints run at apply.
+ *
  * @see codebase-review.md F5 Stage 3, architecture rule 2 (one owner per state)
  */
 
@@ -58,7 +67,11 @@ export class TilingRender extends GObject.Object {
     this.processNode(tree);
     this.apply(tree);
     this.cleanTree();
-    tree.debugTree();
+    // debugTree is a no-op unless debug methods are filled in; only invoke when
+    // debug logging is on so hot path stays free when disabled (B7-4).
+    if (Logger.isDebugEnabled()) {
+      tree.debugTree();
+    }
     Logger.debug(`*********************************************`);
   }
 

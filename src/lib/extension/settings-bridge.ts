@@ -4,7 +4,16 @@
  * Owns the settings key → handler map previously inlined in WindowManager.
  * Meta/overview signals stay on WM.
  *
- * @see codebase-review.md F5 Stage 8
+ * Prefs → shell contract (C3-1):
+ *   Prefs and the shell process share GSettings (and windows.json via
+ *   ConfigManager). Shell must not race silent file reloads; it reacts only to
+ *   GSettings keys, notably:
+ *     - window-overrides-reload-trigger — prefs bumps this after writing
+ *       windows.json; shell reloads float/tile overrides
+ *     - css-updated — theme CSS changed; shell reloads stylesheet
+ *   All other keys in SETTING_HANDLERS are the live prefs→shell event bus.
+ *
+ * @see codebase-review.md F5 Stage 8, C3-1
  */
 
 import type Gio from "gi://Gio";
