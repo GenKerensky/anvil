@@ -54,6 +54,7 @@ import { LayoutEngine } from "./layout-engine.js";
 import { GrabResizeSession } from "./grab-resize-session.js";
 import { SettingsBridge } from "./settings-bridge.js";
 import { FocusController } from "./focus-controller.js";
+import { BorderController } from "./border-controller.js";
 import { computeSnapLayout } from "./snap-layout.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type {
@@ -147,6 +148,7 @@ export class WindowManager extends GObject.Object {
   declare _grab: GrabResizeSession;
   declare _settingsBridge: SettingsBridge;
   declare _focus: FocusController;
+  declare _borders: BorderController;
   declare nodeWinAtPointer: Node<any> | null;
   declare sortedWindows: Meta.Window[];
 
@@ -337,6 +339,19 @@ export class WindowManager extends GObject.Object {
       isRenderFrozen: () => self._freezeRender,
       queueEvent: (ev, interval) => self.queueEvent(ev, interval),
       renderTree: (from, force) => self.renderTree(from, force),
+    });
+    this._borders = new BorderController({
+      get tree() {
+        return self.tree;
+      },
+      get settings() {
+        return self.ext.settings;
+      },
+      get focusMetaWindow() {
+        return self.focusMetaWindow;
+      },
+      calculateGaps: (n) => self._tilingRender.calculateGaps(n),
+      findNodeWindow: (w) => self.findNodeWindow(w),
     });
     this._initCommandHandlers();
 
@@ -1262,74 +1277,23 @@ export class WindowManager extends GObject.Object {
   }
 
   ensureBorderActors(windowActor: AnvilWindowActor | null) {
-    if (!windowActor || !this._bordersEnabled()) return;
-    if (!windowActor.border) {
-      const border = new St.Bin({ style_class: "window-tiled-border" });
-      if (global.window_group) global.window_group.add_child(border);
-      windowActor.border = border;
-      border.show();
-    }
+    this._borders.ensureBorderActors(windowActor);
   }
 
   ensureAllBorderActors() {
-    this.tree.nodeWindows.forEach((nodeWindow) => {
-      const actor = nodeWindow.windowActor as AnvilWindowActor | null;
-      if (actor) {
-        this.ensureBorderActors(actor);
-      }
-    });
+    this._borders.ensureAllBorderActors();
   }
 
   destroyAllBorderActors() {
-    this.tree.nodeWindows.forEach((nodeWindow) => {
-      const actor = nodeWindow.windowActor as AnvilWindowActor | null;
-      if (!actor) return;
-      if (actor.border) {
-        if (global.window_group) {
-          global.window_group.remove_child(actor.border);
-        }
-        actor.border.hide();
-        actor.border = undefined;
-      }
-      if (actor.splitBorder) {
-        if (global.window_group) {
-          global.window_group.remove_child(actor.splitBorder);
-        }
-        actor.splitBorder.hide();
-        actor.splitBorder = undefined;
-      }
-    });
+    this._borders.destroyAllBorderActors();
   }
 
   hideActorBorder(actor: AnvilWindowActor | null) {
-    if (!actor) return;
-    if (actor.border) {
-      actor.border.hide();
-    }
-    if (actor.splitBorder) {
-      actor.splitBorder.hide();
-    }
+    this._borders.hideActorBorder(actor);
   }
 
   hideWindowBorders() {
-    if (!this._bordersEnabled()) return;
-    this.tree.nodeWindows.forEach((nodeWindow) => {
-      const actor = nodeWindow.windowActor;
-      if (actor) {
-        this.hideActorBorder(actor);
-      }
-      if (nodeWindow!.parentNode!.isTabbed()) {
-        // Bug #268 fix: Defensive check — tab widget may have been destroyed
-        // Ported from jcrussell/forge
-        if (nodeWindow.tab && !(nodeWindow.tab as any)._destroyed && nodeWindow.tab.get_parent()) {
-          try {
-            nodeWindow.tab.remove_style_class_name("window-tabbed-tab-active");
-          } catch {
-            // Logger.warn(e);
-          }
-        }
-      }
-    });
+    this._borders.hideWindowBorders();
   }
 
   // Window movement API
@@ -1595,168 +1559,11 @@ export class WindowManager extends GObject.Object {
   }
 
   showWindowBorders() {
-    if (!this._bordersEnabled()) return;
-    const metaWindow = this.focusMetaWindow;
-    if (!metaWindow) return;
-    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-    if (!windowActor) return;
-    this.ensureBorderActors(windowActor);
-    const nodeWindow = this.findNodeWindow(metaWindow);
-    if (!nodeWindow) return;
-    if (metaWindow.get_wm_class() === null) return;
-
-    const borders: St.Bin[] = [];
-    const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
-    const splitBorderEnabled = this.ext.settings.get_boolean("split-border-toggle");
-    const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
-    const gap = this._tilingRender.calculateGaps(nodeWindow);
-    const maximized = () => {
-      try {
-        // GNOME 49+
-        return metaWindow.is_maximized() || metaWindow.is_fullscreen() || gap === 0;
-      } catch {
-        // pre-49 fallback
-        return (
-          (metaWindow as AnvilMetaWindow).get_maximized() === 3 ||
-          metaWindow.is_fullscreen() ||
-          gap === 0
-        );
-      }
-    };
-    const monitorCount = global.display.get_n_monitors();
-    const tiledChildren = this.tree.getTiledChildren(nodeWindow!.parentNode!.childNodes);
-    let inset = 3;
-    const parentNode = nodeWindow!.parentNode!;
-
-    const floatingWindow = nodeWindow.isFloat();
-    const tiledBorder = windowActor.border;
-
-    if (parentNode.isTabbed()) {
-      if (nodeWindow.tab) {
-        nodeWindow.tab.add_style_class_name("window-tabbed-tab-active");
-      }
-    }
-
-    // Feature #262: Skip focus border if single window and setting enabled
-    // Ported from jcrussell/forge
-    const focusBorderHiddenOnSingle = this.ext.settings.get_boolean(
-      "focus-border-hidden-on-single"
-    );
-    const monitorNode = this.tree.findParent(nodeWindow!, NODE_TYPES.MONITOR);
-    const tiledOnMonitor = monitorNode
-      ? monitorNode
-          .getNodeByMode(WINDOW_MODES.TILE)
-          .filter((t: import("./tree.js").Node<any>) => t.isWindow() && !t.nodeValue.minimized)
-      : [];
-    const isSingleWindow = tiledOnMonitor.length === 1 && monitorCount === 1;
-    const skipBorderForSingle = focusBorderHiddenOnSingle && isSingleWindow && !floatingWindow;
-
-    if (tiledBorder && focusBorderEnabled && !skipBorderForSingle) {
-      if (
-        !maximized() ||
-        (gap === 0 && tiledChildren.length === 1 && monitorCount > 1) ||
-        (gap === 0 && tiledChildren.length > 1)
-      ) {
-        if (tilingModeEnabled) {
-          if (parentNode.isStacked()) {
-            if (!floatingWindow) {
-              tiledBorder.set_style_class_name("window-stacked-border");
-            } else {
-              tiledBorder.set_style_class_name("window-floated-border");
-            }
-          } else if (parentNode.isTabbed()) {
-            if (!floatingWindow) {
-              tiledBorder.set_style_class_name("window-tabbed-border");
-              if (nodeWindow.backgroundTab) {
-                tiledBorder.add_style_class_name("window-tabbed-bg");
-              }
-            } else {
-              tiledBorder.set_style_class_name("window-floated-border");
-            }
-          } else {
-            if (!floatingWindow) {
-              tiledBorder.set_style_class_name("window-tiled-border");
-            } else {
-              tiledBorder.set_style_class_name("window-floated-border");
-            }
-          }
-        } else {
-          tiledBorder.set_style_class_name("window-floated-border");
-        }
-        borders.push(tiledBorder);
-      }
-    }
-
-    if (
-      gap === 0 ||
-      (() => {
-        try {
-          // GNOME 49+
-          return metaWindow.is_maximized();
-        } catch {
-          // pre-49 fallback
-          return (
-            (metaWindow as AnvilMetaWindow).get_maximized() === 1 ||
-            (metaWindow as AnvilMetaWindow).get_maximized() === 2
-          );
-        }
-      })()
-    ) {
-      inset = 0;
-    }
-
-    // handle the split border
-    // It should only show when V or H-Split and with single child CONs
-    if (
-      splitBorderEnabled &&
-      focusBorderEnabled &&
-      tilingModeEnabled &&
-      !nodeWindow.isFloat() &&
-      !maximized() &&
-      parentNode.childNodes.length === 1 &&
-      (parentNode.isCon() || parentNode.isMonitor()) &&
-      !(parentNode.isTabbed() || parentNode.isStacked())
-    ) {
-      if (!windowActor.splitBorder) {
-        const splitBorder = new St.Bin({ style_class: "window-split-border" });
-        global.window_group.add_child(splitBorder);
-        windowActor.splitBorder = splitBorder;
-      }
-
-      const splitBorder = windowActor.splitBorder;
-      splitBorder.remove_style_class_name("window-split-vertical");
-      splitBorder.remove_style_class_name("window-split-horizontal");
-
-      if (parentNode.isVSplit()) {
-        splitBorder.add_style_class_name("window-split-vertical");
-      } else if (parentNode.isHSplit()) {
-        splitBorder.add_style_class_name("window-split-horizontal");
-      }
-      borders.push(splitBorder);
-    }
-
-    const rect = metaWindow.get_frame_rect();
-
-    borders.forEach((border) => {
-      border.set_size(rect.width + inset * 2, rect.height + inset * 2);
-      border.set_position(rect.x - inset, rect.y - inset);
-      if (metaWindow.appears_focused && !metaWindow.minimized) {
-        border.show();
-      }
-      if (global.window_group && global.window_group.contains(border)) {
-        // TODO - sort the borders with split border being on top
-        global.window_group.remove_child(border);
-        // Insert below the window actor so the outline does not paint over
-        // the window's client content (e.g. app menus, popovers, dropdowns).
-        global.window_group.insert_child_below(border, metaWindow.get_compositor_private());
-      }
-    });
+    this._borders.showWindowBorders();
   }
 
   updateBorderLayout() {
-    if (!this._bordersEnabled()) return;
-    this.hideWindowBorders();
-    this.showWindowBorders();
+    this._borders.updateBorderLayout();
   }
 
   _clearPendingWindowSignals(metaWindow: AnvilMetaWindow) {

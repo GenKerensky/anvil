@@ -102,14 +102,25 @@ function overrideMatchesWindow(override: WindowOverride, metaWindow: Meta.Window
 export class RulesEngine {
   /** Cached WindowConfig — same object reference as ConfigManager after reload. */
   windowProps: WindowConfig;
+  /**
+   * Per-window classification cache (B7-1). Keyed by Meta window id; entry
+   * stores identity key so class/title/type changes recompute.
+   */
+  private _classifCache = new Map<number, { identity: string; match: RuleMatch }>();
 
   constructor(initial?: WindowConfig | null) {
     this.windowProps = initial ?? { overrides: [] };
   }
 
+  /** Drop cached float classifications (override/settings change). */
+  invalidateClassificationCache(): void {
+    this._classifCache.clear();
+  }
+
   /**
    * Ordered float/tile classification.
    * Prefer this over isFloatingExempt when the rule source is useful.
+   * Results are cached until identity/overrides change (B7-1).
    */
   match(metaWindow: Meta.Window | null): RuleMatch {
     if (!metaWindow) {
@@ -119,8 +130,36 @@ export class RulesEngine {
     const windowTitle = metaWindow.get_title();
     const windowType = metaWindow.get_window_type();
     const wmClass = metaWindow.get_wm_class();
+    const trans = metaWindow.get_transient_for();
+    const resizable = metaWindow.allows_resize();
+    const winId = metaWindow.get_id();
     const overrides = this.windowProps.overrides;
+    const identity = [
+      wmClass ?? "",
+      windowTitle ?? "",
+      String(windowType),
+      trans ? String(trans.get_id?.() ?? "t") : "",
+      resizable ? "1" : "0",
+      String(overrides.length),
+    ].join("\0");
 
+    const cached = this._classifCache.get(winId);
+    if (cached && cached.identity === identity) {
+      return cached.match;
+    }
+
+    const result = this._matchUncached(metaWindow, windowTitle, windowType, wmClass, overrides);
+    this._classifCache.set(winId, { identity, match: result });
+    return result;
+  }
+
+  private _matchUncached(
+    metaWindow: Meta.Window,
+    windowTitle: string | null,
+    windowType: Meta.WindowType,
+    wmClass: string | null,
+    overrides: WindowOverride[]
+  ): RuleMatch {
     // Bug #294: explicit TILE overrides take precedence over all built-in float rules.
     for (const override of overrides) {
       if (override.mode !== "tile") continue;
@@ -205,6 +244,7 @@ export class RulesEngine {
     configMgr.windowProps = currentProps;
     // Keep engine cache on the same object when possible.
     this.windowProps = currentProps;
+    this.invalidateClassificationCache();
   }
 
   removeFloatOverride(metaWindow: Meta.Window, withWmId: boolean, configMgr: ConfigManager): void {
@@ -226,6 +266,7 @@ export class RulesEngine {
     currentProps.overrides = overrides;
     configMgr.windowProps = currentProps;
     this.windowProps = currentProps;
+    this.invalidateClassificationCache();
   }
 
   /**
@@ -239,5 +280,6 @@ export class RulesEngine {
       this.windowProps.overrides = this.windowProps.overrides.filter((override) => !override.wmId);
       Logger.info(`Reloaded ${this.windowProps.overrides.length} window overrides from file`);
     }
+    this.invalidateClassificationCache();
   }
 }

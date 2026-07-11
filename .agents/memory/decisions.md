@@ -133,6 +133,11 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 17 — float cache + BorderController (2026-07-11)
+
+- RulesEngine caches match() by window id + identity until override reload (B7-1).
+- **BorderController** owns focus/split border actors; WM is a facade (B7-2).
+
 ### Residual Stage 16 — layout/focus/pointer (2026-07-11)
 
 - **LayoutEngine.setLayout** for stacked/tabbed toggles (B6-2); determineSplitLayout already
