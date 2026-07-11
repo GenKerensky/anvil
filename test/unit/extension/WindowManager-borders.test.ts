@@ -19,9 +19,9 @@ describe("WindowManager - Borders", () => {
       title: "Test Window",
       workspace: ctx.workspaces[0],
     });
-    vi.spyOn(ctx.windowManager, "postProcessWindow").mockImplementation(() => {});
+    vi.spyOn(ctx.windowManager._tracker, "postProcessWindow").mockImplementation(() => {});
     vi.spyOn(ctx.windowManager, "queueEvent").mockImplementation(() => {});
-    ctx.windowManager.trackWindow(ctx.display, window);
+    ctx.windowManager._tracker.trackWindow(ctx.display, window);
     return window;
   };
 
@@ -102,7 +102,7 @@ describe("WindowManager - Borders", () => {
 
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      ctx.windowManager.showWindowBorders();
+      ctx.windowManager._borders.showWindowBorders();
 
       const actor = metaWindow.get_compositor_private();
       expect(actor.splitBorder).toBeTruthy();

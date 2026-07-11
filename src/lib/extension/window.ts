@@ -21,11 +21,9 @@ import GLib from "gi://GLib";
 
 import GObject from "gi://GObject";
 import Meta from "gi://Meta";
-import St from "gi://St";
 
 // Gnome Shell imports
 import { gettext as _ } from "resource:///org/gnome/shell/extensions/extension.js";
-import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { PACKAGE_VERSION } from "resource:///org/gnome/shell/misc/config.js";
 
 // Shared state
@@ -35,17 +33,8 @@ import type { WindowConfig } from "../shared/settings.js";
 // App imports
 import * as Utils from "./utils.js";
 import { Keybindings } from "./keybindings.js";
-import {
-  Tree,
-  Queue,
-  Node,
-  LAYOUT_TYPES,
-  ORIENTATION_TYPES,
-  NODE_TYPES,
-  RectLike,
-} from "./tree.js";
+import { Tree, Queue, Node, NODE_TYPES, RectLike } from "./tree.js";
 import { production } from "../shared/settings.js";
-import { safeRaise, safeActivate } from "./mutter-safe.js";
 import { PointerPolicy, type PointerFocusSource } from "./pointer-policy.js";
 import { TilingRender } from "./tiling-render.js";
 import { RulesEngine } from "./rules-engine.js";
@@ -56,23 +45,21 @@ import { SettingsBridge } from "./settings-bridge.js";
 import { FocusController } from "./focus-controller.js";
 import { BorderController } from "./border-controller.js";
 import { CommandBus } from "./command-bus.js";
-import { computeSnapLayout } from "./snap-layout.js";
-import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
-import type {
-  AnvilMetaWindow,
-  AnvilWindowActor,
-  AnvilMetaWorkspace,
-  AnvilExtension,
-} from "./window/types.js";
-import type {
-  AnvilAction,
-  FloatAction,
-  DirectionAction,
-  SplitAction,
-  GapSizeAction,
-  SnapLayoutMoveAction,
-  WindowResizeAction,
-} from "./window/actions.js";
+
+import { WINDOW_MODES } from "./window/constants.js";
+import { DragDropTile } from "./drag-drop-tile.js";
+import { SignalManager } from "./signal-manager.js";
+import { RenderScheduler } from "./render-scheduler.js";
+import { DecorationLayout } from "./decoration-layout.js";
+import {
+  createCommandHandlers,
+  resize as commandResize,
+  toggleFloatingMode as commandToggleFloatingMode,
+  type CommandHandlerHost,
+} from "./command-handlers.js";
+import { WorkspaceMutations, type WorkspaceMutationsHost } from "./workspace-mutations.js";
+import type { AnvilWindowActor, AnvilExtension } from "./window/types.js";
+import type { AnvilAction, FloatAction } from "./window/actions.js";
 import { createSessionFlags, type SessionFlagsState } from "./window/session-flags.js";
 
 export { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
@@ -94,9 +81,15 @@ export class WindowManager extends GObject.Object {
   // --- State ---
   declare prefsTitle: string;
   declare disabled: boolean;
-  declare _signalsBound: boolean;
   /** Grouped transient flags (B2-3). Prefer this._session over new loose fields. */
   private _session!: SessionFlagsState;
+  private _dragDrop!: DragDropTile;
+  private _signalManager!: SignalManager;
+  private _commandHandlerHost!: CommandHandlerHost;
+  private _wsMutationsHost!: WorkspaceMutationsHost;
+  private _wsMutations!: WorkspaceMutations;
+  private _renderScheduler!: RenderScheduler;
+  private _decorationLayout!: DecorationLayout;
 
   // Compatibility accessors for session flags (tests / residual call sites).
   get _freezeRender() {
@@ -110,30 +103,6 @@ export class WindowManager extends GObject.Object {
   }
   set _workspaceChanging(v: boolean) {
     this._session.workspaceChanging = v;
-  }
-  get workspaceAdded() {
-    return this._session.workspaceAdded;
-  }
-  set workspaceAdded(v: boolean) {
-    this._session.workspaceAdded = v;
-  }
-  get workspaceRemoved() {
-    return this._session.workspaceRemoved;
-  }
-  set workspaceRemoved(v: boolean) {
-    this._session.workspaceRemoved = v;
-  }
-  get fromOverview() {
-    return this._session.fromOverview;
-  }
-  set fromOverview(v: boolean) {
-    this._session.fromOverview = v;
-  }
-  get toOverview() {
-    return this._session.toOverview;
-  }
-  set toOverview(v: boolean) {
-    this._session.toOverview = v;
   }
 
   // --- Object references ---
@@ -152,18 +121,8 @@ export class WindowManager extends GObject.Object {
   declare nodeWinAtPointer: Node<any> | null;
   declare sortedWindows: Meta.Window[];
 
-  // --- Signal handler ID arrays ---
-  declare _displaySignals: number[] | undefined;
-  declare _windowManagerSignals: number[] | undefined;
-  declare _workspaceManagerSignals: number[] | undefined;
-  declare _overviewSignals: number[] | null;
-
   // --- GLib source IDs ---
   declare _queueSourceId: number;
-  declare _renderTreeSrcId: number;
-  declare _reloadTreeSrcId: number;
-  declare _workspaceChangingTimeoutId: number;
-  declare _prefsOpenSrcId: number;
 
   /** CommandBus — typed AnvilAction dispatch (B3-1 / B10-2). */
   private _commandBus!: CommandBus;
@@ -201,6 +160,44 @@ export class WindowManager extends GObject.Object {
       rectForMonitor: (n, i) => self.rectForMonitor(n, i),
       sameParentMonitor: (a, b) => self.sameParentMonitor(a, b),
       floatingWindow: (n) => self.floatingWindow(n),
+    });
+    // SignalManager before Tree: Tree._initWorkspaces() calls bindWorkspaceSignals
+    // during construction, so it must exist first and own the impl (C11). Host
+    // getters are lazy — _tracker/_grab/_settingsBridge need not exist yet.
+    this._signalManager = new SignalManager({
+      get tracker() {
+        return self._tracker;
+      },
+      get tree() {
+        return self.tree;
+      },
+      get layout() {
+        return self._layout;
+      },
+      get settingsBridge() {
+        return self._settingsBridge;
+      },
+      renderTree: (from, force) => self.renderTree(from, force),
+      trackCurrentMonWs: () => self.trackCurrentMonWs(),
+      updateMetaWorkspaceMonitor: (from, mon, w) => self.updateMetaWorkspaceMonitor(from, mon, w),
+      updateDecorationLayout: () => self.updateDecorationLayout(),
+      hideWindowBorders: () => self.hideWindowBorders(),
+      notifyWorkspaceSettled: () => self.notifyWorkspaceSettled(),
+      notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
+      isRenderFrozen: () => self._freezeRender,
+      freezeRender: () => self.freezeRender(),
+      unfreezeRender: () => self.unfreezeRender(),
+      get workspaceChanging() {
+        return self._workspaceChanging;
+      },
+      set workspaceChanging(v) {
+        self._workspaceChanging = v;
+      },
+      updateStackedFocus: (n) => self.updateStackedFocus(n),
+      updateTabbedFocus: (n) => self.updateTabbedFocus(n),
+      handleGrabOpBegin: (d, m, g) => self._handleGrabOpBegin(d, m, g),
+      handleGrabOpEnd: (d, m, g) => self._handleGrabOpEnd(d, m, g),
+      queueEvent: (ev, interval) => self.queueEvent(ev, interval),
     });
     this._tree = new Tree({
       get settings() {
@@ -249,7 +246,7 @@ export class WindowManager extends GObject.Object {
         return self.eventQueue.length;
       },
       findNodeWindow: (w) => self.findNodeWindow(w),
-      findNodeWindowAtPointer: (n) => self.findNodeWindowAtPointer(n) ?? null,
+      findNodeWindowAtPointer: (n) => self._dragDrop.findNodeWindowAtPointer(n) ?? null,
       trackCurrentMonWs: () => self.trackCurrentMonWs(),
       freezeRender: () => self.freezeRender(),
       unfreezeRender: () => self.unfreezeRender(),
@@ -262,7 +259,7 @@ export class WindowManager extends GObject.Object {
       floatingWindow: (n) => !!self.floatingWindow(n),
       minimizedWindow: (n) => !!self.minimizedWindow(n),
       allowDragDropTile: () => Boolean(self.allowDragDropTile()),
-      moveWindowToPointer: (n, preview) => self.moveWindowToPointer(n, preview),
+      moveWindowToPointer: (n, preview) => self._dragDrop.moveWindowToPointer(n, preview),
       updateStackedFocus: (n) => self.updateStackedFocus(n),
       updateTabbedFocus: (n) => self.updateTabbedFocus(n),
     });
@@ -351,26 +348,97 @@ export class WindowManager extends GObject.Object {
       calculateGaps: (n) => self._tilingRender.calculateGaps(n),
       findNodeWindow: (w) => self.findNodeWindow(w),
     });
+    this._dragDrop = new DragDropTile({
+      get tree() {
+        return self.tree;
+      },
+      get settings() {
+        return self.ext.settings;
+      },
+      get layoutEngine() {
+        return self._layout;
+      },
+      get nodeWinAtPointer() {
+        return self.nodeWinAtPointer;
+      },
+      get cancelGrab() {
+        return self._grab.cancelGrab;
+      },
+      get sortedWindows() {
+        return self.sortedWindows;
+      },
+      renderTree: (from, force) => self.renderTree(from, force),
+      processGap: (n) => self._tilingRender.processGap(n),
+    });
     this._initCommandHandlers();
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self2 = this;
+    this._wsMutationsHost = {
+      get tree() {
+        return self2.tree;
+      },
+      get settings() {
+        return self2.ext.settings;
+      },
+      get layoutEngine() {
+        return self2._layout;
+      },
+      get focusMetaWindow() {
+        return self2.focusMetaWindow;
+      },
+      get grabOp() {
+        return self2._grab.grabOp;
+      },
+      get sortedWindows() {
+        return self2.sortedWindows;
+      },
+      set sortedWindows(v) {
+        self2.sortedWindows = v;
+      },
+      findNodeWindow: (w) => self2.findNodeWindow(w),
+      renderTree: (from, force) => self2.renderTree(from, force),
+      updateBorderLayout: () => self2.updateBorderLayout(),
+      updateDecorationLayout: () => self2.updateDecorationLayout(),
+      updateStackedFocus: (n) => self2.updateStackedFocus(n),
+      updateTabbedFocus: (n) => self2.updateTabbedFocus(n),
+      floatingWindow: (n) => self2.floatingWindow(n),
+      validWindow: (w) => self2._tracker.validWindow(w),
+      handleResizing: (n) => self2._grab.handleResizing(n),
+      handleMoving: (n) => self2._grab.handleMoving(n),
+    };
+    this._wsMutations = new WorkspaceMutations(this._wsMutationsHost);
+    this._renderScheduler = new RenderScheduler({
+      isRenderFrozen: () => self2._freezeRender,
+      freezeRender: () => self2.freezeRender(),
+      unfreezeRender: () => self2.unfreezeRender(),
+      updateDecorationLayout: () => self2.updateDecorationLayout(),
+      updateBorderLayout: () => self2.updateBorderLayout(),
+      tilingRenderRender: (from) => self2._tilingRender.render(from),
+      trackCurrentWindows: () => self2._tracker.trackCurrentWindows(),
+      treeReinitializeWorkspaces: () => self2.tree._initWorkspaces(),
+      treeResetRoot: () => {
+        self2.tree.childNodes.length = 0;
+        self2.tree.attachNode = null;
+      },
+      disableDecorations: () => Utils._disableDecorations(),
+      get tilingModeEnabled() {
+        return self2.ext.settings.get_boolean("tiling-mode-enabled");
+      },
+    });
+    this._decorationLayout = new DecorationLayout({
+      isRenderFrozen: () => self2._freezeRender,
+      get tree() {
+        return self2.tree;
+      },
+      get focusMetaWindow() {
+        return self2.focusMetaWindow;
+      },
+      get settings() {
+        return self2.ext.settings;
+      },
+    });
 
     Logger.info("anvil initialized");
-  }
-
-  /** Grab session state — Stage 6 facades for tests and commands. */
-  get grabOp() {
-    return this._grab.grabOp;
-  }
-  set grabOp(v: Meta.GrabOp) {
-    this._grab.grabOp = v;
-  }
-  get cancelGrab() {
-    return this._grab.cancelGrab;
-  }
-  set cancelGrab(v: boolean) {
-    this._grab.cancelGrab = v;
-  }
-  get _resizedWindows() {
-    return this._grab.resizedWindows;
   }
 
   get pointerPolicy() {
@@ -452,30 +520,9 @@ export class WindowManager extends GObject.Object {
     this.windowProps = this._rules.windowProps;
   }
 
+  /** @deprecated Use commandToggleFloatingMode() from command-handlers.js. Kept for test surface. */
   toggleFloatingMode(action: FloatAction, metaWindow: Meta.Window) {
-    const nodeWindow = this.findNodeWindow(metaWindow);
-    // action is required; historical guard was `!(action || action.mode)`.
-    if (!nodeWindow || !action) return;
-    if (nodeWindow.nodeType !== NODE_TYPES.WINDOW) return;
-
-    const withWmId = action.name === "FloatToggle";
-    const floatingExempt = this.isFloatingExempt(metaWindow);
-
-    if (floatingExempt) {
-      this.removeFloatOverride(metaWindow, withWmId);
-      this.windowProps = this.ext.configMgr.windowProps ?? this.windowProps;
-      this._rules.windowProps = this.windowProps;
-      if (!this.isActiveWindowWorkspaceTiled(metaWindow)) {
-        nodeWindow.mode = WINDOW_MODES.FLOAT;
-      } else {
-        nodeWindow.mode = WINDOW_MODES.TILE;
-      }
-    } else {
-      this.addFloatOverride(metaWindow, withWmId);
-      this.windowProps = this.ext.configMgr.windowProps ?? this.windowProps;
-      this._rules.windowProps = this.windowProps;
-      nodeWindow.mode = WINDOW_MODES.FLOAT;
-    }
+    commandToggleFloatingMode(this._commandHandlerHost, action, metaWindow);
   }
 
   queueEvent(eventObj: { name: string; callback: () => void }, interval: number = 220) {
@@ -494,166 +541,6 @@ export class WindowManager extends GObject.Object {
         return result;
       });
     }
-  }
-
-  /**
-   * This is the central place to bind all the non-window signals.
-   */
-  _bindSignals() {
-    if (this._signalsBound) return;
-
-    const extDisplay = global.display;
-    const shellWm = global.window_manager;
-
-    this._displaySignals = [
-      extDisplay.connect("window-created", (_d, w) => {
-        this._tracker.onWindowCreated(_d, w);
-      }),
-      extDisplay.connect("grab-op-begin", (_d, m, g) => this._handleGrabOpBegin(_d, m, g)),
-      extDisplay.connect("window-entered-monitor", (_, monitor, metaWindow) => {
-        this.updateMetaWorkspaceMonitor("window-entered-monitor", monitor, metaWindow);
-        this.trackCurrentMonWs();
-      }),
-      extDisplay.connect("grab-op-end", (_d, m, g) => this._handleGrabOpEnd(_d, m, g)),
-      extDisplay.connect("showing-desktop-changed", () => {
-        this.hideWindowBorders();
-        this.updateDecorationLayout();
-      }),
-      extDisplay.connect("in-fullscreen-changed", () => {
-        this.renderTree("full-screen-changed");
-      }),
-      extDisplay.connect("workareas-changed", (_display) => {
-        if (global.display.get_n_monitors() == 0) {
-          Logger.debug(`workareas-changed: no monitors, ignoring signal`);
-          return;
-        }
-        if (this.tree.getNodeByType("WINDOW").length > 0) {
-          const workspaceReload = this.workspaceAdded || this.workspaceRemoved;
-          if (workspaceReload) {
-            this.trackCurrentWindows();
-            this.workspaceRemoved = false;
-            this.workspaceAdded = false;
-          } else {
-            this.renderTree("workareas-changed");
-          }
-        }
-      }),
-    ];
-
-    this._windowManagerSignals = [
-      shellWm.connect("map", (_, actor) => {
-        this._tracker.trackMappedActor(actor);
-      }),
-      shellWm.connect("minimize", () => {
-        this.hideWindowBorders();
-        const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-        if (focusNodeWindow) {
-          if (this.tree.getTiledChildren(focusNodeWindow!.parentNode!.childNodes).length === 0) {
-            this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!.parentNode);
-          }
-          this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
-        }
-
-        const prevFrozen = this._freezeRender;
-        if (prevFrozen) this.unfreezeRender();
-        this.renderTree("minimize");
-        if (prevFrozen) this.freezeRender();
-      }),
-      shellWm.connect("unminimize", () => {
-        const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-        if (focusNodeWindow) {
-          this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
-        }
-
-        const prevFrozen = this._freezeRender;
-        if (prevFrozen) this.unfreezeRender();
-        this.renderTree("unminimize");
-        if (prevFrozen) this.freezeRender();
-      }),
-      // Empty handler: connect to suppress Mutter's built-in edge-tile preview
-      // while Anvil owns tiling. Do not disconnect — an empty slot blocks the
-      // default preview side effects without drawing our own overlay.
-      // @see codebase-review.md B4-6
-      shellWm.connect("show-tile-preview", (_wm, _metaWindow, _rect, _num) => {
-        /* intentionally empty — suppress default tile preview */
-      }),
-    ];
-
-    const extWsm = global.workspace_manager;
-
-    this._workspaceManagerSignals = [
-      extWsm.connect("showing-desktop-changed", () => {
-        this.hideWindowBorders();
-        this.updateDecorationLayout();
-      }),
-      extWsm.connect("workspace-added", (_wsm, wsIndex) => {
-        this.tree.addWorkspace(wsIndex);
-        this.trackCurrentMonWs();
-        this.workspaceAdded = true;
-        this.renderTree("workspace-added");
-      }),
-      extWsm.connect("workspace-removed", (_wsm, wsIndex) => {
-        this.tree.removeWorkspace(wsIndex);
-        this.trackCurrentMonWs();
-        this.workspaceRemoved = true;
-        this.updateDecorationLayout();
-        this.renderTree("workspace-removed");
-      }),
-      extWsm.connect("active-workspace-changed", () => {
-        // Bug #374 fix: Set flag to prevent focus jumping during workspace transitions
-        // Ported from jcrussell/forge
-        this._workspaceChanging = true;
-        this.hideWindowBorders();
-        this.trackCurrentMonWs();
-        this.updateDecorationLayout();
-        this.renderTree("active-workspace-changed");
-        // Clear previous timer to avoid races on rapid workspace switches
-        if (this._workspaceChangingTimeoutId) {
-          GLib.Source.remove(this._workspaceChangingTimeoutId);
-          this._workspaceChangingTimeoutId = 0;
-        }
-        // Clear flag after workspace animation completes (300ms)
-        // Also refocus pointer to correct monitor in multi-monitor setups
-        this._workspaceChangingTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
-          this._workspaceChangingTimeoutId = 0;
-          this._workspaceChanging = false;
-          // Tree should have rendered by now (idle_add runs before 300ms timeout)
-          this.notifyWorkspaceSettled();
-          return false;
-        });
-      }),
-    ];
-
-    const numberOfWorkspaces = extWsm.get_n_workspaces();
-
-    for (let i = 0; i < numberOfWorkspaces; i++) {
-      const workspace = extWsm.get_workspace_by_index(i)!;
-      this.bindWorkspaceSignals(workspace);
-    }
-
-    // Stage 8: settings key → handler map (SettingsBridge)
-    this._settingsBridge.enable();
-
-    this._overviewSignals = [
-      Main.overview.connect("hiding", () => {
-        this.fromOverview = true;
-        const eventObj = {
-          name: "focus-after-overview",
-          callback: () => {
-            const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-            this.updateStackedFocus(focusNodeWindow);
-            this.updateTabbedFocus(focusNodeWindow);
-            this.notifyFocusChanged(focusNodeWindow, "overview");
-          },
-        };
-        this.queueEvent(eventObj);
-      }),
-      Main.overview.connect("showing", () => {
-        this.toOverview = true;
-      }),
-    ];
-
-    this._signalsBound = true;
   }
 
   cleanupAlwaysFloat() {
@@ -676,53 +563,13 @@ export class WindowManager extends GObject.Object {
   }
 
   trackCurrentMonWs() {
-    const metaWindow = this.focusMetaWindow;
-    if (!metaWindow) return;
-    const currentMonitor = global.display.get_current_monitor();
-    const currentWorkspace = global.display.get_workspace_manager().get_active_workspace_index();
-
-    const currentMonWs = `mo${currentMonitor}ws${currentWorkspace}`;
-    const activeMetaMonWs = `mo${metaWindow.get_monitor()}ws${metaWindow.get_workspace().index()}`;
-    const currentWsNode = this.tree.findNode(`ws${currentWorkspace}`);
-
-    if (!currentWsNode) {
-      return;
-    }
-
-    // Search for all the valid windows on the workspace
-    const monWindows = currentWsNode.getNodeByType(NODE_TYPES.WORKSPACE).flatMap((ws) => {
-      return ws
-        .getNodeByType(NODE_TYPES.WINDOW)
-        .filter(
-          (w) =>
-            !(w.nodeValue as Meta.Window).minimized &&
-            w.isTile() &&
-            w.nodeValue !== metaWindow &&
-            // The searched window should be on the same monitor workspace
-            // This ensures that Anvil already updated the workspace node tree:
-            currentMonWs === activeMetaMonWs
-        )
-        .map((w) => w.nodeValue);
-    });
-
-    this.sortedWindows = global.display
-      .sort_windows_by_stacking(monWindows as Meta.Window[])
-      .reverse();
+    this._wsMutations.trackCurrentMonWs();
   }
 
-  // TODO move this to workspace.js
+  // Delegates to SignalManager (C11): it owns signal connect/disconnect. Kept as
+  // a facade so Tree (TreeHost) and tests can call WM.bindWorkspaceSignals().
   bindWorkspaceSignals(metaWorkspace: Meta.Workspace) {
-    if (metaWorkspace) {
-      const ws = metaWorkspace as AnvilMetaWorkspace;
-      if (!ws.workspaceSignals) {
-        const workspaceSignals = [
-          metaWorkspace.connect("window-added", (_, metaWindow) => {
-            this._tracker.onWorkspaceWindowAdded(metaWindow);
-          }),
-        ];
-        ws.workspaceSignals = workspaceSignals;
-      }
-    }
+    this._signalManager.bindWorkspaceSignals(metaWorkspace);
   }
 
   /**
@@ -730,27 +577,63 @@ export class WindowManager extends GObject.Object {
    * CommandBusHost — do not reintroduce a mega-switch (architecture rule 3).
    */
   private _initCommandHandlers() {
-    this._commandBus = new CommandBus({
-      handleFloat: (a) => this._handleFloat(a),
-      handleMove: (a) => this._handleMove(a),
-      handleFocus: (a) => this._handleFocus(a),
-      handleSwap: (a) => this._handleSwap(a),
-      handleSplit: (a) => this._handleSplit(a),
-      handleLayoutToggle: () => this._handleLayoutToggle(),
-      handleFocusBorderToggle: () => this._handleFocusBorderToggle(),
-      handleTilingModeToggle: () => this._handleTilingModeToggle(),
-      handleGapSize: (a) => this._handleGapSize(a),
-      handleWorkspaceActiveTileToggle: () => this._handleWorkspaceActiveTileToggle(),
-      handleLayoutStackedToggle: () => this._handleLayoutStackedToggle(),
-      handleLayoutTabbedToggle: () => this._handleLayoutTabbedToggle(),
-      handleCancelOperation: () => this._handleCancelOperation(),
-      handlePrefsOpen: () => this._handlePrefsOpen(),
-      handleWindowSwapLastActive: () => this._handleWindowSwapLastActive(),
-      handleSnapLayoutMove: (a) => this._handleSnapLayoutMove(a),
-      handleShowTabDecorationToggle: () => this._handleShowTabDecorationToggle(),
-      handleWindowResize: (a) => this._handleWindowResize(a),
-      handleWindowClose: () => this._handleWindowClose(),
-    });
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    this._commandHandlerHost = {
+      get tree() {
+        return self.tree;
+      },
+      get focusMetaWindow() {
+        return self.focusMetaWindow;
+      },
+      get settings() {
+        return self.ext.settings;
+      },
+      get ext() {
+        return self.ext;
+      },
+      get layoutEngine() {
+        return self._layout;
+      },
+      get focusController() {
+        return self._focus;
+      },
+      get tilingRender() {
+        return self._tilingRender;
+      },
+      get rulesEngine() {
+        return self._rules;
+      },
+      get eventQueueLength() {
+        return self.eventQueue.length;
+      },
+      get prefsTitle() {
+        return self.prefsTitle;
+      },
+      findNodeWindow: (w) => self.findNodeWindow(w),
+      move: (w, rect) => self.move(w, rect),
+      moveCenter: (w) => self.moveCenter(w),
+      renderTree: (from, force) => self.renderTree(from, force),
+      queueEvent: (ev, interval) => self.queueEvent(ev, interval),
+      notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
+      updateStackedFocus: (n) => self.updateStackedFocus(n),
+      updateTabbedFocus: (n) => self.updateTabbedFocus(n),
+      isActiveWindowWorkspaceTiled: (w) => self.isActiveWindowWorkspaceTiled(w),
+      isFloatingExempt: (w) => self.isFloatingExempt(w),
+      floatWorkspace: (i) => self.floatWorkspace(i),
+      unfloatWorkspace: (i) => self.unfloatWorkspace(i),
+      floatAllWindows: () => self.floatAllWindows(),
+      unfloatAllWindows: () => self.unfloatAllWindows(),
+      addFloatOverride: (w, withWmId) => self.addFloatOverride(w, withWmId),
+      removeFloatOverride: (w, withWmId) => self.removeFloatOverride(w, withWmId),
+      beginGrab: (m, g) => self._handleGrabOpBegin(global.display, m, g),
+      endGrab: (m, g) => self._handleGrabOpEnd(global.display, m, g),
+      setCancelGrab: (v) => {
+        self._grab.cancelGrab = v;
+      },
+      unfreezeRender: () => self.unfreezeRender(),
+    };
+    this._commandBus = new CommandBus(createCommandHandlers(this._commandHandlerHost));
   }
 
   /** Dispatch a typed user action via CommandBus (B3-1). */
@@ -763,395 +646,9 @@ export class WindowManager extends GObject.Object {
     return this._commandBus;
   }
 
-  private _handleFloat(action: FloatAction) {
-    const focusWindow = this.focusMetaWindow;
-    const focusNodeWindow = this.findNodeWindow(focusWindow);
-
-    this.toggleFloatingMode(action, focusWindow);
-
-    const rectRequest = {
-      x: action.x,
-      y: action.y,
-      width: action.width,
-      height: action.height,
-    };
-
-    const moveRect = {
-      x: Utils.resolveX(rectRequest, focusWindow),
-      y: Utils.resolveY(rectRequest, focusWindow),
-      width: Utils.resolveWidth(rectRequest, focusWindow),
-      height: Utils.resolveHeight(rectRequest, focusWindow),
-    };
-
-    this.move(focusWindow, moveRect);
-
-    const existParent = focusNodeWindow!.parentNode!;
-
-    if (this.tree.getTiledChildren(existParent.childNodes).length <= 1) {
-      existParent.percent = undefined;
-      this._layout.resetSiblingPercent(existParent.parentNode!);
-    }
-
-    this._layout.resetSiblingPercent(existParent);
-    this.renderTree("float-toggle", true);
-  }
-
-  private _handleMove(action: DirectionAction) {
-    let focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    this.unfreezeRender();
-    const moveDirection = Utils.resolveDirection(action.direction)!;
-
-    const prev = focusNodeWindow;
-    const moved = this._layout.move(focusNodeWindow!, moveDirection);
-    if (!focusNodeWindow) {
-      focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    }
-    this.queueEvent({
-      name: "move",
-      callback: () => {
-        if (this.eventQueue.length <= 0) {
-          this.unfreezeRender();
-          if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.STACKED) {
-            focusNodeWindow!.parentNode!.appendChild(focusNodeWindow!);
-            safeRaise(focusNodeWindow!.nodeValue as Meta.Window);
-            safeActivate(
-              focusNodeWindow!.nodeValue as Meta.Window,
-              global.display.get_current_time()
-            );
-            this.renderTree("move-stacked-queue");
-          }
-          if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.TABBED) {
-            safeRaise(focusNodeWindow!.nodeValue as Meta.Window);
-            safeActivate(
-              focusNodeWindow!.nodeValue as Meta.Window,
-              global.display.get_current_time()
-            );
-            if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
-            this.renderTree("move-tabbed-queue");
-          }
-          this.notifyFocusChanged(focusNodeWindow, "move");
-        }
-      },
-    });
-    if (moved) {
-      if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
-      this.renderTree("move-window");
-    }
-  }
-
-  private _handleFocus(action: DirectionAction) {
-    let focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    const focusDirection = Utils.resolveDirection(action.direction)!;
-    focusNodeWindow = this._focus.focusDirection(focusNodeWindow, focusDirection);
-    if (!focusNodeWindow) {
-      focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    }
-    // In headless environments (container tests), there is no pointer
-    // to auto-focus the window. Explicitly activate so get_focus_window()
-    // returns the correct window.
-    if (focusNodeWindow) {
-      const win = focusNodeWindow.nodeValue as Meta.Window;
-      safeRaise(win);
-      safeActivate(win, global.display.get_current_time());
-    }
-  }
-
-  private _handleSwap(action: DirectionAction) {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (!focusNodeWindow) return;
-    this.unfreezeRender();
-    const swapDirection = Utils.resolveDirection(action.direction)!;
-    this._layout.swap(focusNodeWindow, swapDirection);
-    const swapWin = focusNodeWindow.nodeValue as Meta.Window;
-    safeRaise(swapWin);
-    safeActivate(swapWin, global.display.get_current_time());
-    this.updateTabbedFocus(focusNodeWindow);
-    this.updateStackedFocus(focusNodeWindow);
-    this.notifyFocusChanged(focusNodeWindow, "swap");
-    this.renderTree("swap", true);
-  }
-
-  private _handleSplit(action: SplitAction) {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (!focusNodeWindow) return;
-    const currentLayout = focusNodeWindow!.parentNode!.layout;
-    if (currentLayout === LAYOUT_TYPES.STACKED || currentLayout === LAYOUT_TYPES.TABBED) {
-      return;
-    }
-    const orientation = action.orientation
-      ? action.orientation.toUpperCase()
-      : ORIENTATION_TYPES.NONE;
-    this._layout.split(focusNodeWindow, orientation);
-    this.renderTree("split");
-  }
-
-  private _handleLayoutToggle() {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (!focusNodeWindow) return;
-    const currentLayout = focusNodeWindow!.parentNode!.layout;
-    if (currentLayout === LAYOUT_TYPES.HSPLIT) {
-      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.VSPLIT;
-    } else if (currentLayout === LAYOUT_TYPES.VSPLIT) {
-      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.HSPLIT;
-    }
-    this.tree.attachNode = focusNodeWindow!.parentNode!;
-    this.renderTree("layout-split-toggle");
-    {
-      const win = focusNodeWindow.nodeValue as Meta.Window;
-      safeRaise(win);
-      safeActivate(win, global.display.get_current_time());
-    }
-    this.notifyFocusChanged(focusNodeWindow, "command");
-  }
-
-  private _handleFocusBorderToggle() {
-    const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
-    this.ext.settings.set_boolean("focus-border-toggle", !focusBorderEnabled);
-  }
-
-  private _handleTilingModeToggle() {
-    // FIXME, not sure if this toggle is still needed from a use case
-    // perspective, since Extension.disable also should do the same thing.
-    const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
-    this.ext.settings.set_boolean("tiling-mode-enabled", !tilingModeEnabled);
-    if (tilingModeEnabled) {
-      this.floatAllWindows();
-    } else {
-      this.unfloatAllWindows();
-    }
-    this.renderTree(`tiling-mode-toggle ${!tilingModeEnabled}`);
-  }
-
-  private _handleGapSize(action: GapSizeAction) {
-    let gapIncrement = this.ext.settings.get_uint("window-gap-size-increment");
-    const amount = action.amount;
-    gapIncrement = gapIncrement + amount;
-    if (gapIncrement < 0) gapIncrement = 0;
-    if (gapIncrement > 8) gapIncrement = 8;
-    this.ext.settings.set_uint("window-gap-size-increment", gapIncrement);
-  }
-
-  private _handleWorkspaceActiveTileToggle() {
-    const activeWorkspace = global.workspace_manager.get_active_workspace_index();
-    const skippedWorkspaces = this.ext.settings.get_string("workspace-skip-tile");
-    let workspaceSkipped = false;
-    let skippedArr: string[] = [];
-    if (skippedWorkspaces.length === 0) {
-      skippedArr.push(`${activeWorkspace}`);
-      this.floatWorkspace(activeWorkspace);
-    } else {
-      skippedArr = skippedWorkspaces.split(",");
-
-      for (let i = 0; i < skippedArr.length; i++) {
-        if (`${skippedArr[i]}` === `${activeWorkspace}`) {
-          workspaceSkipped = true;
-          break;
-        }
-      }
-
-      if (workspaceSkipped) {
-        // tile this workspace
-        const indexWs = skippedArr.indexOf(`${activeWorkspace}`);
-        skippedArr.splice(indexWs, 1);
-        this.unfloatWorkspace(activeWorkspace);
-      } else {
-        // skip tiling workspace
-        skippedArr.push(`${activeWorkspace}`);
-        this.floatWorkspace(activeWorkspace);
-      }
-    }
-    this.ext.settings.set_string("workspace-skip-tile", skippedArr.toString());
-    this.renderTree("workspace-toggle");
-  }
-
-  private _handleLayoutStackedToggle() {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (!focusNodeWindow) return;
-    if (!this.ext.settings.get_boolean("stacked-tiling-mode-enabled")) return;
-
-    if (focusNodeWindow!.parentNode!.isMonitor()) {
-      this._layout.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
-    }
-
-    const parent = focusNodeWindow!.parentNode!;
-    if (parent.layout === LAYOUT_TYPES.STACKED) {
-      this._layout.setLayout(parent, this.determineSplitLayout());
-    } else {
-      this._layout.setLayout(parent, LAYOUT_TYPES.STACKED);
-      const lastChild = parent.lastChild;
-      if (lastChild && lastChild.nodeType === NODE_TYPES.WINDOW) {
-        (lastChild.nodeValue as Meta.Window).activate(global.display.get_current_time());
-      }
-    }
-    this.unfreezeRender();
-    this.tree.attachNode = parent;
-    this.renderTree("layout-stacked-toggle");
-  }
-
-  private _handleLayoutTabbedToggle() {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (!focusNodeWindow) return;
-    if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
-
-    if (focusNodeWindow!.parentNode!.isMonitor()) {
-      this._layout.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
-    }
-
-    const parent = focusNodeWindow!.parentNode!;
-    if (parent.layout === LAYOUT_TYPES.TABBED) {
-      this._layout.setLayout(parent, this.determineSplitLayout());
-    } else {
-      this._layout.setLayout(parent, LAYOUT_TYPES.TABBED);
-      parent.lastTabFocus = focusNodeWindow.nodeValue;
-    }
-    this.unfreezeRender();
-    this.tree.attachNode = parent;
-    this.renderTree("layout-tabbed-toggle");
-  }
-
-  private _handleCancelOperation() {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (focusNodeWindow?.mode === WINDOW_MODES.GRAB_TILE) {
-      this.cancelGrab = true;
-    }
-  }
-
-  private _handlePrefsOpen() {
-    const existWindow = Utils.findWindowWith(this.prefsTitle);
-    if (existWindow && existWindow.get_workspace()) {
-      existWindow
-        .get_workspace()
-        .activate_with_focus(existWindow, global.display.get_current_time());
-      this.moveCenter(existWindow);
-    } else {
-      this.ext.openPreferences();
-    }
-  }
-
-  private _handleWindowSwapLastActive() {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (focusNodeWindow) {
-      const lastActiveWindow = global.display.get_tab_next(
-        Meta.TabList.NORMAL,
-        global.display.get_workspace_manager().get_active_workspace(),
-        focusNodeWindow.nodeValue as Meta.Window,
-        false
-      );
-      const lastActiveNodeWindow = this.tree.findNode(lastActiveWindow);
-      this._layout.swapPairs(lastActiveNodeWindow!, focusNodeWindow);
-      this.notifyFocusChanged(focusNodeWindow, "swap");
-      this.renderTree("swap-last-active");
-    }
-  }
-
-  private _handleSnapLayoutMove(action: SnapLayoutMoveAction) {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (!focusNodeWindow) return;
-
-    const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
-    const workareaRect = metaWindow.get_work_area_current_monitor();
-    const currentFrame = this.focusMetaWindow?.get_frame_rect() ?? null;
-    const snap = computeSnapLayout(action.direction, workareaRect, action.amount, currentFrame);
-    if (!snap) return;
-
-    let rect: RectLike | { x: string | number; y: string | number; width: number; height: number } =
-      snap.rect;
-    if ("x" in rect && rect.x === "center" && this.focusMetaWindow) {
-      rect = {
-        x: Utils.resolveX(rect as { x?: string | number }, this.focusMetaWindow),
-        y: Utils.resolveY(rect as { y?: string | number }, this.focusMetaWindow),
-        width: rect.width,
-        height: rect.height,
-      };
-    }
-    focusNodeWindow.rect = rect as RectLike;
-    if (snap.processGap) {
-      focusNodeWindow.rect = this._tilingRender.processGap(focusNodeWindow) as RectLike;
-    }
-    if (!focusNodeWindow.isFloat()) {
-      this.addFloatOverride(metaWindow, false);
-    }
-    this.move(metaWindow, focusNodeWindow.rect!);
-    this.queueEvent({
-      name: "snap-layout-move",
-      callback: () => {
-        this.renderTree("snap-layout-move");
-      },
-    });
-  }
-
-  private _handleShowTabDecorationToggle() {
-    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-    if (!focusNodeWindow) return;
-    if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
-
-    const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
-    this.ext.settings.set_boolean("showtab-decoration-enabled", !showTabs);
-
-    this.unfreezeRender();
-    this.tree.attachNode = focusNodeWindow!.parentNode!;
-    this.renderTree("showtab-decoration-enabled");
-  }
-
-  private _handleWindowResize(action: WindowResizeAction) {
-    const grabByDir: Record<WindowResizeAction["direction"], Meta.GrabOp> = {
-      Right: Meta.GrabOp.KEYBOARD_RESIZING_E,
-      Left: Meta.GrabOp.KEYBOARD_RESIZING_W,
-      Top: Meta.GrabOp.KEYBOARD_RESIZING_N,
-      Bottom: Meta.GrabOp.KEYBOARD_RESIZING_S,
-    };
-    const grabOp = grabByDir[action.direction];
-    if (grabOp !== undefined) {
-      this.resize(grabOp, action.amount);
-    }
-  }
-
-  private _handleWindowClose() {
-    const focusWindow = this.focusMetaWindow;
-    if (focusWindow) {
-      focusWindow.delete(global.display.get_current_time());
-    }
-  }
-
+  /** @deprecated Use commandResize() from command-handlers.js. Kept for test surface. */
   resize(grabOp: Meta.GrabOp, amount: number) {
-    // Keyboard path keeps calling begin/end facades so existing spies/tests work.
-    const metaWindow = this.focusMetaWindow;
-    if (!metaWindow) return;
-    const display = global.display;
-
-    this._handleGrabOpBegin(display, metaWindow, grabOp);
-
-    const rect = metaWindow.get_frame_rect();
-    const direction = Utils.directionFromGrab(grabOp);
-
-    switch (direction) {
-      case Meta.MotionDirection.RIGHT:
-        rect.width = rect.width + amount;
-        break;
-      case Meta.MotionDirection.LEFT:
-        rect.width = rect.width + amount;
-        rect.x = rect.x - amount;
-        break;
-      case Meta.MotionDirection.UP:
-        rect.height = rect.height + amount;
-        break;
-      case Meta.MotionDirection.DOWN:
-        rect.height = rect.height + amount;
-        rect.y = rect.y - amount;
-        break;
-    }
-    this.move(metaWindow, rect);
-    this.queueEvent(
-      {
-        name: "manual-resize",
-        callback: () => {
-          if (this.eventQueue.length === 0) {
-            this._handleGrabOpEnd(display, metaWindow, grabOp);
-          }
-        },
-      },
-      50
-    );
+    commandResize(this._commandHandlerHost, grabOp, amount);
   }
 
   _stopLiveResizeLoop() {
@@ -1160,7 +657,14 @@ export class WindowManager extends GObject.Object {
 
   disable() {
     Utils._disableDecorations();
-    this._removeSignals();
+    this._signalManager.unbindAll();
+    this._borders.destroyAllBorderActors();
+    this._tracker.dispose();
+    this._grab.dispose();
+    this._settingsBridge.disable();
+    this._renderScheduler.dispose();
+    this._disposePointerPolicy();
+    this._removeQueueSource();
     this.disabled = true;
     Logger.debug(`extension:disable`);
   }
@@ -1168,7 +672,10 @@ export class WindowManager extends GObject.Object {
   enable() {
     // Pair with disable(): re-enable after a prior disable (B4-8).
     this.disabled = false;
-    this._bindSignals();
+    // Reset the workspace-transition flag in case disable fired during a
+    // transition (SignalManager.unbindAll cancels the clearing timeout).
+    this._workspaceChanging = false;
+    this._signalManager.bindAll();
     this.reloadTree("enable");
     Logger.debug(`extension:enable`);
   }
@@ -1219,11 +726,6 @@ export class WindowManager extends GObject.Object {
     return this._kbd;
   }
 
-  get windowsActiveWorkspace() {
-    const wsManager = global.workspace_manager;
-    return global.display.get_tab_list(Meta.TabList.NORMAL_ALL, wsManager.get_active_workspace());
-  }
-
   get windowsAllWorkspaces() {
     const wsManager = global.workspace_manager;
     const windowsAll: Meta.Window[] = [];
@@ -1241,10 +743,7 @@ export class WindowManager extends GObject.Object {
   }
 
   getWindowsOnWorkspace(workspaceIndex: number) {
-    const workspaceNode = this.tree.findNode(`ws${workspaceIndex}`);
-    if (!workspaceNode) return [];
-    const workspaceWindows = workspaceNode.getNodeByType(NODE_TYPES.WINDOW);
-    return workspaceWindows;
+    return this._wsMutations.getWindowsOnWorkspace(workspaceIndex);
   }
 
   determineSplitLayout() {
@@ -1252,19 +751,11 @@ export class WindowManager extends GObject.Object {
   }
 
   floatWorkspace(workspaceIndex: number) {
-    const workspaceWindows = this.getWindowsOnWorkspace(workspaceIndex);
-    if (!workspaceWindows) return;
-    workspaceWindows.forEach((w) => {
-      w.float = true;
-    });
+    this._wsMutations.floatWorkspace(workspaceIndex);
   }
 
   unfloatWorkspace(workspaceIndex: number) {
-    const workspaceWindows = this.getWindowsOnWorkspace(workspaceIndex);
-    if (!workspaceWindows) return;
-    workspaceWindows.forEach((w) => {
-      w.tile = true;
-    });
+    this._wsMutations.unfloatWorkspace(workspaceIndex);
   }
 
   _bordersEnabled() {
@@ -1374,146 +865,16 @@ export class WindowManager extends GObject.Object {
     return null;
   }
 
-  _removeSignals() {
-    if (!this._signalsBound) return;
-
-    if (this._displaySignals) {
-      for (const displaySignal of this._displaySignals) {
-        global.display.disconnect(displaySignal);
-      }
-      this._displaySignals.length = 0;
-      this._displaySignals = undefined;
-    }
-
-    if (this._windowManagerSignals) {
-      for (const windowManagerSignal of this._windowManagerSignals) {
-        global.window_manager.disconnect(windowManagerSignal);
-      }
-      this._windowManagerSignals.length = 0;
-      this._windowManagerSignals = undefined;
-    }
-
-    const globalWsm = global.workspace_manager;
-
-    if (this._workspaceManagerSignals) {
-      for (const workspaceManagerSignal of this._workspaceManagerSignals) {
-        globalWsm.disconnect(workspaceManagerSignal);
-      }
-      this._workspaceManagerSignals.length = 0;
-      this._workspaceManagerSignals = undefined;
-    }
-
-    const numberOfWorkspaces = globalWsm.get_n_workspaces();
-
-    for (let i = 0; i < numberOfWorkspaces; i++) {
-      const workspace = globalWsm.get_workspace_by_index(i) as AnvilMetaWorkspace;
-      if (workspace && workspace.workspaceSignals) {
-        for (const workspaceSignal of workspace.workspaceSignals) {
-          workspace.disconnect(workspaceSignal);
-        }
-        workspace.workspaceSignals.length = 0;
-        workspace.workspaceSignals = undefined;
-      }
-    }
-
-    const allWindows = this.windowsAllWorkspaces;
-
-    if (allWindows) {
-      for (const metaWindowRaw of allWindows) {
-        const metaWindow = metaWindowRaw as AnvilMetaWindow;
-        if (metaWindow.windowSignals !== undefined) {
-          for (const windowSignal of metaWindow.windowSignals) {
-            metaWindow.disconnect(windowSignal);
-          }
-          metaWindow.windowSignals.length = 0;
-          metaWindow.windowSignals = undefined;
-        }
-
-        this._tracker.clearPendingWindowSignals(metaWindow);
-
-        const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-        if (windowActor && windowActor.actorSignals) {
-          for (const actorSignal of windowActor.actorSignals) {
-            windowActor.disconnect(actorSignal);
-          }
-          windowActor.actorSignals.length = 0;
-          windowActor.actorSignals = undefined;
-        }
-
-        if (windowActor && windowActor.border) {
-          windowActor.border.hide();
-          if (global.window_group) {
-            global.window_group.remove_child(windowActor.border);
-          }
-          windowActor.border = undefined;
-        }
-
-        if (windowActor && windowActor.splitBorder) {
-          windowActor.splitBorder.hide();
-          if (global.window_group) {
-            global.window_group.remove_child(windowActor.splitBorder);
-          }
-          windowActor.splitBorder = undefined;
-        }
-      }
-    }
-
-    this._settingsBridge.disable();
-
-    if (this._renderTreeSrcId) {
-      GLib.Source.remove(this._renderTreeSrcId);
-      this._renderTreeSrcId = 0;
-    }
-
-    if (this._reloadTreeSrcId) {
-      GLib.Source.remove(this._reloadTreeSrcId);
-      this._reloadTreeSrcId = 0;
-    }
-
-    this._tracker.dispose();
-    this._grab.dispose();
-
+  /** Remove the shared event queue GLib source (C8 — stays on WM as shared facade). */
+  private _removeQueueSource(): void {
     if (this._queueSourceId) {
       GLib.Source.remove(this._queueSourceId);
       this._queueSourceId = 0;
     }
-
-    this._disposePointerPolicy();
-
-    if (this._prefsOpenSrcId) {
-      GLib.Source.remove(this._prefsOpenSrcId);
-      this._prefsOpenSrcId = 0;
-    }
-
-    if (this._overviewSignals) {
-      for (const overviewSignal of this._overviewSignals) {
-        Main.overview.disconnect(overviewSignal);
-      }
-      this._overviewSignals.length = 0;
-      this._overviewSignals = null;
-    }
-
-    this._signalsBound = false;
   }
 
   renderTree(from: string, force: boolean = false) {
-    const wasFrozen = this._freezeRender;
-    if (force && wasFrozen) this.unfreezeRender();
-    if (this._freezeRender || !this.ext.settings.get_boolean("tiling-mode-enabled")) {
-      this.updateDecorationLayout();
-      this.updateBorderLayout();
-    } else {
-      if (!this._renderTreeSrcId) {
-        this._renderTreeSrcId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
-          this._tilingRender.render(from);
-          this._renderTreeSrcId = 0;
-          this.updateDecorationLayout();
-          this.updateBorderLayout();
-          if (wasFrozen) this.freezeRender();
-          return false;
-        });
-      }
-    }
+    this._renderScheduler.renderTree(from, force);
   }
 
   get allNodeWindows() {
@@ -1528,20 +889,7 @@ export class WindowManager extends GObject.Object {
    * TODO: move this to tree.js
    */
   reloadTree(from: string) {
-    if (!this._reloadTreeSrcId) {
-      this._reloadTreeSrcId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
-        Utils._disableDecorations();
-        // empty out the root children nodes
-        this.tree.childNodes.length = 0;
-        this.tree.attachNode = null;
-        // initialize the workspaces and monitors id strings
-        this.tree._initWorkspaces();
-        this.trackCurrentWindows();
-        this.renderTree(from);
-        this._reloadTreeSrcId = 0;
-        return false;
-      });
-    }
+    this._renderScheduler.reloadTree(from);
   }
 
   sameParentMonitor(firstNode: Node<any>, secondNode: Node<any>) {
@@ -1556,67 +904,8 @@ export class WindowManager extends GObject.Object {
     return firstMonWs === secondMonWs;
   }
 
-  showWindowBorders() {
-    this._borders.showWindowBorders();
-  }
-
   updateBorderLayout() {
     this._borders.updateBorderLayout();
-  }
-
-  _clearPendingWindowSignals(metaWindow: AnvilMetaWindow) {
-    this._tracker.clearPendingWindowSignals(metaWindow);
-  }
-
-  _trackWindowWhenReady(display: Meta.Display, metaWindow: Meta.Window, afterTrack?: () => void) {
-    this._tracker.trackWhenReady(display, metaWindow, afterTrack);
-  }
-
-  _trackMappedWindowActor(
-    actor:
-      | (AnvilWindowActor & {
-          meta_window?: Meta.Window | null;
-          get_meta_window?: () => Meta.Window | null;
-        })
-      | null
-  ) {
-    this._tracker.trackMappedActor(actor);
-  }
-
-  _scheduleCurrentWindowReconcile() {
-    this._tracker.scheduleReconcile();
-  }
-
-  _reconcileCurrentWindows(from: string) {
-    this._tracker.reconcileCurrentWindows(from);
-  }
-
-  trackWindow(_display: Meta.Display, metaWindow: Meta.Window) {
-    this._tracker.trackWindow(_display, metaWindow);
-  }
-
-  postProcessWindow(nodeWindow: Node<any> | null) {
-    this._tracker.postProcessWindow(nodeWindow);
-  }
-
-  trackCurrentWindows() {
-    this._tracker.trackCurrentWindows();
-  }
-
-  _validWindow(metaWindow: Meta.Window) {
-    return this._tracker.validWindow(metaWindow);
-  }
-
-  windowDestroy(actor: AnvilWindowActor) {
-    this._tracker.windowDestroy(actor);
-  }
-
-  /**
-   * Restore focus to another window after one is closed (#258)
-   * Ported from jcrussell/forge
-   */
-  _restoreFocusAfterWindowClosed(closedNodeWindow: import("./tree.js").Node<any>) {
-    this._tracker.restoreFocusAfterWindowClosed(closedNodeWindow);
   }
 
   updateStackedFocus(focusNodeWindow: Node<any> | undefined | null) {
@@ -1631,76 +920,18 @@ export class WindowManager extends GObject.Object {
    * Check if a Meta Window's workspace is skipped for tiling.
    */
   isActiveWindowWorkspaceTiled(metaWindow: Meta.Window) {
-    if (!metaWindow) return true;
-    const skipWs = this.ext.settings.get_string("workspace-skip-tile");
-    const skipArr = skipWs.split(",");
-    let skipThisWs = false;
-
-    for (let i = 0; i < skipArr.length; i++) {
-      const activeWorkspaceForWin = metaWindow.get_workspace();
-      if (activeWorkspaceForWin) {
-        const wsIndex = activeWorkspaceForWin.index();
-        if (skipArr[i].trim() === `${wsIndex}`) {
-          skipThisWs = true;
-          break;
-        }
-      }
-    }
-    return !skipThisWs;
+    return this._wsMutations.isActiveWindowWorkspaceTiled(metaWindow);
   }
 
   /**
    * Check the current active workspace's tiling mode
    */
   isCurrentWorkspaceTiled() {
-    const skipWs = this.ext.settings.get_string("workspace-skip-tile");
-    const skipArr = skipWs.split(",");
-    let skipThisWs = false;
-    const wsMgr = global.workspace_manager;
-    const wsIndex = wsMgr.get_active_workspace_index();
-
-    for (let i = 0; i < skipArr.length; i++) {
-      if (skipArr[i].trim() === `${wsIndex}`) {
-        skipThisWs = true;
-        break;
-      }
-    }
-    return !skipThisWs;
+    return this._wsMutations.isCurrentWorkspaceTiled();
   }
 
   updateMetaWorkspaceMonitor(from: string, _monitor: number | null, metaWindow: Meta.Window) {
-    if (this._validWindow(metaWindow)) {
-      if (metaWindow.get_workspace() === null) return;
-      const existNodeWindow = this.tree.findNode(metaWindow);
-      const metaMonWs = `mo${metaWindow.get_monitor()}ws${metaWindow.get_workspace().index()}`;
-      const metaMonWsNode = this.tree.findNode(metaMonWs);
-      if (existNodeWindow) {
-        if (existNodeWindow.parentNode && metaMonWsNode) {
-          // Uses the existing workspace, monitor that the metaWindow
-          // belongs to.
-          const containsWindow = metaMonWsNode.contains(existNodeWindow);
-          if (!containsWindow) {
-            // handle cleanup of resize percentages - preserve proportions
-            // Store parent reference before moving, then redistribute after
-            // Ported from jcrussell/forge
-            const existParent = existNodeWindow.parentNode;
-            metaMonWsNode.appendChild(existNodeWindow);
-            this._layout.redistributeSiblingPercent(existParent);
-
-            // Ensure that the workspace tiling is honored
-            if (this.isActiveWindowWorkspaceTiled(metaWindow)) {
-              if (this.grabOp !== Meta.GrabOp.WINDOW_BASE) this.updateTabbedFocus(existNodeWindow);
-              this.updateStackedFocus(existNodeWindow);
-            } else {
-              if (this.floatingWindow(existNodeWindow)) {
-                safeRaise(existNodeWindow.nodeValue as Meta.Window);
-              }
-            }
-          }
-        }
-      }
-      this.renderTree(from);
-    }
+    this._wsMutations.updateMetaWorkspaceMonitor(from, _monitor, metaWindow);
   }
 
   /**
@@ -1708,110 +939,11 @@ export class WindowManager extends GObject.Object {
    * Useful for updating the active window border, etc.
    */
   updateMetaPositionSize(_metaWindow: Meta.Window, from: string) {
-    const focusMetaWindow = this.focusMetaWindow;
-    if (!focusMetaWindow) return;
-
-    const focusNodeWindow = this.findNodeWindow(focusMetaWindow);
-    if (!focusNodeWindow) return;
-
-    const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
-
-    if (focusNodeWindow.grabMode && tilingModeEnabled) {
-      if (focusNodeWindow.grabMode === GRAB_TYPES.RESIZING) {
-        this._handleResizing(focusNodeWindow);
-      } else if (focusNodeWindow.grabMode === GRAB_TYPES.MOVING) {
-        this._handleMoving(focusNodeWindow);
-      }
-    } else {
-      if (
-        (() => {
-          try {
-            // GNOME 49+
-            return !focusMetaWindow.is_maximized();
-          } catch {
-            // pre-49 fallback
-            return (focusMetaWindow as AnvilMetaWindow).get_maximized() === 0;
-          }
-        })()
-      ) {
-        this.renderTree(from);
-      }
-    }
-    this.updateBorderLayout();
-    this.updateDecorationLayout();
+    this._wsMutations.updateMetaPositionSize(_metaWindow, from);
   }
 
   updateDecorationLayout() {
-    if (this._freezeRender) return;
-    const activeWsNode = this.currentWsNode;
-    const allCons = this.tree.getNodeByType(NODE_TYPES.CON);
-
-    // First, hide all decorations:
-    allCons.forEach((con) => {
-      if (con.decoration) {
-        con.decoration.hide();
-      }
-    });
-
-    // Next, handle showing-desktop usually by Super + D
-    if (!activeWsNode) return;
-    const allWindows = activeWsNode.getNodeByType(NODE_TYPES.WINDOW);
-    const allHiddenWindows = allWindows.filter((w) => {
-      const metaWindow = w.nodeValue as Meta.Window;
-      return !metaWindow.showing_on_its_workspace() || metaWindow.minimized;
-    });
-
-    // Then if all hidden, do not proceed showing the decorations at all;
-    if (allWindows.length === allHiddenWindows.length) return;
-
-    // Show the decoration where on all monitors of active workspace
-    // But not on the monitor where there is a maximized or fullscreen window
-    // Note, that when multi-display, user can have multi maximized windows,
-    // So it needs to be fully filtered:
-    const monWsNoMaxWindows = activeWsNode.getNodeByType(NODE_TYPES.MONITOR).filter((monitor) => {
-      return (
-        monitor.getNodeByType(NODE_TYPES.WINDOW).filter((w) => {
-          return (() => {
-            try {
-              // GNOME 49+
-              return (
-                (w.nodeValue as Meta.Window).is_maximized() ||
-                (w.nodeValue as Meta.Window).is_fullscreen()
-              );
-            } catch {
-              // pre-49 fallback
-              return (
-                (w.nodeValue as AnvilMetaWindow).get_maximized() === Meta.MaximizeFlags.BOTH ||
-                (w.nodeValue as Meta.Window).is_fullscreen()
-              );
-            }
-          })();
-        }).length === 0
-      );
-    });
-
-    monWsNoMaxWindows.forEach((monitorWs) => {
-      const activeMonWsCons = monitorWs.getNodeByType(NODE_TYPES.CON);
-      activeMonWsCons.forEach((con) => {
-        const tiled = this.tree.getTiledChildren(con.childNodes);
-        const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
-        if (con.decoration && tiled.length > 0 && showTabs) {
-          con.decoration.show();
-          const focusMetaWindow = this.focusMetaWindow;
-          if (global.window_group.contains(con.decoration) && focusMetaWindow) {
-            global.window_group.remove_child(con.decoration);
-            // Show it below the focused window
-            global.window_group.insert_child_below(
-              con.decoration,
-              focusMetaWindow.get_compositor_private()
-            );
-          }
-          con.childNodes.forEach((cn) => {
-            cn.render();
-          });
-        }
-      });
-    });
+    this._decorationLayout.updateDecorationLayout();
   }
 
   freezeRender() {
@@ -1833,399 +965,18 @@ export class WindowManager extends GObject.Object {
   }
 
   /**
-   *
-   * Handle previewing and applying where a drag-drop window is going to be tiled
-   *
+   * Handle previewing and applying where a drag-drop window is going to be tiled.
+   * @deprecated Use this._dragDrop.moveWindowToPointer() directly.
    */
   moveWindowToPointer(focusNodeWindow: Node<any>, preview: boolean = false) {
-    if (this.cancelGrab) {
-      return;
-    }
-    if (!focusNodeWindow || focusNodeWindow.mode !== WINDOW_MODES.GRAB_TILE) return;
-
-    const nodeWinAtPointer = this.nodeWinAtPointer;
-
-    if (nodeWinAtPointer) {
-      const targetRect = (nodeWinAtPointer.nodeValue as Meta.Window).get_frame_rect();
-      const parentNodeTarget = nodeWinAtPointer.parentNode;
-      const currPointer = global.get_pointer() as unknown as [number, number];
-      const horizontal = parentNodeTarget!.isHSplit() || parentNodeTarget!.isTabbed();
-      const isMonParent = parentNodeTarget!.nodeType === NODE_TYPES.MONITOR;
-      const isConParent = parentNodeTarget!.nodeType === NODE_TYPES.CON;
-      const centerLayout = this.ext.settings.get_string("dnd-center-layout").toUpperCase();
-      const stacked = parentNodeTarget!.isStacked();
-      const tabbed = parentNodeTarget!.isTabbed();
-      const stackedOrTabbed = stacked || tabbed;
-      const updatePreview = (
-        focusNodeWindow: Node<any>,
-        previewParams: { className: string; targetRect: any }
-      ) => {
-        const previewHint = focusNodeWindow.previewHint;
-        const previewHintEnabled = this.ext.settings.get_boolean("preview-hint-enabled");
-        const previewRect = previewParams.targetRect;
-        if (previewHint && previewHintEnabled) {
-          if (!previewRect) {
-            previewHint.hide();
-            return;
-          }
-          previewHint.set_style_class_name(previewParams.className);
-          previewHint.set_position(previewRect.x, previewRect.y);
-          previewHint.set_size(previewRect.width, previewRect.height);
-          previewHint.show();
-        }
-      };
-      const regions = (
-        targetRect: { x: number; y: number; width: number; height: number },
-        regionWidth: number
-      ) => {
-        leftRegion = {
-          x: targetRect.x,
-          y: targetRect.y,
-          width: targetRect.width * regionWidth,
-          height: targetRect.height,
-        };
-
-        rightRegion = {
-          x: targetRect.x + targetRect.width * (1 - regionWidth),
-          y: targetRect.y,
-          width: targetRect.width * regionWidth,
-          height: targetRect.height,
-        };
-
-        topRegion = {
-          x: targetRect.x,
-          y: targetRect.y,
-          width: targetRect.width,
-          height: targetRect.height * regionWidth,
-        };
-
-        bottomRegion = {
-          x: targetRect.x,
-          y: targetRect.y + targetRect.height * (1 - regionWidth),
-          width: targetRect.width,
-          height: targetRect.height * regionWidth,
-        };
-
-        centerRegion = {
-          x: targetRect.x + targetRect.width * regionWidth,
-          y: targetRect.y + targetRect.height * regionWidth,
-          width: targetRect.width - targetRect.width * regionWidth * 2,
-          height: targetRect.height - targetRect.height * regionWidth * 2,
-        };
-
-        return {
-          left: leftRegion,
-          right: rightRegion,
-          top: topRegion,
-          bottom: bottomRegion,
-          center: centerRegion,
-        };
-      };
-      let referenceNode: Node<any> | null = null;
-      let containerNode: Node<any> | null = null;
-      let childNode = focusNodeWindow;
-      let previewParams: { className: string; targetRect: any } = {
-        className: "",
-        targetRect: null,
-      };
-      let leftRegion;
-      let rightRegion;
-      let topRegion;
-      let bottomRegion;
-      let centerRegion;
-      const previewWidth = 0.5;
-      const hoverWidth = 0.3;
-
-      // Hover region detects where the pointer is on the target drop window
-      const hoverRegions = regions(targetRect, hoverWidth);
-
-      // Preview region interprets the hover intersect where the focus window
-      // would go when dropped
-      const previewRegions = regions(targetRect, previewWidth);
-
-      leftRegion = hoverRegions.left;
-      rightRegion = hoverRegions.right;
-      topRegion = hoverRegions.top;
-      bottomRegion = hoverRegions.bottom;
-      centerRegion = hoverRegions.center;
-
-      const isLeft = Utils.rectContainsPoint(leftRegion, currPointer);
-      const isRight = Utils.rectContainsPoint(rightRegion, currPointer);
-      const isTop = Utils.rectContainsPoint(topRegion, currPointer);
-      const isBottom = Utils.rectContainsPoint(bottomRegion, currPointer);
-      const isCenter = Utils.rectContainsPoint(centerRegion, currPointer);
-
-      if (isCenter) {
-        if (centerLayout == "SWAP") {
-          referenceNode = nodeWinAtPointer;
-          previewParams = {
-            className: "",
-            targetRect: targetRect,
-          };
-        } else {
-          if (stackedOrTabbed) {
-            containerNode = parentNodeTarget;
-            referenceNode = null;
-            previewParams = {
-              className: stacked ? "window-tilepreview-stacked" : "window-tilepreview-tabbed",
-              targetRect: targetRect,
-            };
-          } else {
-            if (isMonParent) {
-              childNode.createCon = true;
-              containerNode = parentNodeTarget;
-              referenceNode = nodeWinAtPointer;
-              previewParams = {
-                className: "",
-                targetRect: targetRect,
-              };
-            } else {
-              containerNode = parentNodeTarget;
-              referenceNode = null;
-              const parentTargetRect = this._tilingRender.processGap(parentNodeTarget!);
-              previewParams = {
-                className: "",
-                targetRect: parentTargetRect,
-              };
-            }
-          }
-        }
-      } else if (isLeft) {
-        previewParams = {
-          className: "",
-          targetRect: previewRegions.left,
-        };
-
-        if (stackedOrTabbed) {
-          // treat any windows on stacked or tabbed layouts to be
-          // a single node unit: the con itself and then
-          // split left, top, right or bottom accordingly (subsequent if conditions):
-          childNode.detachWindow = true;
-          if (!isMonParent) {
-            referenceNode = parentNodeTarget;
-            containerNode = parentNodeTarget!.parentNode;
-          } else {
-            // It is a monitor that's a stack/tab
-            // TODO: update the stacked/tabbed toggles to not
-            // change layout if the parent is a monitor?
-          }
-        } else {
-          if (horizontal) {
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer;
-          } else {
-            // vertical orientation
-            childNode.createCon = true;
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer;
-          }
-        }
-      } else if (isRight) {
-        previewParams = {
-          className: "",
-          targetRect: previewRegions.right,
-        };
-        if (stackedOrTabbed) {
-          // treat any windows on stacked or tabbed layouts to be
-          // a single node unit: the con itself and then
-          // split left, top, right or bottom accordingly (subsequent if conditions):
-          childNode.detachWindow = true;
-          if (!isMonParent) {
-            referenceNode = parentNodeTarget!.nextSibling;
-            containerNode = parentNodeTarget!.parentNode;
-          } else {
-            // It is a monitor that's a stack/tab
-            // TODO: update the stacked/tabbed toggles to not
-            // change layout if the parent is a monitor?
-          }
-        } else {
-          if (horizontal) {
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer.nextSibling;
-          } else {
-            childNode.createCon = true;
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer.nextSibling;
-          }
-        }
-      } else if (isTop) {
-        previewParams = {
-          className: "",
-          targetRect: previewRegions.top,
-        };
-        if (stackedOrTabbed) {
-          // treat any windows on stacked or tabbed layouts to be
-          // a single node unit: the con itself and then
-          // split left, top, right or bottom accordingly (subsequent if conditions):
-          if (!isMonParent) {
-            containerNode = parentNodeTarget;
-            referenceNode = null;
-            previewParams = {
-              className: stacked ? "window-tilepreview-stacked" : "window-tilepreview-tabbed",
-              targetRect: targetRect,
-            };
-          } else {
-            // It is a monitor that's a stack/tab
-            // TODO: update the stacked/tabbed toggles to not
-            // change layout if the parent is a monitor?
-          }
-        } else {
-          if (horizontal) {
-            childNode.createCon = true;
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer;
-          } else {
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer;
-          }
-        }
-      } else if (isBottom) {
-        previewParams = {
-          className: "",
-          targetRect: previewRegions.bottom,
-        };
-        if (stackedOrTabbed) {
-          // treat any windows on stacked or tabbed layouts to be
-          // a single node unit: the con itself and then
-          // split left, top, right or bottom accordingly (subsequent if conditions):
-          if (!isMonParent) {
-            containerNode = parentNodeTarget;
-            referenceNode = null;
-            previewParams = {
-              className: stacked ? "window-tilepreview-stacked" : "window-tilepreview-tabbed",
-              targetRect: targetRect,
-            };
-          } else {
-            // It is a monitor that's a stack/tab
-            // TODO: update the stacked/tabbed toggles to not
-            // change layout if the parent is a monitor?
-          }
-        } else {
-          if (horizontal) {
-            childNode = focusNodeWindow;
-            childNode.createCon = true;
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer.nextSibling;
-          } else {
-            childNode = focusNodeWindow;
-            containerNode = parentNodeTarget;
-            referenceNode = nodeWinAtPointer.nextSibling;
-          }
-        }
-      }
-
-      if (!isCenter) {
-        if (stackedOrTabbed) {
-          if (isLeft || isRight) {
-            previewParams.className = "window-tilepreview-tiled";
-          } else if (isTop || isBottom) {
-            previewParams.className = stacked
-              ? "window-tilepreview-stacked"
-              : "window-tilepreview-tabbed";
-          }
-        } else {
-          previewParams.className = "window-tilepreview-tiled";
-        }
-      } else if (isCenter) {
-        if (!stackedOrTabbed) previewParams.className = this._getDragDropCenterPreviewStyle();
-      }
-
-      if (!preview) {
-        const previousParent = focusNodeWindow!.parentNode!;
-        this._layout.resetSiblingPercent(containerNode);
-        this._layout.resetSiblingPercent(previousParent);
-
-        if (focusNodeWindow.tab) {
-          const decoParent = focusNodeWindow.tab.get_parent();
-          if (decoParent) decoParent.remove_child(focusNodeWindow.tab);
-        }
-
-        if (childNode.createCon) {
-          const numWin = parentNodeTarget!.childNodes.filter(
-            (c) => c.nodeType === NODE_TYPES.WINDOW
-          ).length;
-          const numChild = parentNodeTarget!.childNodes.length;
-          const sameNumChild = numWin === numChild;
-          // Child Node will still be created
-          if (
-            !isCenter &&
-            ((isConParent && numWin === 1 && sameNumChild) ||
-              (isMonParent && numWin == 2 && sameNumChild))
-          ) {
-            childNode = parentNodeTarget!;
-          } else {
-            childNode = new Node(NODE_TYPES.CON, new St.Bin());
-            containerNode!.insertBefore(childNode!, referenceNode);
-            childNode.appendChild(nodeWinAtPointer);
-          }
-
-          if (isLeft || isTop) {
-            childNode.insertBefore(focusNodeWindow, nodeWinAtPointer);
-          } else if (isRight || isBottom || isCenter) {
-            childNode.insertBefore(focusNodeWindow, null);
-          }
-
-          if (isLeft || isRight) {
-            childNode.layout = LAYOUT_TYPES.HSPLIT;
-          } else if (isTop || isBottom) {
-            childNode.layout = LAYOUT_TYPES.VSPLIT;
-          } else if (isCenter) {
-            childNode.layout = (LAYOUT_TYPES as Record<string, string>)[centerLayout];
-          }
-        } else if (childNode.detachWindow) {
-          const orientation =
-            isLeft || isRight ? ORIENTATION_TYPES.HORIZONTAL : ORIENTATION_TYPES.VERTICAL;
-          this._layout.split(childNode as Node<any>, orientation);
-          containerNode!.insertBefore(childNode!.parentNode!, referenceNode);
-        } else if (isCenter && centerLayout == "SWAP") {
-          this._layout.swapPairs(referenceNode!, focusNodeWindow);
-          this.renderTree("drag-swap");
-        } else {
-          // Child Node is a WINDOW
-          containerNode!.insertBefore(childNode, referenceNode);
-          if (isLeft || isRight) {
-            containerNode!.layout = LAYOUT_TYPES.HSPLIT;
-          } else if (isTop || isBottom) {
-            if (!stackedOrTabbed) containerNode!.layout = LAYOUT_TYPES.VSPLIT;
-          } else if (isCenter) {
-            if (containerNode!.isHSplit() || containerNode!.isVSplit()) {
-              containerNode!.layout = (LAYOUT_TYPES as Record<string, string>)[centerLayout];
-            }
-          }
-        }
-        previousParent.resetLayoutSingleChild();
-      } else {
-        updatePreview(focusNodeWindow, previewParams);
-      }
-      childNode.createCon = false;
-      childNode.detachWindow = false;
-    }
+    this._dragDrop.moveWindowToPointer(focusNodeWindow, preview);
   }
 
+  /**
+   * @deprecated Use this._dragDrop.findNodeWindowAtPointer() directly.
+   */
   findNodeWindowAtPointer(focusNodeWindow: Node<any>) {
-    const pointerCoord = global.get_pointer() as unknown as [number, number];
-
-    const nodeWinAtPointer = this._findNodeWindowAtPointer(
-      focusNodeWindow.nodeValue as Meta.Window,
-      pointerCoord
-    );
-    return nodeWinAtPointer;
-  }
-
-  _findNodeWindowAtPointer(metaWindow: Meta.Window, pointer: [number, number]) {
-    if (!metaWindow) return undefined;
-
-    const sortedWindows = this.sortedWindows;
-
-    if (!sortedWindows) {
-      Logger.warn("No sorted windows");
-      return;
-    }
-
-    const w = Utils.metaWindowAtPoint(pointer, sortedWindows);
-    if (w) return this.tree.getNodeByValue(w);
-
-    return null;
+    return this._dragDrop.findNodeWindowAtPointer(focusNodeWindow);
   }
 
   _handleGrabOpBegin(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
@@ -2244,24 +995,11 @@ export class WindowManager extends GObject.Object {
     return this.kbd.allowDragDropTile();
   }
 
-  _handleResizing(focusNodeWindow: Node<any> | null) {
-    this._grab.handleResizing(focusNodeWindow);
-  }
-
-  _handleMoving(focusNodeWindow: Node<any> | null) {
-    this._grab.handleMoving(focusNodeWindow);
-  }
-
   /** Float/tile classification — delegated to RulesEngine (sole owner). */
   isFloatingExempt(metaWindow: Meta.Window | null) {
     // Keep rules cache aligned with WM windowProps (tests may mutate either).
     this._rules.windowProps = this.windowProps;
     return this._rules.isFloatingExempt(metaWindow);
-  }
-
-  _getDragDropCenterPreviewStyle() {
-    const centerLayout = this.ext.settings.get_string("dnd-center-layout");
-    return `window-tilepreview-${centerLayout}`;
   }
 
   get currentMonWsNode() {
@@ -2320,22 +1058,10 @@ export class WindowManager extends GObject.Object {
   }
 
   floatAllWindows() {
-    this.tree.getNodeByType(NODE_TYPES.WINDOW).forEach((w) => {
-      if (w.isFloat()) {
-        w.prevFloat = true;
-      }
-      w.mode = WINDOW_MODES.FLOAT;
-    });
+    this._wsMutations.floatAllWindows();
   }
 
   unfloatAllWindows() {
-    this.tree.getNodeByType(NODE_TYPES.WINDOW).forEach((w) => {
-      if (!w.prevFloat) {
-        w.mode = WINDOW_MODES.TILE;
-      } else {
-        // Reset the float marker
-        w.prevFloat = false;
-      }
-    });
+    this._wsMutations.unfloatAllWindows();
   }
 }

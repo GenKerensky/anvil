@@ -46,6 +46,12 @@ allowed** (split, rewrite, rename) as long as ownership (§2) and behavior/tests
 | `window.ts`              | Shell facade; free to refactor; prefer logic in owner modules  |
 | `window/actions.ts`      | `AnvilAction` union; all user commands are data                |
 | `command-bus.ts`         | Named handler table; `WindowManager.command()` delegates       |
+| `command-handlers.ts`    | Handler implementations + `createCommandHandlers()` factory    |
+| `drag-drop-tile.ts`      | Drag-drop tiling preview and placement logic                   |
+| `signal-manager.ts`      | Global signal bind/unbind + workspace timeout                  |
+| `workspace-mutations.ts` | Workspace tree mutations + float/unfloat helpers               |
+| `render-scheduler.ts`    | Idle-coalesced render/reload scheduling + freeze protocol      |
+| `decoration-layout.ts`   | Tab/con show/hide per workspace                                |
 | `rules-engine.ts`        | Float/tile rules + override CRUD + classification cache        |
 | `window-tracker.ts`      | `admitWindow` / destroy pipeline / reconcile backoff           |
 | `layout-engine.ts`       | Focus/move/swap/split + percent math + `setLayout`             |

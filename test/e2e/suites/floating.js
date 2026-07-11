@@ -15,17 +15,24 @@ import {
   closeAllWindows,
   sleep,
   waitForWindowCount,
+  clearFloatOverridesForClass,
 } from "../../lib/shared-commands.js";
 
 describe("Floating and Snap Layout", function () {
   beforeEach(async function () {
     await closeAllWindows();
+    // FloatClassToggle is a toggle: strip any leftover Nautilus class float
+    // override from a prior spec so this spec starts from a known (non-floated)
+    // state. Without this the spec is order-dependent (a prior override makes
+    // the toggle un-float instead of float).
+    clearFloatOverridesForClass("org.gnome.Nautilus");
     await sleep(200);
   });
 
   afterEach(async function () {
-    // Ensure tiling is re-enabled
+    // Ensure tiling is re-enabled and no Nautilus class float override bleeds
     getSettings().set_boolean("tiling-mode-enabled", true);
+    clearFloatOverridesForClass("org.gnome.Nautilus");
     await closeAllWindows();
   });
 

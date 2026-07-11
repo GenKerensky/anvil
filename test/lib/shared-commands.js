@@ -468,6 +468,45 @@ export function getNodePercents() {
   });
 }
 
+/**
+ * Remove runtime float overrides for a window class so toggle-based specs start
+ * from a known (non-floated) state. `FloatClassToggle` is a toggle: if a prior
+ * spec left a class float override, the next toggle un-floats instead of
+ * floating, making the spec order-dependent. Strips overrides with no wmTitle
+ * (runtime-added) matching `wmClass`; keeps user-written (wmTitle) rules.
+ * @param {string} wmClass
+ */
+export function clearFloatOverridesForClass(wmClass) {
+  try {
+    const wm = getAnvilWM();
+    const rules = wm._rules;
+    const configMgr = wm.ext && wm.ext.configMgr;
+    const props = (rules && rules.windowProps) || (configMgr && configMgr.windowProps);
+    if (!props || !Array.isArray(props.overrides)) return;
+    const before = props.overrides.length;
+    props.overrides = props.overrides.filter(
+      /** @param {{ wmClass?: string, wmTitle?: string, mode?: string }} o */ function (o) {
+        return !(o.wmClass === wmClass && !o.wmTitle && o.mode === "float");
+      }
+    );
+    if (props.overrides.length === before) return; // nothing to remove
+    // Persist the removal: the configMgr.windowProps setter writes windows.json
+    // back to disk so the removed override does not bleed into later runs.
+    if (configMgr) configMgr.windowProps = props;
+    if (rules) {
+      rules.windowProps = props;
+      if (typeof rules.invalidateClassificationCache === "function") {
+        rules.invalidateClassificationCache();
+      }
+    }
+  } catch (e) {
+    log(
+      "[SharedCommands] clearFloatOverridesForClass: " +
+        (e instanceof Error ? e.message : String(e))
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Monitor constraint management
 // ---------------------------------------------------------------------------
@@ -475,8 +514,10 @@ export function getNodePercents() {
 export function clearResizedWindows() {
   try {
     const wm = getAnvilWM();
-    if (wm && wm._resizedWindows) {
-      wm._resizedWindows.clear();
+    // Resize counts are owned by GrabResizeSession (architecture rule §2).
+    // Clear through the owner interface, not the removed WM._resizedWindows map.
+    if (wm && wm._grab && typeof wm._grab.clearResizedWindows === "function") {
+      wm._grab.clearResizedWindows();
     }
   } catch (e) {
     log("[SharedCommands] clearResizedWindows: " + (e instanceof Error ? e.message : String(e)));

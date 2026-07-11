@@ -32,7 +32,6 @@ describe("WindowManager - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const toggleSpy = vi.spyOn(wm(), "toggleFloatingMode");
       const moveSpy = vi.spyOn(wm(), "move");
 
       wm().command({
@@ -44,10 +43,9 @@ describe("WindowManager - Commands", () => {
         height: 300,
       });
 
-      expect(toggleSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "FloatToggle" }),
-        metaWindow
-      );
+      // Assert the observable behavior (owner = tree node mode), not the
+      // WM toggleFloatingMode middle-man facade (review S7).
+      expect(ctx.tree.findNode(metaWindow)?.mode).toBe(WINDOW_MODES.FLOAT);
       expect(moveSpy).toHaveBeenCalled();
     });
 
@@ -57,14 +55,9 @@ describe("WindowManager - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const toggleSpy = vi.spyOn(wm(), "toggleFloatingMode");
-
       wm().command({ name: "FloatClassToggle", mode: WINDOW_MODES.FLOAT });
 
-      expect(toggleSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "FloatClassToggle" }),
-        metaWindow
-      );
+      expect(ctx.tree.findNode(metaWindow)?.mode).toBe(WINDOW_MODES.FLOAT);
     });
 
     it("should handle FloatNonPersistentToggle action", () => {
@@ -73,11 +66,9 @@ describe("WindowManager - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const toggleSpy = vi.spyOn(wm(), "toggleFloatingMode");
-
       wm().command({ name: "FloatNonPersistentToggle", mode: WINDOW_MODES.FLOAT });
 
-      expect(toggleSpy).toHaveBeenCalled();
+      expect(ctx.tree.findNode(metaWindow)?.mode).toBe(WINDOW_MODES.FLOAT);
     });
   });
 
@@ -388,7 +379,7 @@ describe("WindowManager - Commands", () => {
 
       wm().command({ name: "CancelOperation" });
 
-      expect(wm().cancelGrab).toBe(true);
+      expect(wm()._grab.cancelGrab).toBe(true);
     });
 
     it("should not set cancelGrab when window is not in GRAB_TILE mode", () => {
@@ -399,7 +390,7 @@ describe("WindowManager - Commands", () => {
 
       wm().command({ name: "CancelOperation" });
 
-      expect(wm().cancelGrab).toBe(false);
+      expect(wm()._grab.cancelGrab).toBe(false);
     });
   });
 
@@ -465,39 +456,56 @@ describe("WindowManager - Commands", () => {
     }
 
     it("should resize window to the right", () => {
-      setupResizeWindow();
-      const resizeSpy = vi.spyOn(wm(), "resize");
+      const metaWindow = setupResizeWindow();
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
 
       wm().command({ name: "WindowResize", direction: "Right", amount: 10 });
 
-      expect(resizeSpy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
+      // Assert through the grab-session owner, not the WM resize facade (S7).
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_E
+      );
     });
 
     it("should resize window to the left", () => {
-      setupResizeWindow();
-      const resizeSpy = vi.spyOn(wm(), "resize");
+      const metaWindow = setupResizeWindow();
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
 
       wm().command({ name: "WindowResize", direction: "Left", amount: 10 });
 
-      expect(resizeSpy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_W, 10);
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_W
+      );
     });
 
     it("should resize window upward", () => {
-      setupResizeWindow();
-      const resizeSpy = vi.spyOn(wm(), "resize");
+      const metaWindow = setupResizeWindow();
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
 
       wm().command({ name: "WindowResize", direction: "Top", amount: 10 });
 
-      expect(resizeSpy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_N, 10);
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_N
+      );
     });
 
     it("should resize window downward", () => {
-      setupResizeWindow();
-      const resizeSpy = vi.spyOn(wm(), "resize");
+      const metaWindow = setupResizeWindow();
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
 
       wm().command({ name: "WindowResize", direction: "Bottom", amount: 10 });
 
-      expect(resizeSpy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_S, 10);
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_S
+      );
     });
 
     it("should do nothing if no focus window", () => {

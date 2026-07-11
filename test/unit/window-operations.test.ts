@@ -277,10 +277,10 @@ describe("Integration - Window Operations", () => {
       const display = ctx.display;
 
       wm()._handleGrabOpBegin(display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
-      expect(wm().grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
 
       wm()._handleGrabOpEnd(display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
-      expect(wm().grabOp).toBe(Meta.GrabOp.NONE);
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
     });
   });
 

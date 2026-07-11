@@ -14,10 +14,12 @@
 
 ## Resize exemption
 
-- **`_resizedWindows`** is `Map<number, number>` tracking resize counts per window.
+- **`GrabResizeSession.resizedWindows`** (`Map<number, number>`) is the sole owner tracking
+  resize counts per window (architecture rule §2 — migrated off `WindowManager._resizedWindows`).
 - Exemption requires count ≥ 2 (first resize always clamped; async Wayland `size-changed` may arrive
   before counter increments).
-- `clearResizedWindows()` in test `beforeEach` to prevent state bleed.
+- Test cleanup calls the owner interface `wm._grab.clearResizedWindows()` in `beforeEach` to
+  prevent state bleed (do not clear the map from outside the owner).
 
 ## wl-clipboard / ephemeral Wayland helpers
 
@@ -254,3 +256,175 @@ This improves depth, leverage (one load for the default path), and removes dupli
 - **No `--force-host-session`** — fail-closed host bus / XDG guardrails in `host_guard.py`.
 - **Post-fix devkit is user-opt-in** — agent asks; never auto-launches devkit after headless fix.
 - **Shared library** — `test/lib/shell_session.py` extracted from E2E; E2E migration optional (PR 6).
+
+## window.ts refactor (2026-07-11)
+
+- **Extraction approach**: Split WindowManager into focused modules, each with its own `*Host` interface.
+  Stages 0–5 create: `drag-drop-tile.ts`, `signal-manager.ts`, `command-handlers.ts`,
+  `workspace-mutations.ts`, `render-scheduler.ts`, `decoration-layout.ts`. `window.ts` shrinks
+  from 2341 → 1082 LOC (−54%).
+- **Host interface widths**: Narrow for DragDropTile, RenderScheduler, DecorationLayout,
+  WorkspaceMutations. `SignalManagerHost` (~20) and `CommandHandlerHost` (~25) are **accepted
+  wide dispatch seams** — structural interfaces (no `WindowManager` import), deletion-test-justified
+  (deleting them re-spreads the fanned-out wiring across WM).
+- **Freeze-state ownership (C2/C3, rule §2)**: Storage stays on `SessionFlagsState.freezeRender`,
+  read/written only through WM's `_freezeRender` getter/setter → `this._session.freezeRender`.
+  RenderScheduler, SignalManager, and CommandHandlers are **callers** via
+  `host.freezeRender()/unfreezeRender()/isRenderFrozen()` — single storage, single setter path,
+  no second writer. Reuses existing `isRenderFrozen` (did not add `freezeRenderState`).
+- **`workspaceChanging`**: Storage on `SessionFlagsState`; **sole writer = SignalManager** (via the
+  300ms `active-workspace-changed` timeout through the host setter); **sole reader = PointerPolicy**.
+- **`nodeWinAtPointer` (C13)**: Storage stays on WM (shared grab/drag field). **Writer =
+  GrabResizeSession** via the `GrabResizeHost` setter; **reader = DragDropTile** via a `readonly`
+  host view. Not a second writer.
+- **Grab state**: `grabOp`/`cancelGrab`/`resizedWindows` storage lives **only** on
+  `GrabResizeSession`. WM's `grabOp`/`cancelGrab`/`_resizedWindows` facades were removed; tests +
+  `test/e2e/lib/commands.js` now read `wm._grab.*` directly.
+- **`bindWorkspaceSignals` (C11)**: `SignalManager` owns the connect/disconnect implementation.
+  WM's `bindWorkspaceSignals(ws)` is a thin TreeHost/test facade that delegates to
+  `this._signalManager.bindWorkspaceSignals(ws)`. SignalManager is constructed **before** Tree in
+  the WM constructor because Tree.\_initWorkspaces() calls `bindWorkspaceSignals` during construction;
+  all SignalManager host accessors are lazy, so later subsystems need not yet exist. This removed a
+  dead duplicate of the method that had been left on WM.
+- **Dead-state removal (C5)**: `fromOverview`/`toOverview` were dead writes (zero readers) — deleted
+  from `SessionFlagsState` and WM accessors; `TODO(overview-thrash)` markers left at the overview
+  hiding/showing handlers. Overview-thrash skip was intended but never wired — suspected latent bug
+  logged for deliberate re-implementation if needed.
+- **C8 correction**: `_prefsOpenSrcId` was vestigial dead state in the original WM (declared,
+  removed in `_removeSignals`, but **never assigned** — `handlePrefsOpen` calls
+  `host.ext.openPreferences()`). Rather than own the dead source in a command-handlers `dispose()`, it
+  was removed entirely; `createCommandHandlers(host)` now returns a `CommandBusHost` directly and WM
+  no longer keeps a `_commandHandlers` field. The Stage 3 disable pipeline dropped the no-op
+  `_commandHandlers.dispose()` line.
+- **Stage 6 facade cleanup**: Removed non-host/non-test forwarding stubs — `showWindowBorders`,
+  `_clearPendingWindowSignals`, `trackWindow`, `postProcessWindow`, `trackCurrentWindows` (stub),
+  `windowDestroy`, `_restoreFocusAfterWindowClosed`, `_getDragDropCenterPreviewStyle`, plus dead
+  `windowsActiveWorkspace`. Tests updated to call owner subsystems directly (`_tracker.*`,
+  `_borders.*`). SignalManager now calls `host.tracker.trackCurrentWindows()` (removed from
+  `SignalManagerHost`); RenderSchedulerHost routes `trackCurrentWindows` to `self._tracker.*`.
+  Host-contract facades (`renderTree`, `ensureBorderActors`, `queueEvent`, `move`, `rectForMonitor`,
+  `floatingWindow`, etc.) and the public test API (`getTestStateJson`, `toggleFloatingMode`, `resize`,
+  `isActiveWindowWorkspaceTiled`, `floatAllWindows`, …) are retained.
+- **Dependency direction (rule §12)**: `tree.ts` and all six new modules import **no** concrete
+  `WindowManager`. Verified by grep on build.
+- **LOC budget reconciliation (rule §8, Stage 6 gate `≤ 600`)**: The `≤ 600` target is **not
+  achievable as the plan specifies**. Evidence: (1) the plan's own Post-Refactor File Inventory
+  per-item budget sums to **~830, not ~600** (the "Total ~600" header is an arithmetic error); (2)
+  the inventory assumed the constructor is ~180 LOC, but Prettier **forces** trivial getters to stay
+  multi-line, making the constructor ~340 LOC (~+160); (3) the only remaining lever — extracting the
+  host-wiring into a builder module — the plan explicitly forbids ("adds indirection without
+  improving clarity"). Hitting 600 would require fighting the formatter (breaks the lint gate), adding
+  the plan-forbidden builder, or removing host-contract facades (violates §7/§4). **Decision
+  (user-approved 2026-07-11): accept the faithful no-builder floor at 1082 LOC**; all substantive
+  non-host/non-test stubs are removed and `npm test` (typecheck + lint + 891 unit tests) is green.
+- **`command-handlers.ts` §8 (520 LOC)**: ~20 LOC over the soft cap. The module is one intrinsic
+  concern (22 command handlers + host + factory); the dead `_prefsOpenSrcId`/`dispose` code was
+  removed to take it from 538 → 520. Splitting would add an artificial seam with no concern boundary
+  (§8 says split _by concern_); a single file is the right shape. Accepted at 520 as marginally over
+  the soft cap. (No external plan document references this; the decision is self-justified here.)
+- **Architecture-rule verification**: §2 (one owner per state — layout/percent/tree-structure
+  writes routed through `LayoutEngine`; see review-fix notes below), §7 (no new public `any` on
+  exported host interfaces — the four new `*Host` interfaces use `Node<NodeType>` instead of
+  `Node<any>`; the surviving `any` in `decoration-layout.ts`/`drag-drop-tile.ts` are inline callback
+  params in non-exported closures, not public API), §12 (no WM imports in new modules) all green.
+- **E2E**: `make test-e2e` was **not** run in this environment (requires host `gnome-shell` +
+  `jasmine-gjs`; `build.md` notes CI runs unit only and E2E is a host-run pre-release gate). Unit
+  typecheck/lint/891 tests pass. Lifecycle/grab/render E2E should be run on a host before release.
+
+### E2E harness + pre-existing failures fixed in fedora-devbox (2026-07-11)
+
+Ran the full E2E suite in the `fedora-devbox` distrobox (Fedora 44, GNOME Shell 50.3,
+jasmine-gjs). The baseline (pre-refactor HEAD) was **13 passed / 112 failed** because the
+harness was broken, not because the extension was broken. After the fixes below the full
+suite is **125 passed / 125 passed** (stable across two consecutive runs).
+
+- **specFilter bug (runner.js)**: `runner.env.specFilter` is a deprecated getter in this
+  jasmine-gjs and `originalFilter(spec)` threw, so `--tag` ran ALL specs every time and
+  attributed failures wildly. Rewrote the filter to a plain substring match (no deprecated
+  getter) AND added **import-level filtering** — only suites whose basename includes the tag
+  are imported, so non-matching `describe`s never register. Robust against jasmine specFilter
+  quirks.
+- **Reporter suite stack (runner.js)**: `suiteStarted`/`suiteDone` used a single `currentSuite`
+  with a name match, so nested `describe` blocks misattributed specs and spec-less suites were
+  recorded. Replaced with a proper suite **stack** (push on start, pop+record on done) so specs
+  attach to the innermost active suite and spec-less suites are dropped.
+- **`--tag` isolation confirmed**: `--tag focus` → 4/4, `--tag tiling` → 8/8, `--tag resize` →
+  74/74, `--tag constraints` → 4/4, `--tag floating` → 6/6.
+- **S2 (real bug found via E2E)**: `SignalManager.bindAll()` set `_signalsBound = true` AFTER
+  the per-workspace binding loop, so the S2 lifecycle gate made the loop a no-op — workspace
+  `window-added` signals were never bound. Fixed by setting the flag BEFORE the loop.
+- **Keyboard resize ignored monitor constraints (pre-existing)**: `command-handlers.resize()`
+  called `host.move()` with the grown rect directly; the render-time clamp
+  (`TilingRender.enforceUltrawideSize`) could not reposition the window while an active grab
+  held it (Mutter rejects `move_resize_frame` during a grab, and `apply` swallows the throw),
+  so the keyboard-resized window stayed at the un-clamped size. Fixed by clamping the
+  requested rect to active constraints at the source (`enforceUltrawideSize` before `move`).
+  Resize suite still 74/74.
+- **FloatClassToggle flakiness (pre-existing test hygiene)**: `FloatClassToggle` is a **toggle**;
+  the floating suite's `afterEach` did not remove the Nautilus class float override it added, so
+  the override persisted to `~/.config/anvil/config/windows.json` (the `ConfigManager.windowProps`
+  setter writes the file) and a later toggle un-floated instead of floating. Added
+  `clearFloatOverridesForClass(wmClass)` to `shared-commands.js` (persists the removal via the
+  configMgr setter) and call it in the floating suite's `beforeEach`/`afterEach` and in the
+  runner's global reset.
+- **Global state reset (runner.js `run()`)**: the headless session shares the user dconf db, so
+  prior runs left `workspace-skip-tile` / `monitor-constraints` / persisted Nautilus float
+  overrides behind, making the first tiling spec see Nautilus as float-exempt (window opened
+  floated at its persisted preferred size). Added a reset at the start of `run()` (using the
+  extension's `global.__anvil_settings`, not a fresh `Gio.Settings` — different backends in the
+  isolated session) that re-enables tiling, clears skip-tile + constraints + resized windows +
+  Nautilus float overrides. Also cleaned the stray Nautilus override from the devbox's user
+  config file.
+- **E2E resize cleanup (Spec-P1)**: `test/lib/shared-commands.js` `clearResizedWindows` calls
+  the owner `wm._grab.clearResizedWindows()`. Removed the duplicate helper from
+  `test/e2e/lib/commands.js` (suites import the shared one).
+- **History**: `codebase-review.md` is left as a historical snapshot (C7); the living module map
+  is `.agents/context/architecture.md`.
+
+### window.ts refactor review fixes (2026-07-11)
+
+Follow-up to the unstaged code review (`window-ts-refactor-code-review.md`). All findings fixed;
+`npm test` green at 901 unit tests.
+
+- **S1 (owner-compliant writes)**: Command handlers no longer mutate tree-structure / layout /
+  sibling percents directly. New `LayoutEngine` methods — `toggleSplitLayout`, `setAttachNode`,
+  `resetPercentForFloatToggle`, `raiseInStacked`, `reparentToNode` — own those writes; handlers express
+  intent only. `drag-drop-tile.ts` layout writes go through `host.layoutEngine.setLayout`;
+  `workspace-mutations.updateMetaWorkspaceMonitor` reparents via `reparentToNode`. Unit tests added in
+  `layout-engine.test.ts`.
+- **S2 (lifecycle)**: `SignalManager.bindWorkspaceSignals` is now lifecycle-gated — it early-returns
+  when `!_signalsBound`, so the construction-time call from `Tree._initWorkspaces` → `Tree.addWorkspace`
+  no longer connects `Meta.Workspace` signals outside `enable()` (architecture rule §1). The real
+  per-workspace binding happens in `bindAll()` (loops existing workspaces) and in the runtime
+  `workspace-added` handler (with `_signalsBound` true). `unbindAll()` disconnects them. Also,
+  `unbindAll()` resets the `workspaceChanging` flag when cancelling the transition timer, and
+  `WindowManager.enable()` resets it before rebinding.
+- **S3 (no public `any`)**: Added `NodeType` union to `tree.ts`; the four exported `*Host` interfaces
+  (`CommandHandlerHost`, `SignalManagerHost`, `WorkspaceMutationsHost`, `DragDropTileHost`) use
+  `Node<NodeType>` instead of `Node<any>`.
+- **S4 (transition flag)**: `SignalManager.unbindAll()` resets `host.workspaceChanging = false` when
+  it cancels the 300ms timer; `WindowManager.enable()` also resets it before `bindAll()`. Covered by
+  `SignalManager.test.ts` + a lifecycle test.
+- **S5 (docs)**: Restored `codebase-review.md` (was erroneously deleted). Removed all
+  `@see window-ts-refactor.md` references from the six new modules (pointed at architecture rules +
+  decisions instead). Restored the multi-monitor rationale comment in `decoration-layout.ts`.
+- **S6 (middle-man cycles / unused seams / honest interface)**: `handleFloat` and
+  `handleWindowResize` call the same-module `toggleFloatingMode` / `resize` helpers directly instead
+  of routing through the WM facade and back. Removed unused `SignalManagerHost` members
+  (`grabSession`, `reloadTree`, `resetSiblingPercent`) and `CommandHandlerHost.isRenderFrozen` (and
+  their WM wiring). `workspace-mutations.ts` is now a `WorkspaceMutations` class (one honest
+  interface) instead of ten free functions.
+- **S7 (test surface)**: E2E `clearResizedWindows` calls the owner interface
+  `wm._grab.clearResizedWindows()` (in both `test/lib/shared-commands.js` and the E2E helper);
+  removed the duplicate E2E helper. Unit tests no longer reach into `wm._grab.resizedWindows` (the
+  internal `Map`): new `GrabResizeSession` probes `hasResizeCount` / `getResizeCount` /
+  `resizeCountEntries` / `seedResizeCount` (test-only) replace `.has/.get/.set/.size/.clear`.
+  The `FloatToggle` / `WindowResize` command tests assert through the owner (tree node mode,
+  `GrabResizeSession.begin`) instead of the WM `toggleFloatingMode`/`resize` middle-man facades.
+  Added a `DragDropTile` placement/mutation test (center SWAP via `LayoutEngine.swapPairs`).
+  Remaining `wm._tracker.*` / `wm._borders.*` access goes through **public** subsystem fields (no
+  `private` keyword) to test real owner behavior — accepted as the test surface; the harmful cases
+  (internal-Map mutation, underscore-helper-only coverage) are fixed.
+- **Spec-P1 (E2E resize cleanup)**: `test/lib/shared-commands.js` `clearResizedWindows` updated to
+  call `wm._grab.clearResizedWindows()` (the owner) instead of clearing the removed `wm._resizedWindows`
+  map (which silently no-op'd and let resize counts bleed between specs).

@@ -293,16 +293,9 @@ export function getAnvilSettings() {
 
 /* ── Monitor constraint management ─────────────────────────────────────── */
 
-export function clearResizedWindows() {
-  try {
-    const wm = getAnvilWM();
-    if (wm && wm._resizedWindows) {
-      wm._resizedWindows.clear();
-    }
-  } catch (e) {
-    log("[E2E] clearResizedWindows: " + (e instanceof Error ? e.message : String(e)));
-  }
-}
+// clearResizedWindows lives in ../lib/shared-commands.js (single source of
+// truth) and calls the owner interface wm._grab.clearResizedWindows().
+// Do not duplicate it here — resize/constraints suites import from there.
 
 export function clearMonitorConstraints() {
   try {

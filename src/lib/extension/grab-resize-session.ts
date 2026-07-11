@@ -152,6 +152,24 @@ export class GrabResizeSession {
     return this.resizedWindows.get(id) || 0;
   }
 
+  /** True when a resize count has been recorded for `id` (counts are always ≥1). */
+  hasResizeCount(id: number): boolean {
+    return this.resizedWindows.has(id);
+  }
+
+  /** Number of windows with a recorded resize count (test probe). */
+  get resizeCountEntries(): number {
+    return this.resizedWindows.size;
+  }
+
+  /**
+   * Seed a resize count for `id` (test-only). Lets tests simulate prior-resize
+   * state without reaching into the internal `resizedWindows` map.
+   */
+  seedResizeCount(id: number, count: number): void {
+    this.resizedWindows.set(id, count);
+  }
+
   clearResizedWindows(): void {
     this.resizedWindows.clear();
   }

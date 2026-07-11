@@ -83,6 +83,69 @@ export class LayoutEngine {
   }
 
   /**
+   * Toggle a split container between HSPLIT and VSPLIT (architecture rule §2:
+   * LayoutEngine is the sole owner of layout writes). Sets `tree.attachNode` to
+   * the toggled parent so the next render attaches there. Caller renders.
+   */
+  toggleSplitLayout(parentNode: Node<any>): void {
+    const currentLayout = parentNode.layout;
+    if (currentLayout === LAYOUT_TYPES.HSPLIT) {
+      parentNode.layout = LAYOUT_TYPES.VSPLIT;
+    } else if (currentLayout === LAYOUT_TYPES.VSPLIT) {
+      parentNode.layout = LAYOUT_TYPES.HSPLIT;
+    }
+    this._host.tree.attachNode = parentNode;
+  }
+
+  /**
+   * Set the tree's attach node (architecture rule §2: commands express intent
+   * through LayoutEngine rather than mutating tree structure directly).
+   */
+  setAttachNode(node: Node<any>): void {
+    this._host.tree.attachNode = node;
+  }
+
+  /**
+   * Reset percent state for a focus window's parent after a float toggle
+   * (architecture rule §2: LayoutEngine is the sole owner of sibling percents).
+   * If the parent now has at most one tiled child, clear its percent and reset
+   * the grandparent's siblings, then reset the parent's siblings.
+   */
+  resetPercentForFloatToggle(parentNode: Node<any>, tree: Tree): void {
+    if (tree.getTiledChildren(parentNode.childNodes).length <= 1) {
+      parentNode.percent = undefined;
+      this.resetSiblingPercent(parentNode.parentNode!);
+    }
+    this.resetSiblingPercent(parentNode);
+  }
+
+  /**
+   * Raise a window to the end of its stacked parent's child list (architecture
+   * rule §2: tree-structure mutations for tiling ops go through LayoutEngine).
+   * Used by the move command's stacked-queue follow-up to bring the moved window
+   * to the top of the stack. Caller renders.
+   */
+  raiseInStacked(node: Node<any>): void {
+    const parent = node.parentNode;
+    if (!parent) return;
+    parent.appendChild(node);
+  }
+
+  /**
+   * Reparent `node` under `newParent` and redistribute the old parent's
+   * remaining siblings so their percents still sum to ~1 (architecture rule
+   * §2: LayoutEngine owns sibling percents and tree-structure mutations for
+   * tiling ops). Used when a window crosses monitor/workspace nodes.
+   */
+  reparentToNode(node: Node<any>, newParent: Node<any>): void {
+    const oldParent = node.parentNode;
+    newParent.appendChild(node);
+    if (oldParent) {
+      this.redistributeSiblingPercent(oldParent);
+    }
+  }
+
+  /**
    * Auto-split the focused window's container before admitting a new tiled window.
    * Returns true if a split was performed.
    */

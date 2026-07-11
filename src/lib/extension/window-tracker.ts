@@ -81,6 +81,32 @@ export class WindowTracker {
       GLib.Source.remove(this._windowReconcileSrcId);
       this._windowReconcileSrcId = 0;
     }
+
+    // Per-window cleanup: disconnect signals, clear pending, clean actor signals
+    const allWindows = this._host.windowsAllWorkspaces;
+    if (allWindows) {
+      for (const metaWindowRaw of allWindows) {
+        const metaWindow = metaWindowRaw as AnvilMetaWindow;
+        if (metaWindow.windowSignals !== undefined) {
+          for (const windowSignal of metaWindow.windowSignals) {
+            metaWindow.disconnect(windowSignal);
+          }
+          metaWindow.windowSignals.length = 0;
+          metaWindow.windowSignals = undefined;
+        }
+
+        this.clearPendingWindowSignals(metaWindow);
+
+        const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+        if (windowActor && windowActor.actorSignals) {
+          for (const actorSignal of windowActor.actorSignals) {
+            windowActor.disconnect(actorSignal);
+          }
+          windowActor.actorSignals.length = 0;
+          windowActor.actorSignals = undefined;
+        }
+      }
+    }
   }
 
   validWindow(metaWindow: Meta.Window) {

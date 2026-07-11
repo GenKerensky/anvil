@@ -67,6 +67,12 @@ export const NODE_TYPES = createEnum([
   "WORKSPACE",
 ]);
 
+/**
+ * Union of `NODE_TYPES` values — the `Node<T>` type discriminator. Use this
+ * instead of `any` on exported host interfaces (architecture rule §7).
+ */
+export type NodeType = typeof NODE_TYPES[keyof typeof NODE_TYPES];
+
 export const LAYOUT_TYPES = createEnum(["STACKED", "TABBED", "ROOT", "HSPLIT", "VSPLIT", "PRESET"]);
 
 export const ORIENTATION_TYPES = createEnum(["NONE", "HORIZONTAL", "VERTICAL"]);

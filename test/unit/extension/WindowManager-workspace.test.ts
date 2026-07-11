@@ -219,13 +219,13 @@ describe("WindowManager - Workspace", () => {
       ctx.workspaces[0]._windows = [win1];
       ctx.display.get_tab_list.mockReturnValue([win1]);
 
-      expect(() => wm().trackCurrentWindows()).not.toThrow();
+      expect(() => wm()._tracker.trackCurrentWindows()).not.toThrow();
     });
 
     it("should handle empty window lists", () => {
       ctx.display.get_tab_list.mockReturnValue([]);
 
-      expect(() => wm().trackCurrentWindows()).not.toThrow();
+      expect(() => wm()._tracker.trackCurrentWindows()).not.toThrow();
     });
   });
 

@@ -214,7 +214,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, true]];
       const metaWindow1 = setupWindowOnMonitor(0, 42);
       setupWindowOnMonitor(0, 43); // second window so it's not solo
-      wm()._resizedWindows.set(42, 2);
+      wm()._grab.seedResizeCount(42, 2);
       const node = ctx.tree.findNode(metaWindow1);
       const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
@@ -232,7 +232,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       metaWindow._monitor = 0;
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      wm()._resizedWindows.set(42, 2);
+      wm()._grab.seedResizeCount(42, 2);
 
       const node = ctx.tree.findNode(metaWindow);
       const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
@@ -256,7 +256,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       metaWindow._monitor = 0;
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      wm()._resizedWindows.set(43, 2);
+      wm()._grab.seedResizeCount(43, 2);
 
       const node = ctx.tree.findNode(metaWindow);
       const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
@@ -328,7 +328,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
 
       wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
-      expect(wm()._resizedWindows.has(99)).toBe(true);
+      expect(wm()._grab.hasResizeCount(99)).toBe(true);
 
       timeoutAddSpy.mockRestore();
     });
@@ -341,7 +341,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
 
       wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
-      expect(wm()._resizedWindows.has(99)).toBe(false);
+      expect(wm()._grab.hasResizeCount(99)).toBe(false);
     });
 
     it("does NOT track when grabOp is not RESIZING", () => {
@@ -352,7 +352,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
 
       wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_MOVING);
 
-      expect(wm()._resizedWindows.has(99)).toBe(false);
+      expect(wm()._grab.hasResizeCount(99)).toBe(false);
     });
 
     it("does NOT track when constraints are null", () => {
@@ -361,7 +361,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
 
       wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
-      expect(wm()._resizedWindows.has(99)).toBe(false);
+      expect(wm()._grab.hasResizeCount(99)).toBe(false);
     });
 
     it("does NOT throw when focusMetaWindow is null", () => {
@@ -378,15 +378,15 @@ describe("WindowManager - Per-Monitor Constraints", () => {
   // ----------------------------------------------------------------
   describe("settings changed - monitor-constraints", () => {
     it("clears _resizedWindows when monitor-constraints changes", () => {
-      wm()._resizedWindows.set(1, 1);
-      wm()._resizedWindows.set(2, 1);
-      expect(wm()._resizedWindows.size).toBe(2);
+      wm()._grab.seedResizeCount(1, 1);
+      wm()._grab.seedResizeCount(2, 1);
+      expect(wm()._grab.resizeCountEntries).toBe(2);
 
       // Simulate what the settings-changed handler does
-      wm()._resizedWindows.clear();
+      wm()._grab.clearResizedWindows();
       wm().renderTree("monitor-constraints", true);
 
-      expect(wm()._resizedWindows.size).toBe(0);
+      expect(wm()._grab.resizeCountEntries).toBe(0);
     });
   });
 });

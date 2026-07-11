@@ -26,7 +26,7 @@ describe("WindowManager - Focus", () => {
 
   describe("_findNodeWindowAtPointer", () => {
     it("should return undefined for null metaWindow", () => {
-      expect(wm()._findNodeWindowAtPointer(null, [100, 100])).toBeUndefined();
+      expect(wm()._dragDrop._findNodeWindowAtPointer(null, [100, 100])).toBeUndefined();
     });
 
     it("should return node when window found in sortedWindows", () => {
@@ -37,14 +37,14 @@ describe("WindowManager - Focus", () => {
         .getNodeByType(NODE_TYPES.WINDOW)
         .map((n: any) => n.nodeValue as Meta.Window);
 
-      const found = wm()._findNodeWindowAtPointer(metaWindow, [100, 100]);
+      const found = wm()._dragDrop._findNodeWindowAtPointer(metaWindow, [100, 100]);
       expect(found).toBe(nodeWindow);
     });
 
     it("should return null when window not in sortedWindows", () => {
       const metaWindow = createMockWindow({ rect: { x: 0, y: 0, width: 200, height: 200 } });
       wm().sortedWindows = [];
-      expect(wm()._findNodeWindowAtPointer(metaWindow, [100, 100])).toBeNull();
+      expect(wm()._dragDrop._findNodeWindowAtPointer(metaWindow, [100, 100])).toBeNull();
     });
   });
 
@@ -124,7 +124,7 @@ describe("WindowManager - Focus", () => {
 
   describe("_restoreFocusAfterWindowClosed", () => {
     it("should return early when closedNodeWindow is null", () => {
-      expect(() => wm()._restoreFocusAfterWindowClosed(null)).not.toThrow();
+      expect(() => wm()._tracker.restoreFocusAfterWindowClosed(null)).not.toThrow();
     });
 
     it("should focus sibling window when available", () => {
@@ -137,7 +137,7 @@ describe("WindowManager - Focus", () => {
       const raiseSpy = vi.spyOn(metaWindow2, "raise");
       const focusSpy = vi.spyOn(metaWindow2, "focus");
 
-      wm()._restoreFocusAfterWindowClosed(node1);
+      wm()._tracker.restoreFocusAfterWindowClosed(node1);
 
       expect(raiseSpy).toHaveBeenCalled();
       expect(focusSpy).toHaveBeenCalled();
@@ -152,7 +152,7 @@ describe("WindowManager - Focus", () => {
       ctx.workspaces[0]._windows = [metaWindowWs];
 
       const raiseSpy = vi.spyOn(metaWindowWs, "raise");
-      wm()._restoreFocusAfterWindowClosed(node);
+      wm()._tracker.restoreFocusAfterWindowClosed(node);
       expect(raiseSpy).toHaveBeenCalled();
     });
 
@@ -162,7 +162,7 @@ describe("WindowManager - Focus", () => {
 
       const node = ctx.tree.createNode(ctx.tree.rootNode, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(() => wm()._restoreFocusAfterWindowClosed(node)).not.toThrow();
+      expect(() => wm()._tracker.restoreFocusAfterWindowClosed(node)).not.toThrow();
     });
   });
 });

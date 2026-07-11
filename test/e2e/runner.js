@@ -12,7 +12,12 @@ import Gio from "gi://Gio";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 
 import { closeAllWindows, takeScreenshot } from "./lib/commands.js";
-import { sleep } from "../lib/shared-commands.js";
+import {
+  sleep,
+  clearMonitorConstraints,
+  clearResizedWindows,
+  clearFloatOverridesForClass,
+} from "../lib/shared-commands.js";
 
 const UUID = "anvil@GenKerensky.github.com";
 const SCHEMA_ID = "org.gnome.shell.extensions.anvil";
@@ -100,22 +105,26 @@ function ensureExtensionReady() {
 function makeJsonReporter(outputPath) {
   /** @type {{ results: any[], timestamp: string | null, fatalError: string | null, totalPassed?: number, totalFailed?: number }} */
   const results = { results: [], timestamp: null, fatalError: null };
-  /** @type {{ name: string, tests: any[], passed: number, failed: number } | null} */
-  let currentSuite = null;
+  // Stack of active suites so nested `describe` blocks (and filtered/spec-less
+  // suites) are attributed correctly. Specs attach to the top of the stack.
+  /** @type {{ name: string, tests: any[], passed: number, failed: number }[]} */
+  const suiteStack = [];
 
   return {
     /** @param {jasmine.SuiteResult} result */
     suiteStarted(result) {
-      if (!currentSuite) {
-        currentSuite = { name: result.fullName, tests: [], passed: 0, failed: 0 };
-      }
+      suiteStack.push({ name: result.fullName, tests: [], passed: 0, failed: 0 });
     },
 
     /** @param {jasmine.SuiteResult} result */
     suiteDone(result) {
-      if (currentSuite && currentSuite.name === result.fullName) {
-        results.results.push(currentSuite);
-        currentSuite = null;
+      // Pop the matching suite (top-down) and, if it ran specs, record it.
+      for (let i = suiteStack.length - 1; i >= 0; i--) {
+        if (suiteStack[i].name === result.fullName) {
+          const done = suiteStack.splice(i, 1)[0];
+          if (done.tests.length > 0) results.results.push(done);
+          break;
+        }
       }
     },
 
@@ -134,10 +143,11 @@ function makeJsonReporter(outputPath) {
             : null,
       };
 
-      if (currentSuite) {
-        currentSuite.tests.push(test);
-        if (test.passed) currentSuite.passed++;
-        else if (!test.pending) currentSuite.failed++;
+      const owner = suiteStack[suiteStack.length - 1];
+      if (owner) {
+        owner.tests.push(test);
+        if (test.passed) owner.passed++;
+        else if (!test.pending) owner.failed++;
       }
     },
 
@@ -226,6 +236,40 @@ export async function run() {
 
   await ensureExtensionReady();
 
+  // Global state reset: the headless session shares the user dconf db, so a
+  // prior run (or a `--tag constraints` diagnostic run) can leave
+  // monitor-constraints / tiling-mode / float overrides behind. Normalize the
+  // mutable GSettings-backed extension state here so the suite starts from a
+  // known baseline regardless of prior runs.
+  try {
+    // Use the EXTENSION's settings instance (global.__anvil_settings), not a
+    // fresh Gio.Settings — in the isolated D-Bus session these may resolve to
+    // different dconf backends, so only the extension's instance reliably
+    // matches what it reads at render time.
+    const settings =
+      /** @type {Gio.Settings | null} */ (/** @type {any} */ (global).__anvil_settings) ||
+      new Gio.Settings({ schema_id: SCHEMA_ID });
+    settings.set_boolean("tiling-mode-enabled", true);
+    // Clear left-behind skip-tile + constraints so windows tile on every suite.
+    // These GSettings persist in the shared dconf across runs; a prior
+    // workspace-skip-tile or constraint-suite run would otherwise leave the
+    // active workspace skip-tiled (windows float at preferred size) or clamped.
+    settings.set_string("workspace-skip-tile", "");
+    settings.set_string("monitor-skip-tile", "");
+    const empty = new GLib.Variant("a(suubb)", []);
+    settings.set_value("monitor-constraints", empty);
+    clearMonitorConstraints();
+    clearResizedWindows();
+    // Remove persisted Nautilus float overrides from prior floating-suite runs so
+    // the tiling suite (run first) does not see Nautilus as floating-exempt.
+    clearFloatOverridesForClass("org.gnome.Nautilus");
+    log("[E2E] Global state reset (tiling + skip-tile + constraints + float-override cleared)");
+  } catch (e) {
+    log(
+      "[E2E] Warning: global state reset failed: " + (e instanceof Error ? e.message : String(e))
+    );
+  }
+
   let runner;
   try {
     runner = await bootJasmine();
@@ -246,11 +290,11 @@ export async function run() {
 
   if (filterTag) {
     const tag = filterTag.toLowerCase();
-    const originalFilter = runner.env.specFilter;
+    // NOTE: do not read `runner.env.specFilter` — getter is deprecated in this
+    // jasmine-gjs and returns/throws, which made the filter no-op (all specs ran).
     runner.env.configure({
       /** @param {jasmine.Spec} spec */
       specFilter: function (spec) {
-        if (!originalFilter(spec)) return false;
         return spec.getFullName().toLowerCase().includes(tag);
       },
     });
@@ -258,7 +302,7 @@ export async function run() {
 
   // extension.js is last: disable/re-enable can leave the WM half-initialized and
   // would poison later suites if run first.
-  const suites = [
+  const allSuites = [
     "./suites/tiling.js",
     "./suites/keyboard.js",
     "./suites/operations.js",
@@ -274,6 +318,23 @@ export async function run() {
     "./suites/constraints.js",
     "./suites/extension.js",
   ];
+
+  // Tag filter at the import level (robust against jasmine-gjs specFilter quirks —
+  // the env specFilter configure is not honored in this version, which made
+  // `--tag` run all 125 specs). Only importing matching suites guarantees only
+  // their describes register. Match by basename substring, e.g. "focus" →
+  // focus.js, "resize" → resize.js + constraints.js, "extension" → extension.js.
+  /** @type {string[]} */
+  let suites = allSuites;
+  if (filterTag) {
+    const tag = filterTag.toLowerCase();
+    suites = allSuites.filter((p) => (p.split("/").pop() ?? "").toLowerCase().includes(tag));
+    // Always keep extension.js last when it is in the filtered set so its
+    // disable/re-enable cannot poison other suites.
+    suites = suites.filter((p) => p !== "./suites/extension.js");
+    if (filterTag.toLowerCase().includes("extension")) suites.push("./suites/extension.js");
+    if (suites.length === 0) suites = allSuites;
+  }
 
   for (const path of suites) {
     try {

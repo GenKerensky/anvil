@@ -109,7 +109,7 @@ describe("WindowManager - Resize", () => {
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
 
-      expect(ctx.windowManager.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
+      expect(ctx.windowManager._grab.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
     });
   });
 
@@ -125,39 +125,56 @@ describe("WindowManager - Resize", () => {
 
   describe("WindowResize commands", () => {
     it("should dispatch WindowResizeRight command", () => {
-      const spy = vi.spyOn(ctx.windowManager, "resize");
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
       const metaWindow = setupFocusWindow(ctx);
 
       wm().command({ name: "WindowResize", direction: "Right", amount: 10 });
 
-      expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
+      // Assert through the grab-session owner, not the WM resize facade (S7).
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_E
+      );
     });
 
     it("should dispatch WindowResizeLeft command", () => {
-      const spy = vi.spyOn(ctx.windowManager, "resize");
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
       const metaWindow = setupFocusWindow(ctx);
 
       wm().command({ name: "WindowResize", direction: "Left", amount: -10 });
 
-      expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_W, -10);
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_W
+      );
     });
 
     it("should dispatch WindowResizeTop command", () => {
-      const spy = vi.spyOn(ctx.windowManager, "resize");
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
       const metaWindow = setupFocusWindow(ctx);
 
       wm().command({ name: "WindowResize", direction: "Top", amount: 10 });
 
-      expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_N, 10);
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_N
+      );
     });
 
     it("should dispatch WindowResizeBottom command", () => {
-      const spy = vi.spyOn(ctx.windowManager, "resize");
+      const grabBegin = vi.spyOn(wm()._grab, "begin");
       const metaWindow = setupFocusWindow(ctx);
 
       wm().command({ name: "WindowResize", direction: "Bottom", amount: -10 });
 
-      expect(spy).toHaveBeenCalledWith(Meta.GrabOp.KEYBOARD_RESIZING_S, -10);
+      expect(grabBegin).toHaveBeenCalledWith(
+        expect.anything(),
+        metaWindow,
+        Meta.GrabOp.KEYBOARD_RESIZING_S
+      );
     });
 
     it("should return early in resize when no focus window", () => {
@@ -234,11 +251,11 @@ describe("WindowManager - Resize", () => {
       const display = ctx.display;
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 20);
-      expect(wm().grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
 
       wm()._handleGrabOpEnd(display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
-      expect(wm().grabOp).toBe(Meta.GrabOp.NONE);
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
       const node = wm().findNodeWindow(metaWindow);
       expect(node!.initRect).toBeNull();
       expect(node!.grabMode).toBeNull();
@@ -334,7 +351,7 @@ describe("WindowManager - Resize", () => {
       // Resize win1 to the right by 100px using move_resize_frame (creates new rect)
       metaWin1.move_resize_frame(true, 0, 0, 1060, 1080);
 
-      wm()._handleResizing(node1);
+      wm()._grab.handleResizing(node1);
 
       expect(node1.percent).not.toBe(0.5);
       expect(node2.percent).not.toBe(0.5);
@@ -352,7 +369,7 @@ describe("WindowManager - Resize", () => {
       wm()._handleGrabOpBegin(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
 
       metaWin1.move_resize_frame(true, 0, 0, 1060, 1080);
-      wm()._handleResizing(node1);
+      wm()._grab.handleResizing(node1);
 
       const expectedPercent1 = 1060 / 1920;
       const expectedPercent2 = 860 / 1920;
@@ -376,7 +393,7 @@ describe("WindowManager - Resize", () => {
 
       metaWin1.move_resize_frame(true, 0, 0, 1060, 1080);
 
-      wm()._handleResizing(node1);
+      wm()._grab.handleResizing(node1);
 
       expect(node1.percent).not.toBe(0.5);
 
@@ -401,7 +418,7 @@ describe("WindowManager - Resize", () => {
 
       metaWin1.move_resize_frame(true, 0, 0, 1920, 640);
 
-      wm()._handleResizing(node1);
+      wm()._grab.handleResizing(node1);
 
       expect(node1.percent).not.toBe(0.5);
       expect(node2.percent).not.toBe(0.5);
@@ -414,7 +431,7 @@ describe("WindowManager - Resize", () => {
 
       node1.initGrabOp = Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN;
 
-      wm()._handleResizing(node1);
+      wm()._grab.handleResizing(node1);
 
       expect(node1.percent).toBe(0.5);
       expect(node2.percent).toBe(0.5);
@@ -424,7 +441,7 @@ describe("WindowManager - Resize", () => {
       const { metaWin1, node1, node2 } = setupTwoWindows(ctx);
       node1.mode = "FLOAT";
 
-      wm()._handleResizing(node1);
+      wm()._grab.handleResizing(node1);
 
       expect(node1.percent).toBe(0.5);
       expect(node2.percent).toBe(0.5);
@@ -451,7 +468,7 @@ describe("WindowManager - Resize", () => {
       // Simulate resize: node2 gets wider by 100px
       metaWin2.move_resize_frame(true, 960, 0, 1060, 1080);
 
-      wm()._handleResizing(node2);
+      wm()._grab.handleResizing(node2);
 
       // Percents should be updated (node2 larger, node1 smaller)
       expect(node2.percent).not.toBe(0.5);

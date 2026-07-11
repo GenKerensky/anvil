@@ -30,37 +30,37 @@ describe("WindowManager - Lifecycle", () => {
   describe("_validWindow", () => {
     it("should accept NORMAL windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.NORMAL });
-      expect(wm()._validWindow(window)).toBe(true);
+      expect(wm()._tracker.validWindow(window)).toBe(true);
     });
 
     it("should accept DIALOG windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.DIALOG });
-      expect(wm()._validWindow(window)).toBe(true);
+      expect(wm()._tracker.validWindow(window)).toBe(true);
     });
 
     it("should accept MODAL_DIALOG windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.MODAL_DIALOG });
-      expect(wm()._validWindow(window)).toBe(true);
+      expect(wm()._tracker.validWindow(window)).toBe(true);
     });
 
     it("should reject UTILITY windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.UTILITY });
-      expect(wm()._validWindow(window)).toBe(false);
+      expect(wm()._tracker.validWindow(window)).toBe(false);
     });
 
     it("should reject POPUP_MENU windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.POPUP_MENU });
-      expect(wm()._validWindow(window)).toBe(false);
+      expect(wm()._tracker.validWindow(window)).toBe(false);
     });
 
     it("should reject DROPDOWN_MENU windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.DROPDOWN_MENU });
-      expect(wm()._validWindow(window)).toBe(false);
+      expect(wm()._tracker.validWindow(window)).toBe(false);
     });
 
     it("should reject TOOLTIP windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.TOOLTIP });
-      expect(wm()._validWindow(window)).toBe(false);
+      expect(wm()._tracker.validWindow(window)).toBe(false);
     });
 
     it("should reject XWayland Video Bridge windows", () => {
@@ -68,7 +68,7 @@ describe("WindowManager - Lifecycle", () => {
         wm_class: "xwaylandvideobridge",
         title: "Video Bridge",
       });
-      expect(wm()._validWindow(window)).toBe(false);
+      expect(wm()._tracker.validWindow(window)).toBe(false);
     });
 
     it("should reject ddterm windows", () => {
@@ -76,7 +76,7 @@ describe("WindowManager - Lifecycle", () => {
         wm_class: "ddterm",
         title: "ddterm",
       });
-      expect(wm()._validWindow(window)).toBe(false);
+      expect(wm()._tracker.validWindow(window)).toBe(false);
     });
 
     it("should reject XWayland Video Bridge case-insensitively", () => {
@@ -84,7 +84,7 @@ describe("WindowManager - Lifecycle", () => {
         wm_class: "XWaylandVideoBridge",
         title: "Video Bridge",
       });
-      expect(wm()._validWindow(window)).toBe(false);
+      expect(wm()._tracker.validWindow(window)).toBe(false);
     });
   });
 
@@ -118,7 +118,7 @@ describe("WindowManager - Lifecycle", () => {
 
   describe("postProcessWindow", () => {
     it("should do nothing for null node", () => {
-      expect(() => wm().postProcessWindow(null)).not.toThrow();
+      expect(() => wm()._tracker.postProcessWindow(null)).not.toThrow();
     });
 
     it("should move pointer to window node", () => {
@@ -130,7 +130,7 @@ describe("WindowManager - Lifecycle", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const nodeWindow = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      wm().postProcessWindow(nodeWindow);
+      wm()._tracker.postProcessWindow(nodeWindow);
 
       expect(pointerSpy).toHaveBeenCalledWith(nodeWindow, "window-create");
     });
@@ -145,7 +145,7 @@ describe("WindowManager - Lifecycle", () => {
       expect(ctx.tree.findNode(metaWindow)).not.toBeNull();
 
       const actor = metaWindow.get_compositor_private();
-      wm().windowDestroy(actor);
+      wm()._tracker.windowDestroy(actor);
 
       expect(ctx.tree.findNode(metaWindow)).toBeNull();
     });
@@ -159,7 +159,7 @@ describe("WindowManager - Lifecycle", () => {
       const removeSpy = vi.spyOn(wm(), "removeFloatOverride");
 
       const actor = metaWindow.get_compositor_private();
-      wm().windowDestroy(actor);
+      wm()._tracker.windowDestroy(actor);
 
       expect(removeSpy).toHaveBeenCalledWith(metaWindow, true);
     });
@@ -183,7 +183,7 @@ describe("WindowManager - Lifecycle", () => {
       ctx.display.get_focus_window.mockReturnValue(metaWindow1);
 
       const actor = metaWindow1.get_compositor_private();
-      wm().windowDestroy(actor);
+      wm()._tracker.windowDestroy(actor);
 
       expect(ctx.tree.findNode(metaWindow1)).toBeNull();
     });
@@ -198,7 +198,7 @@ describe("WindowManager - Lifecycle", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
       const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
-      wm().windowDestroy(metaWindow.get_compositor_private());
+      wm()._tracker.windowDestroy(metaWindow.get_compositor_private());
 
       expect(renderSpy).not.toHaveBeenCalled();
     });
@@ -213,7 +213,7 @@ describe("WindowManager - Lifecycle", () => {
         remove_all_transitions: vi.fn(),
       };
 
-      expect(() => wm().windowDestroy(actor)).not.toThrow();
+      expect(() => wm()._tracker.windowDestroy(actor)).not.toThrow();
     });
   });
 
@@ -227,7 +227,7 @@ describe("WindowManager - Lifecycle", () => {
 
       const initialWindowCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
 
-      wm().trackWindow(ctx.display, window);
+      wm()._tracker.trackWindow(ctx.display, window);
 
       const afterCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
 
@@ -243,7 +243,7 @@ describe("WindowManager - Lifecycle", () => {
 
       const initialWindowCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
 
-      wm().trackWindow(ctx.display, window);
+      wm()._tracker.trackWindow(ctx.display, window);
 
       expect(ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length).toBe(initialWindowCount);
     });
@@ -256,7 +256,7 @@ describe("WindowManager - Lifecycle", () => {
 
       const initialCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
 
-      wm().trackWindow(ctx.display, window);
+      wm()._tracker.trackWindow(ctx.display, window);
 
       const afterCount = ctx.tree.getNodeByType(NODE_TYPES.WINDOW).length;
 
@@ -304,7 +304,7 @@ describe("WindowManager - Lifecycle", () => {
       });
       const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
 
-      wm()._trackWindowWhenReady(ctx.display, window);
+      wm()._tracker.trackWhenReady(ctx.display, window);
 
       expect(ctx.tree.findNode(window)).toBeNull();
       expect(window.getHandlerCount("notify::window-type")).toBe(1);
@@ -327,7 +327,7 @@ describe("WindowManager - Lifecycle", () => {
       });
       const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
 
-      wm()._trackMappedWindowActor({ meta_window: window });
+      wm()._tracker.trackMappedActor({ meta_window: window } as any);
 
       expect(ctx.tree.findNode(window)?.mode).toBe(WINDOW_MODES.TILE);
       expect(renderSpy).toHaveBeenCalledWith("window-create", true);
@@ -348,7 +348,7 @@ describe("WindowManager - Lifecycle", () => {
       ctx.display.get_tab_list.mockReturnValue([window]);
       const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
 
-      wm()._scheduleCurrentWindowReconcile();
+      wm()._tracker.scheduleReconcile();
 
       expect(ctx.tree.findNode(window)).toBeNull();
       expect(reconcileCallback).not.toBeNull();
@@ -369,7 +369,7 @@ describe("WindowManager - Lifecycle", () => {
       (global as any).get_window_actors.mockReturnValue([{ meta_window: window }]);
       const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
 
-      wm()._reconcileCurrentWindows("test-reconcile");
+      wm()._tracker.reconcileCurrentWindows("test-reconcile");
 
       expect(ctx.tree.findNode(window)?.mode).toBe(WINDOW_MODES.TILE);
       expect(renderSpy).toHaveBeenCalledWith("window-create", true);
@@ -386,10 +386,31 @@ describe("WindowManager - Lifecycle", () => {
         workspace,
       });
 
+      // S2: bindWorkspaceSignals is lifecycle-gated (no connects outside enable).
+      // Simulate the bound state that enable()/bindAll() would establish.
+      (wm() as any)._signalManager._signalsBound = true;
       wm().bindWorkspaceSignals(workspace);
       workspace.emit("window-added", workspace, window);
 
       expect(ctx.tree.findNode(window)).not.toBeNull();
+    });
+  });
+
+  describe("enable/disable workspace transition flag (S4)", () => {
+    it("enable() resets a stuck workspaceChanging flag before rebinding signals", () => {
+      // Simulate a disable that fired mid-transition (timer cancelled, flag left true).
+      wm()._workspaceChanging = true;
+
+      // Avoid driving the full Shell signal surface (not mocked here); assert
+      // only the reset, which runs before bindAll().
+      const signalManager = (wm() as any)._signalManager;
+      vi.spyOn(signalManager, "bindAll").mockImplementation(() => {});
+      vi.spyOn(wm(), "reloadTree").mockImplementation(() => {});
+
+      wm().enable();
+
+      expect(wm()._workspaceChanging).toBe(false);
+      expect(signalManager.bindAll).toHaveBeenCalled();
     });
   });
 });

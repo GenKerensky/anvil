@@ -112,11 +112,11 @@ describe("WindowManager - Resized Counter Race Fix", () => {
 
       // The counter MUST be set on metaWin1's id (the window that was resized),
       // NOT on metaWin2's id (the window that has focus)
-      expect(wm()._resizedWindows.has(100)).toBe(true);
-      expect(wm()._resizedWindows.get(100)).toBe(1);
+      expect(wm()._grab.hasResizeCount(100)).toBe(true);
+      expect(wm()._grab.getResizeCount(100)).toBe(1);
 
       // metaWin2 should NOT have a counter entry since it wasn't resized
-      expect(wm()._resizedWindows.has(200)).toBe(false);
+      expect(wm()._grab.hasResizeCount(200)).toBe(false);
 
       timeoutAddSpy.mockRestore();
     });
@@ -146,8 +146,8 @@ describe("WindowManager - Resized Counter Race Fix", () => {
 
       wm()._handleGrabOpEnd(ctx.display, metaWin1, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
-      expect(wm()._resizedWindows.has(100)).toBe(true);
-      expect(wm()._resizedWindows.get(100)).toBe(1);
+      expect(wm()._grab.hasResizeCount(100)).toBe(true);
+      expect(wm()._grab.getResizeCount(100)).toBe(1);
 
       timeoutAddSpy.mockRestore();
     });
@@ -169,7 +169,7 @@ describe("WindowManager - Resized Counter Race Fix", () => {
       wm()._handleGrabOpEnd(ctx.display, null as any, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
       // No windows should be tracked since _metaWindow was null
-      expect(wm()._resizedWindows.has(100)).toBe(false);
+      expect(wm()._grab.hasResizeCount(100)).toBe(false);
     });
 
     it("should not increment counter when grabOp is not a RESIZING operation", () => {
@@ -197,7 +197,7 @@ describe("WindowManager - Resized Counter Race Fix", () => {
       // Use MOVING operation instead of RESIZING
       wm()._handleGrabOpEnd(ctx.display, metaWin1, Meta.GrabOp.KEYBOARD_MOVING);
 
-      expect(wm()._resizedWindows.has(100)).toBe(false);
+      expect(wm()._grab.hasResizeCount(100)).toBe(false);
 
       timeoutAddSpy.mockRestore();
     });
@@ -227,7 +227,7 @@ describe("WindowManager - Resized Counter Race Fix", () => {
 
       wm()._handleGrabOpEnd(ctx.display, metaWin1, Meta.GrabOp.KEYBOARD_RESIZING_E);
 
-      expect(wm()._resizedWindows.has(100)).toBe(false);
+      expect(wm()._grab.hasResizeCount(100)).toBe(false);
 
       timeoutAddSpy.mockRestore();
     });
@@ -256,11 +256,11 @@ describe("WindowManager - Resized Counter Race Fix", () => {
 
       // First resize
       wm()._handleGrabOpEnd(ctx.display, metaWin1, Meta.GrabOp.KEYBOARD_RESIZING_E);
-      expect(wm()._resizedWindows.get(100)).toBe(1);
+      expect(wm()._grab.getResizeCount(100)).toBe(1);
 
       // Second resize
       wm()._handleGrabOpEnd(ctx.display, metaWin1, Meta.GrabOp.KEYBOARD_RESIZING_W);
-      expect(wm()._resizedWindows.get(100)).toBe(2);
+      expect(wm()._grab.getResizeCount(100)).toBe(2);
 
       timeoutAddSpy.mockRestore();
     });

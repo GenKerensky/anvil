@@ -189,6 +189,13 @@ def wait_for_results(results_path: pathlib.Path, timeout: float = 600.0) -> dict
             try:
                 with results_path.open() as f:
                     data = json.load(f)
+                # Preserve a copy for post-run diagnosis before unlinking.
+                try:
+                    import pathlib as _p, tempfile as _tf
+                    _cp = _p.Path(_tf.gettempdir()) / "anvil-e2e-results-last.json"
+                    _cp.write_text(json.dumps(data, indent=2))
+                except Exception:
+                    pass
                 results_path.unlink()
                 return data
             except (json.JSONDecodeError, OSError):

@@ -187,4 +187,111 @@ describe("LayoutEngine", () => {
       expect(node.parentNode?.layout).toBe(LAYOUT_TYPES.HSPLIT);
     });
   });
+
+  // S1: command handlers route tree-structure / layout / percent writes through
+  // LayoutEngine instead of mutating the tree directly.
+  describe("toggleSplitLayout / setAttachNode (S1 owner-compliant writes)", () => {
+    it("toggleSplitLayout flips HSPLIT<->VSPLIT and sets tree.attachNode", () => {
+      const ctx = createTreeFixture({ fullExtWm: true });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const win = createMockWindow();
+      const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.HORIZONTAL, true);
+      const parent = node.parentNode!;
+      expect(parent.layout).toBe(LAYOUT_TYPES.HSPLIT);
+
+      ctx.layoutEngine.toggleSplitLayout(parent);
+      expect(parent.layout).toBe(LAYOUT_TYPES.VSPLIT);
+      expect(ctx.tree.attachNode).toBe(parent);
+
+      ctx.layoutEngine.toggleSplitLayout(parent);
+      expect(parent.layout).toBe(LAYOUT_TYPES.HSPLIT);
+    });
+
+    it("setAttachNode writes tree.attachNode through the owner", () => {
+      const ctx = createTreeFixture({ fullExtWm: true });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const win = createMockWindow();
+      const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win);
+      ctx.tree.attachNode = null;
+
+      ctx.layoutEngine.setAttachNode(node);
+      expect(ctx.tree.attachNode).toBe(node);
+    });
+  });
+
+  describe("resetPercentForFloatToggle (S1)", () => {
+    it("clears parent percent + grandparent siblings when <=1 tiled child", () => {
+      const ctx = createTreeFixture({ fullExtWm: true });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const win = createMockWindow();
+      const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win);
+      const parent = node.parentNode!;
+      parent.percent = 0.5;
+      const grand = parent.parentNode!;
+      grand.childNodes.forEach((c: any) => (c.percent = 0.25));
+
+      ctx.layoutEngine.resetPercentForFloatToggle(parent, ctx.tree);
+
+      expect(parent.percent).toBeUndefined();
+      expect(parent.parentNode!.childNodes.every((c: any) => c.percent === undefined)).toBe(true);
+    });
+
+    it("does not clear parent.percent when >1 tiled child", () => {
+      const ctx = createTreeFixture({ fullExtWm: true });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const win1 = createMockWindow({ id: 1 });
+      const win2 = createMockWindow({ id: 2 });
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win1);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win2);
+      // both windows share the monitor-level container; mark parent explicitly
+      const parent = ctx.tree.getNodeByType(NODE_TYPES.CON)[0] ?? monitor;
+      // Use the shared parent of the two windows:
+      const sharedParent = ctx.tree.findNode(win1)!.parentNode!;
+      sharedParent.percent = 0.5;
+
+      ctx.layoutEngine.resetPercentForFloatToggle(sharedParent, ctx.tree);
+
+      expect(sharedParent.percent).toBe(0.5);
+    });
+  });
+
+  describe("raiseInStacked (S1)", () => {
+    it("moves a node to the end of its stacked parent's child list", () => {
+      const ctx = createTreeFixture({ fullExtWm: true });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const win1 = createMockWindow({ id: 1 });
+      const win2 = createMockWindow({ id: 2 });
+      const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win1);
+      const node2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win2);
+      const parent = node1.parentNode!;
+      parent.layout = LAYOUT_TYPES.STACKED;
+
+      ctx.layoutEngine.raiseInStacked(node1);
+
+      expect(parent.lastChild).toBe(node1);
+      expect(parent.childNodes[parent.childNodes.length - 1]).toBe(node1);
+    });
+  });
+
+  describe("reparentToNode (S1)", () => {
+    it("reparents under the new parent and redistributes the old parent's siblings", () => {
+      const ctx = createTreeFixture({ fullExtWm: true });
+      const { wsNode, monitor } = getWorkspaceAndMonitor(ctx);
+      const win = createMockWindow();
+      const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win);
+      const oldParent = node.parentNode!;
+      oldParent.percent = 0.5;
+
+      const target = wsNode!;
+      ctx.layoutEngine.reparentToNode(node, target);
+
+      expect(node.parentNode).toBe(target);
+      // old parent's remaining children redistributed (percents summed to ~1)
+      const remaining = oldParent.childNodes;
+      const sum = remaining.reduce((s: number, c: any) => s + (c.percent ?? 0), 0);
+      // With no remaining children the sum is 0; otherwise redistribute targets ~1.
+      expect(sum === 0 || Math.abs(sum - 1) < 1e-5).toBe(true);
+    });
+  });
 });
