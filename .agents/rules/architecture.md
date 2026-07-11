@@ -1,8 +1,6 @@
 # Architecture Rules (enforceable)
 
-**Authority:** Synthesized from `codebase-review.md` (F3 target shape, F4 rules 1–12,
-extractions F5 + residual 9–21). Agents **must** follow these rules on every tiling-core
-change. Do not re-open big-bang rewrites of `window.ts`.
+**Authority:** Synthesized from `codebase-review.md` (F3 target shape, F4 rules 1–12, extractions F5 + residual 9–21). Agents **must** follow these rules on every tiling-core change.
 
 **Related (load when needed):**
 
@@ -28,7 +26,7 @@ Prefs write → GSettings / windows.json reload trigger → shell reacts
 
 | Role                        | Module(s)                                                                |
 | --------------------------- | ------------------------------------------------------------------------ |
-| Facade / wiring only        | `window.ts` (`WindowManager`)                                            |
+| Shell facade / public API   | `window.ts` (`WindowManager`) — may be refactored or split freely        |
 | Typed user actions          | `window/actions.ts` + `command-bus.ts`                                   |
 | Float/tile rules            | `rules-engine.ts`                                                        |
 | Window admit/destroy        | `window-tracker.ts` (`admitWindow`)                                      |
@@ -80,15 +78,16 @@ Do **not** invent a second write path.
 | GSettings reactions                | `SettingsBridge`                                   | Mega-`switch (key)` on WM                                   |
 | User command dispatch              | `CommandBus` via `WindowManager.command()`         | New open-coded `switch (action.name)`                       |
 
-**Render scheduling:** `renderTree` may stay on the facade (idle coalesce, freeze, tiling-mode
-gate, then borders). Geometry **apply** stays on `TilingRender`.
+**Render scheduling:** idle coalesce, freeze, and tiling-mode gate may live on the shell entry
+that calls `TilingRender` (today: `WindowManager.renderTree`). Geometry **apply** stays on
+`TilingRender`.
 
 ---
 
 ## 3. Commands are data
 
 - All user actions are **`AnvilAction`** values (`src/lib/extension/window/actions.ts`).
-- Dispatch: `wm.command(action)` → **`CommandBus.dispatch`**.
+- Dispatch: `wm.command(action)` → **`CommandBus.dispatch`** (or successor registry).
 - Adding a command:
   1. Extend the `AnvilAction` union.
   2. Register a handler on `CommandBus` / `CommandBusHost`.
@@ -101,15 +100,17 @@ gate, then borders). Geometry **apply** stays on `TilingRender`.
 
 ---
 
-## 4. Freeze `window.ts` growth
+## 4. Module budget — `window.ts` may be refactored freely
 
-- **`src/lib/extension/window.ts` is frozen for new features.**
-- New behavior lands in **new modules**; WM only constructs, wires host interfaces, and
-  exposes thin facades for tests/E2E.
-- **No new public methods** or feature logic on `WindowManager` without first extracting an
-  existing cluster.
+**Big-bang refactors of `src/lib/extension/window.ts` are allowed and encouraged** when they
+preserve behavior and the ownership rules in §2. Do **not** treat historical “freeze growth”
+or “incremental only” guidance as a ban.
+
+- Prefer landing durable logic in the owner modules (tracker, layout, render, rules, …).
 - Soft module budget: **~500 LOC** per file — split when exceeded.
-- Mechanical moves that shrink WM or improve types are allowed; net new feature surface is not.
+- After a refactor, the public shell API used by tests/E2E (`command`, `extWm`, test probe)
+  should remain usable or be updated in the same change with tests.
+- Incremental extractions and full rewrites are both valid tactics.
 
 ---
 
@@ -205,12 +206,12 @@ Use project terms in code and APIs:
 ```text
 tree (structure, TreeHost)  ←  layout-engine
                             ←  window-tracker / command-bus / tiling-render
-window.ts (facade)          →  wires all of the above
+window.ts (or successor)    →  wires all of the above
 ```
 
 - **`tree.ts` must not import `WindowManager`.** Use `TreeHost`.
-- Subsystems take narrow host interfaces, not the concrete facade.
-- Avoid new cycles: Keybindings → CommandBus/WM command; never Tree → full WM.
+- Subsystems take narrow host interfaces, not the concrete shell facade class.
+- Avoid new cycles: Keybindings → CommandBus/command API; never Tree → full WM.
 
 ---
 
@@ -230,35 +231,35 @@ window.ts (facade)          →  wires all of the above
 
 Before marking a tiling-core task done:
 
-1. [ ] New logic is **not** bulked into `window.ts` (facade only if needed).
-2. [ ] Correct **owner** from the table in §2; no second writer.
-3. [ ] User-facing behavior is an **AnvilAction** + CommandBus/keybinding table entry if applicable.
-4. [ ] Rules/float changes only in **RulesEngine** (+ shared schema if JSON shape changes).
-5. [ ] Lifecycle: enable/disable paired; no getter side effects; no leaky GLib sources.
-6. [ ] Names match **CONTEXT.md** language.
-7. [ ] Unit tests for pure logic; E2E only if Meta integration is required.
-8. [ ] `npm test` (typecheck + lint + unit) green per workflow rules.
-9. [ ] If architectural trade-off is new, append **`.agents/memory/decisions.md`**.
+1. [ ] Correct **owner** from the table in §2; no second writer (refactor may move code out of
+       or restructure `window.ts`).
+2. [ ] User-facing behavior is an **AnvilAction** + CommandBus/keybinding table entry if applicable.
+3. [ ] Rules/float changes only in **RulesEngine** (+ shared schema if JSON shape changes).
+4. [ ] Lifecycle: enable/disable paired; no getter side effects; no leaky GLib sources.
+5. [ ] Names match **CONTEXT.md** language.
+6. [ ] Unit tests for pure logic; E2E when Meta integration or public shell API changes.
+7. [ ] `npm test` (typecheck + lint + unit) green per workflow rules.
+8. [ ] If architectural trade-off is new, append **`.agents/memory/decisions.md`**.
 
 ---
 
 ## Anti-patterns (from the review — do not reintroduce)
 
-| Anti-pattern                                        | Do this instead                      |
-| --------------------------------------------------- | ------------------------------------ |
-| God-object methods on `WindowManager`               | New module + host wire               |
-| Mega-switch on `action.name` or settings key        | CommandBus / SettingsBridge registry |
-| `isFloatingExempt` copy-paste / dual classification | RulesEngine only                     |
-| Tree importing WM; Clutter tabs inside Node         | TreeHost; `tab-decoration.ts`        |
-| `command({ name: "Split" })` from track             | `LayoutEngine.autoSplitFromFocus`    |
-| Busy 120×16ms reconcile                             | Backoff + stop when stable           |
-| `percent === 0` meaning unset                       | `undefined` + `isUnsetPercent`       |
-| Four near-identical resize action names             | One action + direction enum          |
-| Lazy-create Keybindings in a getter                 | `wireKeybindings` after construct    |
-| `null as unknown as T` on extension disable         | Nullable fields / getters            |
-| Exact pixel E2E as primary proof                    | Percents / relative geometry         |
-| Ad-hoc timeouts without names                       | Named session constants + comments   |
-| Substring class match as default                    | Exact / glob / `re:` / `~` policy    |
+| Anti-pattern                                          | Do this instead                                         |
+| ----------------------------------------------------- | ------------------------------------------------------- |
+| New feature logic only on a god-class `WindowManager` | Owner module + host wire (`window.ts` refactor is fine) |
+| Mega-switch on `action.name` or settings key          | CommandBus / SettingsBridge registry                    |
+| `isFloatingExempt` copy-paste / dual classification   | RulesEngine only                                        |
+| Tree importing WM; Clutter tabs inside Node           | TreeHost; `tab-decoration.ts`                           |
+| `command({ name: "Split" })` from track               | `LayoutEngine.autoSplitFromFocus`                       |
+| Busy 120×16ms reconcile                               | Backoff + stop when stable                              |
+| `percent === 0` meaning unset                         | `undefined` + `isUnsetPercent`                          |
+| Four near-identical resize action names               | One action + direction enum                             |
+| Lazy-create Keybindings in a getter                   | `wireKeybindings` after construct                       |
+| `null as unknown as T` on extension disable           | Nullable fields / getters                               |
+| Exact pixel E2E as primary proof                      | Percents / relative geometry                            |
+| Ad-hoc timeouts without names                         | Named session constants + comments                      |
+| Substring class match as default                      | Exact / glob / `re:` / `~` policy                       |
 
 ---
 

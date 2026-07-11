@@ -34,31 +34,31 @@ inherit the main source's `rootDir: "./src"`.
 Source in `src/lib/shared/*.ts` → tests in `test/unit/shared/*.test.ts`.
 Source in `src/lib/extension/*.ts` → tests in `test/unit/extension/*.test.ts`.
 
-## Target seams / freeze
+## Target seams
 
-`WindowManager` (`window.ts`) is a **frozen facade** for new features — enforceable
-rules live in **`.agents/rules/architecture.md`** (synthesized from `codebase-review.md`
-F3–F4 + extractions). Read that file before changing tiling core.
+Enforceable rules: **`.agents/rules/architecture.md`**. Read that before tiling-core work.
 
-| Seam (today)             | Notes                                                           |
-| ------------------------ | --------------------------------------------------------------- |
-| `window/actions.ts`      | `AnvilAction` union; all user commands are data                 |
-| `command-bus.ts`         | Named handler table; `WindowManager.command()` delegates        |
-| `rules-engine.ts`        | Float/tile rules + override CRUD + classification cache         |
-| `window-tracker.ts`      | `admitWindow` / destroy pipeline / reconcile backoff            |
-| `layout-engine.ts`       | Focus/move/swap/split + percent math + `setLayout`              |
-| `focus-controller.ts`    | Directional focus + stacked/tabbed focus helpers                |
-| `grab-resize-session.ts` | Grab begin/end, Wayland live poll, keyboard resize, exemptions  |
-| `border-controller.ts`   | Focus / split border actors                                     |
-| `tab-decoration.ts`      | Tab strip + tabbed container St UI (not in tree.ts)             |
-| `keybinding-table.ts`    | Schema key → AnvilAction table                                  |
-| `settings-bridge.ts`     | GSettings changed → host handler map (prefs→shell bus)          |
-| `TilingRender`           | Sole geometry owner (gaps, constraints, frames); no WM wrappers |
-| `Tree`                   | Structure only; **TreeHost** (no WindowManager import)          |
-| `PointerPolicy`          | Always constructed; hover/warp enable via settings              |
-| `utils/*`                | geometry / window-filters / decorations / version               |
+`window.ts` / `WindowManager` is the shell-facing entry today. **Big-bang refactors of it are
+allowed** (split, rewrite, rename) as long as ownership (§2) and behavior/tests hold.
 
-New behavior goes in new modules and is wired from the facade — do not grow `window.ts`.
+| Seam (today)             | Notes                                                          |
+| ------------------------ | -------------------------------------------------------------- |
+| `window.ts`              | Shell facade; free to refactor; prefer logic in owner modules  |
+| `window/actions.ts`      | `AnvilAction` union; all user commands are data                |
+| `command-bus.ts`         | Named handler table; `WindowManager.command()` delegates       |
+| `rules-engine.ts`        | Float/tile rules + override CRUD + classification cache        |
+| `window-tracker.ts`      | `admitWindow` / destroy pipeline / reconcile backoff           |
+| `layout-engine.ts`       | Focus/move/swap/split + percent math + `setLayout`             |
+| `focus-controller.ts`    | Directional focus + stacked/tabbed focus helpers               |
+| `grab-resize-session.ts` | Grab begin/end, Wayland live poll, keyboard resize, exemptions |
+| `border-controller.ts`   | Focus / split border actors                                    |
+| `tab-decoration.ts`      | Tab strip + tabbed container St UI (not in tree.ts)            |
+| `keybinding-table.ts`    | Schema key → AnvilAction table                                 |
+| `settings-bridge.ts`     | GSettings changed → host handler map (prefs→shell bus)         |
+| `TilingRender`           | Sole geometry owner (gaps, constraints, frames)                |
+| `Tree`                   | Structure only; **TreeHost** (no WindowManager import)         |
+| `PointerPolicy`          | Always constructed; hover/warp enable via settings             |
+| `utils/*`                | geometry / window-filters / decorations / version              |
 
 ## Tree / render invariants (B5)
 

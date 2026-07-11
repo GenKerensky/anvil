@@ -8,6 +8,10 @@
 **`.agents/rules/architecture.md`** (synthesized from F3–F4 + extractions). Prefer that file for
 implementation; keep this document as historical findings and roadmap.
 
+**Superseded guidance:** “not a big-bang rewrite” and “freeze `window.ts` growth” (F4 rule 4 /
+Stage 0) are **lifted**. Big-bang refactors of `window.ts` are allowed under the current
+architecture rules (ownership, lifecycle, tests).
+
 ---
 
 ## 0. Executive summary
@@ -25,7 +29,7 @@ The maintainability problem is concentration and control-flow density:
 
 **`WindowManager` is the bottleneck.** Rough metrics: ~100 methods, ~379 `if` sites, one `command()` switch with ~20 action names, settings `changed` switch with ~15 keys, dense Meta signal wiring, and dual float classification (`processFloats` in render + `isFloatingExempt` in track). Humans cannot hold create/focus/resize/destroy paths in working memory.
 
-**Direction of travel (not a big-bang rewrite):** peel `WindowManager` into a thin facade plus:
+**Direction of travel (historical; big-bang of `window.ts` now allowed):** peel `WindowManager` into a thin facade plus:
 
 - `WindowTracker` (Meta signals + track/destroy)
 - `CommandBus` (action registry; kill the mega-switch)
@@ -35,7 +39,7 @@ The maintainability problem is concentration and control-flow density:
 - `FocusController` + existing `PointerPolicy`
 - `SettingsBridge` (typed setting → effect map)
 
-**Highest leverage first:** (1) freeze growth of `window.ts`, (2) extract `command()` handlers, (3) document tree/render invariants, (4) centralize async “settlement” for Wayland size/map races, (5) finish moving render-only logic out of WM.
+**Highest leverage first (historical):** (1) ~~freeze growth of `window.ts`~~ (lifted), (2) extract `command()` handlers, (3) document tree/render invariants, (4) centralize async “settlement” for Wayland size/map races, (5) finish moving render-only logic out of WM.
 
 ---
 
@@ -545,7 +549,7 @@ Settings change → SettingsBridge → affected modules only
 1. **Lifecycle purity:** No Meta/Shell side effects outside `enable()`; every `enable` side effect has a `disable` inverse.
 2. **One owner per state:** Tree percents only via LayoutEngine; frame writes only via RenderPipeline; Meta signal connects only via WindowTracker.
 3. **Commands are data:** All user actions are `AnvilAction` values handled by a registry—no new `case` in a 500-line switch.
-4. **Freeze `window.ts` growth:** New features land in new modules; facade only wires.
+4. **Module budget (updated):** Soft ~500 LOC; **`window.ts` may be big-bang refactored** (freeze lifted 2026-07-11). Prefer owner modules for durable logic.
 5. **Async settlement:** Map/size/grab races go through named session helpers with unit tests; no ad-hoc timeout constants without a name.
 6. **Rules are data:** Float/tile decisions only through RulesEngine (JSON + built-ins as rule entries).
 7. **Types:** No new public `any`; Meta patches only in `window/types.ts`.
@@ -557,17 +561,17 @@ Settings change → SettingsBridge → affected modules only
 
 ### F5. Prioritized roadmap
 
-| Stage | Work                                                         | Outcome                | Effort | Status                |
-| ----- | ------------------------------------------------------------ | ---------------------- | ------ | --------------------- |
-| **0** | Adopt rules 1–4 in AGENTS/decisions; freeze window.ts growth | Stops bleeding         | S      | **done** (2026-07-10) |
-| **1** | `AnvilAction` union + command registry **inside** WM         | Readable dispatch      | M      | **done** (2026-07-10) |
-| **2** | Extract RulesEngine from `isFloatingExempt` + overrides      | One place for floats   | M      | **done** (2026-07-10) |
-| **3** | Expand TilingRender; delete WM wrappers                      | Clear render ownership | M      | **done** (2026-07-10) |
-| **4** | WindowTracker extraction (signals + track/destroy)           | Testable lifecycle     | L      | **done** (2026-07-10) |
-| **5** | LayoutEngine extraction (tree ops + percent)                 | Pure layout unit tests | L      | **done** (2026-07-10) |
-| **6** | GrabResizeSession                                            | Debuggable resize      | L      | **done** (2026-07-10) |
-| **7** | Remove Tree→WM concrete dependency; strip node UI            | Clean graph            | L      | **done** (2026-07-10) |
-| **8** | Keybinding table + SettingsBridge                            | Less string soup       | M      | **done** (2026-07-10) |
+| Stage | Work                                                     | Outcome                | Effort | Status                |
+| ----- | -------------------------------------------------------- | ---------------------- | ------ | --------------------- |
+| **0** | Adopt architecture rules (window.ts freeze later lifted) | Stops bleeding         | S      | **done** (2026-07-10) |
+| **1** | `AnvilAction` union + command registry **inside** WM     | Readable dispatch      | M      | **done** (2026-07-10) |
+| **2** | Extract RulesEngine from `isFloatingExempt` + overrides  | One place for floats   | M      | **done** (2026-07-10) |
+| **3** | Expand TilingRender; delete WM wrappers                  | Clear render ownership | M      | **done** (2026-07-10) |
+| **4** | WindowTracker extraction (signals + track/destroy)       | Testable lifecycle     | L      | **done** (2026-07-10) |
+| **5** | LayoutEngine extraction (tree ops + percent)             | Pure layout unit tests | L      | **done** (2026-07-10) |
+| **6** | GrabResizeSession                                        | Debuggable resize      | L      | **done** (2026-07-10) |
+| **7** | Remove Tree→WM concrete dependency; strip node UI        | Clean graph            | L      | **done** (2026-07-10) |
+| **8** | Keybinding table + SettingsBridge                        | Less string soup       | M      | **done** (2026-07-10) |
 
 **F5 roadmap complete (stages 0–8):** architecture rules; `AnvilAction` + command registry;
 **`RulesEngine`**; **`TilingRender`**; **`WindowTracker`**; **`LayoutEngine`**;

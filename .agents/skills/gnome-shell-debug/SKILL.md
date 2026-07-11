@@ -215,7 +215,7 @@ Exit codes: `0` pass, `1` repro fail, `2` guardrail abort, `3` shell crash, `130
      b. Read iteration-NNN.json; SESSION_DIR=$(jq -r .session.dir …)
      c. If .results.passed → break
      d. Edit src/; npm run typecheck && npm run lint
-4. npm run test:unit (+ make test-e2e if touching window.ts)
+4. npm run test:unit (+ make test-e2e if Meta lifecycle behavior changes)
 5. Post-fix ritual (below)
 6. Optional: run-debug-loop.sh teardown --session-dir "$SESSION_DIR"
 ```

@@ -53,12 +53,16 @@ briefly focuses `wl-clipboard` at the compositor level; the extension cannot sup
 
 ## Architecture direction (2026-07-10)
 
-Full findings in **`codebase-review.md`** (repo root). Direction of travel without big-bang rewrite:
+Full findings in **`codebase-review.md`** (repo root). Extractions modules (CommandBus, RulesEngine,
+WindowTracker, LayoutEngine, TilingRender, …) are the preferred owners; rules live in
+**`.agents/rules/architecture.md`**.
 
-- Freeze growth of `window.ts`; extract CommandBus, RulesEngine, WindowTracker, LayoutEngine.
-- Keep/extend `TilingRender` as sole geometry apply path.
-- Enforce architecture rules listed in that document (lifecycle purity, one owner per state, typed
-  actions, ~500 LOC module budget).
+### window.ts freeze lifted (2026-07-11)
+
+- Historical review said “not a big-bang rewrite” / “freeze `window.ts` growth” (F4 rule 4 / Stage 0).
+- **Superseded:** agents may **big-bang refactor or rewrite** `src/lib/extension/window.ts` when
+  tests and one-owner rules still hold. Soft ~500 LOC module budget remains a guide, not a ban.
+- Still required: lifecycle purity, one owner per state, commands as data, TreeHost dependency direction.
 
 ### Architecture rules synthesis (2026-07-11)
 
@@ -79,7 +83,7 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 1. **Lifecycle purity** — no Meta/Shell side effects outside `enable()`; every effect has a disable inverse.
 2. **One owner per state** — do not add second writers for frames, percents, or Meta signals.
 3. **Commands are data** — user actions are `AnvilAction` values handled by a registry.
-4. **Freeze `window.ts` growth** — new features in new modules; no new public WM methods without extracting a cluster first.
+4. **Module budget** — soft ~500 LOC; `window.ts` may be big-bang refactored (freeze lifted 2026-07-11).
 
 ### F5 Stage 1 — typed command registry (2026-07-10)
 
