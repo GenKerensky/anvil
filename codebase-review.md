@@ -578,8 +578,8 @@ Address remaining individual findings (including P2/P3) beyond the prioritized F
 | Stage  | Work                                                               | Findings                                                     | Status                |
 | ------ | ------------------------------------------------------------------ | ------------------------------------------------------------ | --------------------- |
 | **9**  | Hygiene: docs, enable/disabled, kbd wire, freeze/constraints notes | B1-1, B2-2 partial, B4-6, B4-8, B4-9, B7-3, B7-4, B8-3, C3-1 | **done** (2026-07-11) |
-| **10** | Extension lifecycle types (optional fields, TestProbe)             | B1-2, B1-3                                                   | pending               |
-| **11** | SessionFlags grouping                                              | B2-3                                                         | pending               |
+| **10** | Extension lifecycle types (optional fields, TestProbe)             | B1-2, B1-3                                                   | **done** (2026-07-11) |
+| **11** | SessionFlags grouping                                              | B2-3                                                         | **done** (2026-07-11) |
 | **12** | WindowResize direction enum + Snap cleanup                         | B3-4, B3-5                                                   | pending               |
 | **13** | Reconcile exponential backoff                                      | B4-2                                                         | pending               |
 | **14** | Single admit API + destroy pipeline                                | B4-5, B4-7                                                   | pending               |

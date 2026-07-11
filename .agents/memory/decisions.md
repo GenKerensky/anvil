@@ -133,6 +133,12 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 11 — SessionFlags (2026-07-11)
+
+- Transient overview/workspace/freeze booleans grouped in
+  `window/session-flags.ts` (`SessionFlagsState` / `createSessionFlags`) with
+  WM accessors for compatibility (B2-3). Grab state stays on GrabResizeSession.
+
 ### Residual Stage 10 — extension lifecycle types (2026-07-11)
 
 - Subsystem fields on `AnvilExtension` are private `_x: T | null` with throwing getters

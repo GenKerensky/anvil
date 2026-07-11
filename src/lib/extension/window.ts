@@ -70,6 +70,7 @@ import type {
   SnapLayoutMoveAction,
   WindowResizeAction,
 } from "./window/actions.js";
+import { createSessionFlags, type SessionFlagsState } from "./window/session-flags.js";
 
 export { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 export type { AnvilMetaWindow, AnvilWindowActor, AnvilMetaWorkspace } from "./window/types.js";
@@ -91,12 +92,46 @@ export class WindowManager extends GObject.Object {
   declare prefsTitle: string;
   declare disabled: boolean;
   declare _signalsBound: boolean;
-  declare _freezeRender: boolean;
-  declare _workspaceChanging: boolean;
-  declare workspaceAdded: boolean;
-  declare workspaceRemoved: boolean;
-  declare fromOverview: boolean;
-  declare toOverview: boolean;
+  /** Grouped transient flags (B2-3). Prefer this._session over new loose fields. */
+  private _session!: SessionFlagsState;
+
+  // Compatibility accessors for session flags (tests / residual call sites).
+  get _freezeRender() {
+    return this._session.freezeRender;
+  }
+  set _freezeRender(v: boolean) {
+    this._session.freezeRender = v;
+  }
+  get _workspaceChanging() {
+    return this._session.workspaceChanging;
+  }
+  set _workspaceChanging(v: boolean) {
+    this._session.workspaceChanging = v;
+  }
+  get workspaceAdded() {
+    return this._session.workspaceAdded;
+  }
+  set workspaceAdded(v: boolean) {
+    this._session.workspaceAdded = v;
+  }
+  get workspaceRemoved() {
+    return this._session.workspaceRemoved;
+  }
+  set workspaceRemoved(v: boolean) {
+    this._session.workspaceRemoved = v;
+  }
+  get fromOverview() {
+    return this._session.fromOverview;
+  }
+  set fromOverview(v: boolean) {
+    this._session.fromOverview = v;
+  }
+  get toOverview() {
+    return this._session.toOverview;
+  }
+  set toOverview(v: boolean) {
+    this._session.toOverview = v;
+  }
 
   // --- Object references ---
   declare _kbd: import("./keybindings.js").Keybindings;
@@ -139,6 +174,7 @@ export class WindowManager extends GObject.Object {
     this._rules = new RulesEngine();
     this.reloadWindowOverrides();
     this.disabled = false;
+    this._session = createSessionFlags();
     // Keybindings wired after construction via wireKeybindings() (B4-9).
     // Host getters use `self` so lazy tree access works during/after construction.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -293,7 +329,6 @@ export class WindowManager extends GObject.Object {
       restoreAlwaysFloat: () => self.restoreAlwaysFloat(),
       clearResizedWindows: () => self._grab.clearResizedWindows(),
     });
-    this._workspaceChanging = false;
     this._initCommandHandlers();
 
     Logger.info("anvil initialized");
