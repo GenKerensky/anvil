@@ -8,9 +8,8 @@ make dist            # Build → .zip artifact
 make clean           # Remove dist/, src/schemas/gschemas.compiled, src/lib/prefs/metadata.js
 npm run format       # Prettier (printWidth 100, tabWidth 2)
 npm run build        # tsc only (compile TS → dist/)
-npm run typecheck             # tsc --noEmit (src + unit + e2e + integration)
+npm run typecheck             # tsc --noEmit (src + unit + e2e)
 npm run typecheck:e2e         # E2E GJS files only
-npm run typecheck:integration # integration GJS files only
 npm run typecheck:all         # same as npm run typecheck
 ```
 
@@ -22,38 +21,28 @@ Generated files: `src/lib/prefs/metadata.js` (from git log), `src/schemas/gschem
 ## Test Commands (CI order)
 
 ```bash
-npm run typecheck    # tsc --noEmit (4 tsconfigs)
+npm run typecheck    # tsc project references (src, unit, e2e)
 npm run lint         # eslint . && prettier --check
-npm run test:unit    # vitest run (~767 tests, no GNOME runtime)
+npm run test:unit    # vitest run (~832 tests, no GNOME runtime)
 npm run test:unit:watch
 
-npm test             # typecheck → lint → unit → integration build → integration all
+npm test             # typecheck → lint → unit
 ```
 
-### Container integration tests
+### Host E2E tests
 
 ```bash
-make test-integration              # Fedora 44 (default, GNOME 50)
-make test-integration FEDORA_VERSION=43  # GNOME 49
-make test-integration FEDORA_VERSION=42  # GNOME 48
-make test-integration-all
+make test-e2e                              # Full suite (host GNOME Shell)
+python3 test/e2e/run.py --tag resize       # Filter by suite/spec name substring
+python3 test/e2e/run.py --no-build         # Skip make dist
 ```
 
-`test/integration/runner.js` is loaded by `--automation-script`. Module-level promise chains (not
-`export async function run()` — headless does not call `run()`). Sets `test-mode=true`, waits for
-ACTIVE extension, bootstraps Jasmine from `/usr/share/jasmine-gjs/`, writes
-`/tmp/anvil-jasmine-results.json`.
+`test/e2e/runner.js` is loaded by `--automation-script`. Exports `async function run()`
+(called by gnome-shell). Sets `test-mode=true`, waits for ACTIVE extension with
+`__anvil_test_state.extWm`, bootstraps Jasmine from `/usr/share/jasmine-gjs/`, writes
+`/tmp/anvil-e2e-results.json`.
 
-Requires Podman + `glib2-devel`. `jasmine-gjs` is built from source in the container image.
-
-### Devkit E2E tests
-
-```bash
-make test-e2e    # Local devkit compositor (host GNOME version)
-```
-
-Uses `gnome-shell --devkit --wayland --automation-script`. `--devkit` **does** call
-`export async function run()`.
+Requires host `gnome-shell` + `jasmine-gjs` + `glib2-devel`.
 
 **Important**: `Shell.Eval` is broken system-wide (returns `(false, '')` for all expressions). Use
 D-Bus APIs (`org.gnome.Shell.Extensions.*`) and direct GJS API calls instead.

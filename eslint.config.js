@@ -36,7 +36,8 @@ export default [
         { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
       ],
       "no-empty": ["error", { allowEmptyCatch: true }],
-      "@typescript-eslint/no-explicit-any": "warn",
+      // GJS/Meta interop still needs any in places; prefer unknown for new public APIs.
+      "@typescript-eslint/no-explicit-any": "off",
     },
   },
   {
@@ -55,38 +56,6 @@ export default [
   },
   {
     files: ["test/e2e/**/*.js"],
-    languageOptions: {
-      globals: {
-        describe: "readonly",
-        fdescribe: "readonly",
-        xdescribe: "readonly",
-        it: "readonly",
-        fit: "readonly",
-        xit: "readonly",
-        expect: "readonly",
-        beforeAll: "readonly",
-        afterAll: "readonly",
-        beforeEach: "readonly",
-        afterEach: "readonly",
-        pending: "readonly",
-        spyOn: "readonly",
-        spyOnProperty: "readonly",
-        jasmine: "readonly",
-      },
-    },
-    rules: {
-      "no-restricted-globals": [
-        "error",
-        { name: "fit", message: "Focused jasmine test (fit) — remove before committing" },
-        {
-          name: "fdescribe",
-          message: "Focused jasmine suite (fdescribe) — remove before committing",
-        },
-      ],
-    },
-  },
-  {
-    files: ["test/integration/specs/**/*.js"],
     languageOptions: {
       globals: {
         describe: "readonly",

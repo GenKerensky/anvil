@@ -41,14 +41,20 @@ describe("Tree", () => {
 
     (global as any).display.get_workspace_manager.mockReturnValue(mockWorkspaceManager);
 
+    const mockSettings = {
+      get_boolean: vi.fn(() => true),
+      get_uint: vi.fn(() => 0),
+    };
     mockWindowManager = {
       ext: {
-        settings: {
-          get_boolean: vi.fn(() => true),
-          get_uint: vi.fn(() => 0),
-        },
+        settings: mockSettings,
       },
+      get settings() {
+        return mockSettings;
+      },
+      focusMetaWindow: null,
       determineSplitLayout: vi.fn(() => LAYOUT_TYPES.HSPLIT),
+      floatingWindow: vi.fn(() => false),
       bindWorkspaceSignals: vi.fn(),
     };
 
@@ -68,8 +74,9 @@ describe("Tree", () => {
       expect(tree.defaultStackHeight).toBe(35);
     });
 
-    it("should have reference to WindowManager", () => {
-      expect(tree.extWm).toBe(mockWindowManager);
+    it("should have TreeHost (not concrete WindowManager)", () => {
+      expect(tree.host).toBe(mockWindowManager);
+      expect(tree.host.determineSplitLayout).toBeDefined();
     });
 
     it("should initialize workspaces", () => {

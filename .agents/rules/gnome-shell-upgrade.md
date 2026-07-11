@@ -21,13 +21,13 @@ Ask the user which version to target, or infer the next unreleased version from 
 
 Fetch the upgrade guide for the target major version from gjs.guide:
 
-```
+```text
 https://gjs.guide/extensions/upgrading/gnome-shell-<major version>.html
 ```
 
 Example for GNOME Shell 51:
 
-```
+```text
 https://gjs.guide/extensions/upgrading/gnome-shell-51.html
 ```
 
@@ -94,7 +94,7 @@ Check `vitest.config.js` — the `resolve.alias` mappings must match the import 
 
 Current aliases in `vitest.config.js`:
 
-```
+```text
 gi://GObject, gi://Gio, gi://GLib, gi://Meta, gi://St, gi://Clutter, gi://Shell
 ```
 
@@ -105,46 +105,17 @@ npm run typecheck   # must pass with new @girs packages
 npm run test:unit   # must pass — mocks may need updates for new API shapes
 ```
 
-## Step 4: Update Containerfile system packages
+## Step 4: Host shell compatibility notes
 
-The E2E test container (`test/e2e/Containerfile`) installs system packages via `dnf`. Between Fedora/GNOME releases, some packages may be renamed, split, or removed.
+E2E runs on the **host** GNOME Shell (`make test-e2e`). When upgrading the workstation or
+distrobox image:
 
-### Review package changes
+- Confirm `gnome-shell --help` still documents `--headless` and `--virtual-monitor`
+- Confirm `jasmine-gjs` still loads from `/usr/share/jasmine-gjs/jasmineBoot.js`
+- Confirm `python3-dbusmock` stubs still satisfy the shell (UPower, NM, SessionManager, etc.)
+- Check GNOME Shell CI for the target branch for new required D-Bus services:
 
-Check if any of these packages changed in the target Fedora version:
-
-- **GNOME Shell stack**: `gnome-shell`, `mutter`, `gnome-extensions-app`, `gnome-text-editor`
-- **D-Bus**: `dbus-daemon`, `dbus-tools` (Fedora ≥41 uses `dbus-broker`, but `dbus-daemon` provides the session bus for `start-session.sh`)
-- **GLib**: `glib2`, `glib2-devel`
-- **Python mocks**: `python3`, `python3-dbus`, `python3-dbusmock`, `python3-gobject`
-- **AT-SPI/Dogtail**: `at-spi2-core`, `at-spi2-atk`, `python3-dogtail`, `python3-pip`
-- **Utilities**: `jq`, `procps-ng`, `util-linux`, `which`, `findutils`
-- **Init/sudo**: `sudo`, `systemd`, `systemd-udev`
-
-To check for package renames/removals:
-
-```bash
-# Check if a package exists in the target Fedora
-podman run --rm fedora:<target> dnf list <package> 2>/dev/null || echo "NOT FOUND"
-# Check what provides a missing package
-podman run --rm fedora:<target> dnf provides <file-or-provides>
-```
-
-### Python packages
-
-The `behave-html-pretty-formatter` is installed via pip3:
-
-```dockerfile
-RUN pip3 install behave-html-pretty-formatter
-```
-
-Check if the target Fedora's Python version changed (e.g. python3 → python3.13), which would affect pip paths.
-
-### systemd unit check
-
-The systemd unit `gnome-headless.service` references specific paths and env vars. Between GNOME releases, environment variables like `GNOME_SHELL_SESSION_MODE`, `MUTTER_DEBUG_DUMMY_MODE_SPECS`, or `GJS_DEBUG_OUTPUT` may change behavior. Check the GNOME Shell CI config for the target version:
-
-```
+```text
 https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/gnome-<major>/.gitlab-ci.yml
 ```
 
@@ -227,84 +198,31 @@ make build    # Build to dist/ (for local testing)
 
 Verify `npm run typecheck` and `npm run lint` pass.
 
-## Step 7: Run E2E tests against the target version
-
-### Build the container image
-
-```bash
-./test/e2e/build-container.sh <fedora version>
-```
-
-For Fedora 45 (GNOME 51):
-
-```bash
-./test/e2e/build-container.sh 45
-```
-
-If the container image fails to build (e.g. the Fedora version isn't released yet), document this and skip E2E testing.
-
-### Run the tests
-
-```bash
-make test-e2e FEDORA_VERSION=<fedora version>
-```
-
-Or equivalently:
-
-```bash
-./test/integration/run-tests.sh -v <fedora version>
-```
-
-### Run unit tests
+## Step 7: Run tests on the host GNOME version
 
 ```bash
 npm run test:unit
+make test-e2e
 ```
+
+E2E targets the **host** shell version only (no multi-Fedora container matrix).
 
 ## Step 8: Update documentation
 
-After running tests, update the test tracking document (`test/TESTS.md`):
+Update `README.md` / `metadata.json` supported shell versions when the host upgrade lands.
 
-1. Add a new row or note for the target version showing which tests pass/fail
-2. If any tests fail, document the failure with a brief description
-3. Update the "Tests run across" line: `Tests run across Fedora 42 (GNOME 48), 43 (GNOME 49), 44 (GNOME 50), and <new> (GNOME <new>).`
-
-Update the README (`README.md`):
-
-1. If all unit + E2E tests pass: add the new version to the supported versions table with "✅ Supported"
-2. If tests fail: add the new version with "⚠️ In testing" or note the failures
-3. Update the `shell-version` comment: `"Works on GNOME 45 through <new version>"`
-4. Update the "Supported GNOME Shell versions" table in the E2E Testing section
-5. Update `test/e2e/Containerfile` and `test/e2e/STRATEGY.md` version tables
-
-## Step 9: Update E2E infrastructure (if needed)
-
-Update these files with the new version:
-
-- `test/e2e/Containerfile` — add the new Fedora/GNOME mapping comment
-- `test/e2e/STRATEGY.md` — add the new version row in the table
-- `Makefile` — add a comment line for the new `FEDORA_VERSION`
-- `test/e2e/build-container.sh` — add the new version to the help text
-
-## Step 10: Verification checklist
+## Step 9: Verification checklist
 
 - [ ] Migration guide reviewed; all affected code updated
 - [ ] `@girs/*` npm packages updated to match target GNOME version
-- [ ] `Containerfile` system packages reviewed for renames/removals
 - [ ] `metadata.json` `shell-version` includes new version
 - [ ] `npm install` completes without errors
 - [ ] `npm run typecheck` passes
 - [ ] `npm run lint` passes
-- [ ] `npm run test:unit` passes (182+ tests)
+- [ ] `npm run test:unit` passes
 - [ ] `make dist` succeeds
-- [ ] Container image builds for the new Fedora version
-- [ ] E2E tests run against the new version
-- [ ] `test/TESTS.md` updated with version-specific notes
-- [ ] `README.md` supported versions table updated
-- [ ] `test/e2e/Containerfile` version comment updated
-- [ ] `test/e2e/STRATEGY.md` version table updated
-- [ ] `Makefile` version comment updated
-- [ ] `test/e2e/build-container.sh` help text updated
+- [ ] `make test-e2e` passes on the upgraded host shell
+- [ ] `README.md` supported versions updated
 
 ## What NOT to do
 

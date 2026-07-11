@@ -90,6 +90,22 @@ E2E_DIR = pathlib.Path(__file__).resolve().parent
 OUTPUT_DIR = E2E_DIR / "output"
 
 RESULTS_PATH = pathlib.Path("/tmp/anvil-e2e-results.json")
+JASMINE_BOOT = pathlib.Path("/usr/share/jasmine-gjs/jasmineBoot.js")
+
+
+def require_jasmine_gjs() -> None:
+    """Fail early with install instructions if jasmine-gjs is missing."""
+    if JASMINE_BOOT.is_file():
+        return
+    _fail(
+        "jasmine-gjs not found at /usr/share/jasmine-gjs/\n"
+        "  E2E tests need jasmine-gjs installed system-wide. From source:\n"
+        "    git clone --depth=1 https://github.com/ptomato/jasmine-gjs.git\n"
+        "    cd jasmine-gjs && meson setup _build --prefix=/usr\n"
+        "    ninja -C _build && sudo ninja -C _build install\n"
+        "  On immutable hosts (Bazzite), install inside a distrobox with gnome-shell."
+    )
+    raise SystemExit(1)
 
 
 # ── Step 2: Build extension ────────────────────────────────────────────────────
@@ -371,9 +387,11 @@ def main() -> int:
 
     print("")
     print("══════════════════════════════════")
-    print("  Anvil Devkit E2E Tests")
+    print("  Anvil E2E Tests (headless)")
     print("══════════════════════════════════")
     print("")
+
+    require_jasmine_gjs()
 
     # Clean up stale results file from a previous run
     if RESULTS_PATH.exists():
@@ -387,9 +405,9 @@ def main() -> int:
     install_extension_files()
 
     with DevkitSession(tag_filter=tag_filter) as _session:
-        _info("Running E2E tests inside devkit…")
-        results = wait_for_results(RESULTS_PATH)
-        exit_code = print_results(results, title="Anvil Devkit E2E Results")
+        _info("Running E2E tests inside headless gnome-shell…")
+        results = wait_for_results(RESULTS_PATH, timeout=900.0)
+        exit_code = print_results(results, title="Anvil E2E Results")
 
     return exit_code
 

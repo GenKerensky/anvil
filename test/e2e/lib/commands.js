@@ -7,7 +7,6 @@
 
 import Meta from "gi://Meta";
 import Shell from "gi://Shell";
-import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GLib from "gi://GLib";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
@@ -15,7 +14,6 @@ import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import { sleep } from "../../lib/shared-commands.js";
 
 const UUID = "anvil@GenKerensky.github.com";
-const SCHEMA_ID = "org.gnome.shell.extensions.anvil";
 
 /* ── Application management ──────────────────────────────────────────── */
 
@@ -234,7 +232,7 @@ export function takeScreenshot(path) {
       15000,
       null
     );
-  } catch (e) {
+  } catch {
     /* screenshot may fail silently in devkit */
   }
 }

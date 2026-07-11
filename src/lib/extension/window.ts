@@ -18,7 +18,6 @@
 
 // Gnome imports
 import GLib from "gi://GLib";
-import Clutter from "gi://Clutter";
 
 import GObject from "gi://GObject";
 import Meta from "gi://Meta";
@@ -40,48 +39,43 @@ import {
   Tree,
   Queue,
   Node,
-  POSITION,
   LAYOUT_TYPES,
   ORIENTATION_TYPES,
   NODE_TYPES,
   RectLike,
 } from "./tree.js";
 import { production } from "../shared/settings.js";
-import { safeRaise, safeFocus, safeActivate } from "./mutter-safe.js";
+import { safeRaise, safeActivate } from "./mutter-safe.js";
 import { PointerPolicy, type PointerFocusSource } from "./pointer-policy.js";
 import { TilingRender } from "./tiling-render.js";
-import { WINDOW_MODES, GRAB_TYPES, INVALID_WINDOW_TYPES } from "./window/constants.js";
+import { RulesEngine } from "./rules-engine.js";
+import { WindowTracker } from "./window-tracker.js";
+import { LayoutEngine } from "./layout-engine.js";
+import { GrabResizeSession } from "./grab-resize-session.js";
+import { SettingsBridge } from "./settings-bridge.js";
+import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type {
   AnvilMetaWindow,
   AnvilWindowActor,
   AnvilMetaWorkspace,
   AnvilExtension,
 } from "./window/types.js";
+import type {
+  AnvilAction,
+  AnvilActionName,
+  FloatAction,
+  DirectionAction,
+  SplitAction,
+  GapSizeAction,
+  SnapLayoutMoveAction,
+  WindowResizeAction,
+} from "./window/actions.js";
 
 export { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 export type { AnvilMetaWindow, AnvilWindowActor, AnvilMetaWorkspace } from "./window/types.js";
-
-function windowTitleMatchesOverride(windowTitle: string | null, overrideTitle: string): boolean {
-  if (overrideTitle === " ") {
-    return overrideTitle === windowTitle;
-  }
-
-  const lowerWindowTitle = (windowTitle || "").toLowerCase();
-  if (!lowerWindowTitle) return false;
-
-  return (
-    overrideTitle.split(",").filter((titlePattern: string) => {
-      const lowerPattern = titlePattern.toLowerCase();
-      if (lowerPattern.startsWith("!")) {
-        return !lowerWindowTitle.includes(lowerPattern.slice(1));
-      }
-      if (lowerPattern.startsWith("=")) {
-        return lowerWindowTitle === lowerPattern.slice(1);
-      }
-      return lowerWindowTitle.includes(lowerPattern);
-    }).length > 0
-  );
-}
+export type { AnvilAction, AnvilActionName } from "./window/actions.js";
+export { RulesEngine, windowTitleMatchesOverride } from "./rules-engine.js";
+export type { RuleMatch, RuleSource } from "./rules-engine.js";
 
 export class WindowManager extends GObject.Object {
   static {
@@ -89,7 +83,9 @@ export class WindowManager extends GObject.Object {
   }
 
   ext: AnvilExtension;
+  /** Synced with RulesEngine / ConfigManager (same object after reload). */
   windowProps!: WindowConfig;
+  private _rules!: RulesEngine;
 
   // --- State ---
   declare prefsTitle: string;
@@ -101,18 +97,19 @@ export class WindowManager extends GObject.Object {
   declare workspaceRemoved: boolean;
   declare fromOverview: boolean;
   declare toOverview: boolean;
-  declare cancelGrab: boolean;
 
   // --- Object references ---
-  declare _settingsChangedId: number;
   declare _kbd: import("./keybindings.js").Keybindings;
   declare _tree: Tree;
   declare eventQueue: Queue;
   declare theme: import("./extension-theme-manager.js").ExtensionThemeManager;
   declare _pointerPolicy: PointerPolicy | null;
   declare _tilingRender: TilingRender;
+  declare _tracker: WindowTracker;
+  declare _layout: LayoutEngine;
+  declare _grab: GrabResizeSession;
+  declare _settingsBridge: SettingsBridge;
   declare nodeWinAtPointer: Node<any> | null;
-  declare _draggedNodeWindow: Node<any> | null;
   declare sortedWindows: Meta.Window[];
 
   // --- Signal handler ID arrays ---
@@ -125,24 +122,13 @@ export class WindowManager extends GObject.Object {
   declare _queueSourceId: number;
   declare _renderTreeSrcId: number;
   declare _reloadTreeSrcId: number;
-  declare _windowReconcileSrcId: number;
   declare _workspaceChangingTimeoutId: number;
   declare _prefsOpenSrcId: number;
-  declare _liveResizeSrcId: number;
 
-  // --- Grab state ---
-  declare grabOp: Meta.GrabOp;
-
-  // --- Resize exemption tracking ---
-  // Map<windowId, resizeCount> — only exempt after 2+ completed grabs
-  // to avoid race with async Wayland size-changed signals.
-  declare _resizedWindows: Map<number, number>;
-
-  // --- Live resize pair tracking ---
-  // Stores the resize pair found during _handleResizing so that
-  // _liveResizeNeighbors can process the common ancestor when the
-  // pair lives in a different parent container (diffParent case).
-  declare _lastResizePair: Node<any> | null;
+  // --- Command registry (AnvilAction name → handler) ---
+  private _commandHandlers!: {
+    [K in AnvilActionName]: (action: Extract<AnvilAction, { name: K }>) => void;
+  };
 
   constructor(ext: AnvilExtension) {
     super();
@@ -150,9 +136,43 @@ export class WindowManager extends GObject.Object {
     this.prefsTitle = `Anvil ${_("Settings")} - ${
       !production ? "DEV" : `${PACKAGE_VERSION}-${ext.metadata.version}`
     }`;
+    this._rules = new RulesEngine();
     this.reloadWindowOverrides();
     this._kbd = this.ext.keybindings;
-    this._tree = new Tree(this);
+    // Host getters use `self` so lazy tree access works during/after construction.
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    // LayoutEngine before Tree: Tree._initWorkspaces calls determineSplitLayout().
+    this._layout = new LayoutEngine({
+      get tree() {
+        return self.tree;
+      },
+      get settings() {
+        return self.ext.settings;
+      },
+      get focusMetaWindow() {
+        return self.focusMetaWindow;
+      },
+      get currentMonWsNode() {
+        return self.currentMonWsNode;
+      },
+      notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
+      moveWindow: (w, rect) => self.move(w, rect),
+      rectForMonitor: (n, i) => self.rectForMonitor(n, i),
+      sameParentMonitor: (a, b) => self.sameParentMonitor(a, b),
+      floatingWindow: (n) => self.floatingWindow(n),
+    });
+    this._tree = new Tree({
+      get settings() {
+        return self.ext.settings;
+      },
+      get focusMetaWindow() {
+        return self.focusMetaWindow;
+      },
+      determineSplitLayout: () => self.determineSplitLayout(),
+      floatingWindow: (n) => self.floatingWindow(n),
+      bindWorkspaceSignals: (ws) => self.bindWorkspaceSignals(ws),
+    });
     this.eventQueue = new Queue();
     this.theme = this.ext.theme;
     this._pointerPolicy = null;
@@ -167,15 +187,132 @@ export class WindowManager extends GObject.Object {
       isFloatingExempt: (w) => this.isFloatingExempt(w),
       isActiveWindowWorkspaceTiled: (w) => this.isActiveWindowWorkspaceTiled(w),
       getTiledChildren: (nodes) => this.tree.getTiledChildren(nodes),
-      getResizeCount: (id) => this._resizedWindows.get(id) || 0,
+      getResizeCount: (id) => self._grab.getResizeCount(id),
       findParent: (node, type) => this.tree.findParent(node, type),
+      computeSizes: (n, c) => self._layout.computeSizes(n, c),
     });
-    this.cancelGrab = false;
+    this._grab = new GrabResizeSession({
+      get tree() {
+        return self.tree;
+      },
+      get focusMetaWindow() {
+        return self.focusMetaWindow;
+      },
+      get settings() {
+        return self.ext.settings;
+      },
+      get nodeWinAtPointer() {
+        return self.nodeWinAtPointer;
+      },
+      set nodeWinAtPointer(n) {
+        self.nodeWinAtPointer = n;
+      },
+      get eventQueueLength() {
+        return self.eventQueue.length;
+      },
+      findNodeWindow: (w) => self.findNodeWindow(w),
+      findNodeWindowAtPointer: (n) => self.findNodeWindowAtPointer(n) ?? null,
+      trackCurrentMonWs: () => self.trackCurrentMonWs(),
+      freezeRender: () => self.freezeRender(),
+      unfreezeRender: () => self.unfreezeRender(),
+      renderTree: (from, force) => self.renderTree(from, force),
+      queueEvent: (ev, interval) => self.queueEvent(ev, interval),
+      move: (w, rect) => self.move(w, rect),
+      calculateGaps: (n) => self._tilingRender.calculateGaps(n),
+      processNode: (n) => self._tilingRender.processNode(n),
+      getMonitorConstraints: (i) => self._tilingRender.getMonitorConstraints(i),
+      floatingWindow: (n) => !!self.floatingWindow(n),
+      minimizedWindow: (n) => !!self.minimizedWindow(n),
+      allowDragDropTile: () => Boolean(self.allowDragDropTile()),
+      moveWindowToPointer: (n, preview) => self.moveWindowToPointer(n, preview),
+      updateStackedFocus: (n) => self.updateStackedFocus(n),
+      updateTabbedFocus: (n) => self.updateTabbedFocus(n),
+    });
+    this._tracker = new WindowTracker({
+      get tree() {
+        return self.tree;
+      },
+      get focusMetaWindow() {
+        return self.focusMetaWindow;
+      },
+      get prefsTitle() {
+        return self.prefsTitle;
+      },
+      get windowsAllWorkspaces() {
+        return self.windowsAllWorkspaces;
+      },
+      get settings() {
+        return self.ext.settings;
+      },
+      isFloatingExempt: (w) => self.isFloatingExempt(w),
+      isActiveWindowWorkspaceTiled: (w) => self.isActiveWindowWorkspaceTiled(w),
+      floatingWindow: (n) => self.floatingWindow(n),
+      reloadTree: (from) => self.reloadTree(from),
+      updateMetaWorkspaceMonitor: (from, mon, w) => self.updateMetaWorkspaceMonitor(from, mon, w),
+      updateMetaPositionSize: (w, from) => self.updateMetaPositionSize(w, from),
+      renderTree: (from, force) => self.renderTree(from, force),
+      queueEvent: (ev, interval) => self.queueEvent(ev, interval),
+      unfreezeRender: () => self.unfreezeRender(),
+      ensureBorderActors: (a) => self.ensureBorderActors(a),
+      hideActorBorder: (a) => self.hideActorBorder(a),
+      updateBorderLayout: () => self.updateBorderLayout(),
+      updateDecorationLayout: () => self.updateDecorationLayout(),
+      updateStackedFocus: (n) => self.updateStackedFocus(n),
+      updateTabbedFocus: (n) => self.updateTabbedFocus(n),
+      notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
+      moveCenter: (w) => self.moveCenter(w),
+      removeFloatOverride: (w, withWmId) => self.removeFloatOverride(w, withWmId),
+      trackCurrentMonWs: () => self.trackCurrentMonWs(),
+      autoSplitFromFocus: () => self.layoutEngine.autoSplitFromFocus(),
+    });
+    this._settingsBridge = new SettingsBridge({
+      get settings() {
+        return self.ext.settings;
+      },
+      get tree() {
+        return self.tree;
+      },
+      reloadWindowOverrides: () => self.reloadWindowOverrides(),
+      bordersEnabled: () => self._bordersEnabled(),
+      ensureAllBorderActors: () => self.ensureAllBorderActors(),
+      updateBorderLayout: () => self.updateBorderLayout(),
+      destroyAllBorderActors: () => self.destroyAllBorderActors(),
+      pointerPolicyNeeded: () => self._pointerPolicyNeeded(),
+      ensurePointerPolicy: () => self._ensurePointerPolicy(),
+      teardownPointerPolicy: () => self._teardownPointerPolicy(),
+      setHoverFocusEnabled: (enabled) => {
+        self._pointerPolicy?.setHoverFocusEnabled(enabled);
+      },
+      renderTree: (from, force) => self.renderTree(from, force),
+      determineSplitLayout: () => self.determineSplitLayout(),
+      reloadStylesheet: () => {
+        self.theme?.reloadStylesheet();
+      },
+      cleanupAlwaysFloat: () => self.cleanupAlwaysFloat(),
+      restoreAlwaysFloat: () => self.restoreAlwaysFloat(),
+      clearResizedWindows: () => self._grab.clearResizedWindows(),
+    });
     this._workspaceChanging = false;
-    this._resizedWindows = new Map();
-    this._lastResizePair = null;
+    this._initCommandHandlers();
 
     Logger.info("anvil initialized");
+  }
+
+  /** Grab session state — Stage 6 facades for tests and commands. */
+  get grabOp() {
+    return this._grab.grabOp;
+  }
+  set grabOp(v: Meta.GrabOp) {
+    this._grab.grabOp = v;
+  }
+  get cancelGrab() {
+    return this._grab.cancelGrab;
+  }
+  set cancelGrab(v: boolean) {
+    this._grab.cancelGrab = v;
+  }
+  get _resizedWindows() {
+    return this._grab.resizedWindows;
   }
 
   get pointerPolicy() {
@@ -184,6 +321,10 @@ export class WindowManager extends GObject.Object {
 
   get tilingRender() {
     return this._tilingRender;
+  }
+
+  get layoutEngine() {
+    return this._layout;
   }
 
   get shouldFocusOnHover() {
@@ -243,59 +384,19 @@ export class WindowManager extends GObject.Object {
   }
 
   addFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
-    const configMgr = this.ext.configMgr;
-    const currentProps = configMgr.windowProps;
-    if (!currentProps) return;
-    const overrides = currentProps.overrides;
-    const wmClass = metaWindow.get_wm_class() ?? "";
-    const wmId = metaWindow.get_id();
-
-    for (const override of overrides) {
-      // if the window is already floating
-      if (
-        override.wmClass === wmClass &&
-        override.mode === "float" &&
-        !override.wmTitle &&
-        (!withWmId || override.wmId === String(wmId))
-      )
-        return;
-    }
-    overrides.push({
-      wmClass,
-      wmId: withWmId ? String(wmId) : undefined,
-      mode: "float",
-    });
-
-    // Save the updated overrides back to the ConfigManager
-    currentProps.overrides = overrides;
-    configMgr.windowProps = currentProps;
+    this._rules.addFloatOverride(metaWindow, withWmId, this.ext.configMgr);
+    this.windowProps = this._rules.windowProps;
   }
 
   removeFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
-    const configMgr = this.ext.configMgr;
-    const currentProps = configMgr.windowProps;
-    if (!currentProps) return;
-    let overrides = currentProps.overrides;
-    const wmClass = metaWindow.get_wm_class() ?? "";
-    const wmId = String(metaWindow.get_id());
-    overrides = overrides.filter(
-      (override) =>
-        !(
-          override.wmClass === wmClass &&
-          // rules with a Title are written by the user and peristent
-          !override.wmTitle &&
-          (!withWmId || override.wmId === wmId)
-        )
-    );
-
-    // Save the updated overrides back to the ConfigManager
-    currentProps.overrides = overrides;
-    configMgr.windowProps = currentProps;
+    this._rules.removeFloatOverride(metaWindow, withWmId, this.ext.configMgr);
+    this.windowProps = this._rules.windowProps;
   }
 
-  toggleFloatingMode(action: any, metaWindow: Meta.Window) {
+  toggleFloatingMode(action: FloatAction, metaWindow: Meta.Window) {
     const nodeWindow = this.findNodeWindow(metaWindow);
-    if (!nodeWindow || !(action || action.mode)) return;
+    // action is required; historical guard was `!(action || action.mode)`.
+    if (!nodeWindow || !action) return;
     if (nodeWindow.nodeType !== NODE_TYPES.WINDOW) return;
 
     const withWmId = action.name === "FloatToggle";
@@ -304,6 +405,7 @@ export class WindowManager extends GObject.Object {
     if (floatingExempt) {
       this.removeFloatOverride(metaWindow, withWmId);
       this.windowProps = this.ext.configMgr.windowProps ?? this.windowProps;
+      this._rules.windowProps = this.windowProps;
       if (!this.isActiveWindowWorkspaceTiled(metaWindow)) {
         nodeWindow.mode = WINDOW_MODES.FLOAT;
       } else {
@@ -312,6 +414,7 @@ export class WindowManager extends GObject.Object {
     } else {
       this.addFloatOverride(metaWindow, withWmId);
       this.windowProps = this.ext.configMgr.windowProps ?? this.windowProps;
+      this._rules.windowProps = this.windowProps;
       nodeWindow.mode = WINDOW_MODES.FLOAT;
     }
   }
@@ -345,8 +448,7 @@ export class WindowManager extends GObject.Object {
 
     this._displaySignals = [
       extDisplay.connect("window-created", (_d, w) => {
-        this._trackWindowWhenReady(_d, w);
-        this._scheduleCurrentWindowReconcile();
+        this._tracker.onWindowCreated(_d, w);
       }),
       extDisplay.connect("grab-op-begin", (_d, m, g) => this._handleGrabOpBegin(_d, m, g)),
       extDisplay.connect("window-entered-monitor", (_, monitor, metaWindow) => {
@@ -381,16 +483,16 @@ export class WindowManager extends GObject.Object {
 
     this._windowManagerSignals = [
       shellWm.connect("map", (_, actor) => {
-        this._trackMappedWindowActor(actor);
+        this._tracker.trackMappedActor(actor);
       }),
       shellWm.connect("minimize", () => {
         this.hideWindowBorders();
         const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
         if (focusNodeWindow) {
           if (this.tree.getTiledChildren(focusNodeWindow!.parentNode!.childNodes).length === 0) {
-            this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!.parentNode);
+            this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!.parentNode);
           }
-          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
+          this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
         }
 
         const prevFrozen = this._freezeRender;
@@ -401,7 +503,7 @@ export class WindowManager extends GObject.Object {
       shellWm.connect("unminimize", () => {
         const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
         if (focusNodeWindow) {
-          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
+          this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
         }
 
         const prevFrozen = this._freezeRender;
@@ -466,103 +568,8 @@ export class WindowManager extends GObject.Object {
       this.bindWorkspaceSignals(workspace);
     }
 
-    const settings = this.ext.settings;
-
-    // Phase A fix: Save settings handler ID for cleanup on disable
-    // Credit: mayconrcmello/forge PR #523
-    this._settingsChangedId = settings.connect("changed", (_, settingName) => {
-      switch (settingName) {
-        case "window-overrides-reload-trigger":
-          // Reload window overrides when triggered by preferences
-          // This prevents the main extension from overwriting changes made by preferences
-          this.reloadWindowOverrides();
-          break;
-        case "focus-border-toggle":
-        case "split-border-toggle":
-        case "focus-border-hidden-on-single":
-          if (this._bordersEnabled()) {
-            this.ensureAllBorderActors();
-            this.updateBorderLayout();
-          } else {
-            this.destroyAllBorderActors();
-          }
-          break;
-        case "focus-on-hover-enabled":
-        case "move-pointer-focus-enabled":
-          if (this._pointerPolicyNeeded()) {
-            this._ensurePointerPolicy();
-            if (settingName === "focus-on-hover-enabled") {
-              this._pointerPolicy!.setHoverFocusEnabled(settings.get_boolean(settingName));
-            }
-          } else {
-            this._teardownPointerPolicy();
-          }
-          break;
-        case "tiling-mode-enabled":
-          this.renderTree(settingName);
-          break;
-        case "window-gap-size-increment":
-        case "window-gap-size":
-        case "window-gap-hidden-on-single":
-        case "workspace-skip-tile":
-          this.renderTree(settingName, true);
-          break;
-        case "stacked-tiling-mode-enabled":
-          if (!settings.get_boolean(settingName)) {
-            const stackedNodes = this.tree.getNodeByLayout(LAYOUT_TYPES.STACKED);
-            stackedNodes.forEach((node) => {
-              node.prevLayout = node.layout;
-              node.layout = this.determineSplitLayout();
-            });
-          } else {
-            const hSplitNodes = this.tree.getNodeByLayout(LAYOUT_TYPES.HSPLIT);
-            const vSplitNodes = this.tree.getNodeByLayout(LAYOUT_TYPES.VSPLIT);
-            Array.prototype.push.apply(hSplitNodes, vSplitNodes);
-            hSplitNodes.forEach((node) => {
-              if (node.prevLayout && node.prevLayout === LAYOUT_TYPES.STACKED) {
-                node.layout = LAYOUT_TYPES.STACKED;
-              }
-            });
-          }
-          this.renderTree(settingName);
-          break;
-        case "tabbed-tiling-mode-enabled":
-          if (!settings.get_boolean(settingName)) {
-            const tabbedNodes = this.tree.getNodeByLayout(LAYOUT_TYPES.TABBED);
-            tabbedNodes.forEach((node) => {
-              node.prevLayout = node.layout;
-              node.layout = this.determineSplitLayout();
-            });
-          } else {
-            const hSplitNodes = this.tree.getNodeByLayout(LAYOUT_TYPES.HSPLIT);
-            const vSplitNodes = this.tree.getNodeByLayout(LAYOUT_TYPES.VSPLIT);
-            Array.prototype.push.apply(hSplitNodes, vSplitNodes);
-            hSplitNodes.forEach((node) => {
-              if (node.prevLayout && node.prevLayout === LAYOUT_TYPES.TABBED) {
-                node.layout = LAYOUT_TYPES.TABBED;
-              }
-            });
-          }
-          this.renderTree(settingName);
-          break;
-        case "css-updated":
-          this.theme?.reloadStylesheet();
-          break;
-        case "float-always-on-top-enabled":
-          if (!settings.get_boolean(settingName)) {
-            this.cleanupAlwaysFloat();
-          } else {
-            this.restoreAlwaysFloat();
-          }
-          break;
-        case "monitor-constraints":
-          this._resizedWindows.clear();
-          this.renderTree(settingName, true);
-          break;
-        default:
-          break;
-      }
-    });
+    // Stage 8: settings key → handler map (SettingsBridge)
+    this._settingsBridge.enable();
 
     this._overviewSignals = [
       Main.overview.connect("hiding", () => {
@@ -647,16 +654,7 @@ export class WindowManager extends GObject.Object {
       if (!ws.workspaceSignals) {
         const workspaceSignals = [
           metaWorkspace.connect("window-added", (_, metaWindow) => {
-            this._trackWindowWhenReady(global.display, metaWindow, () => {
-              if (this._validWindow(metaWindow)) {
-                this.updateMetaWorkspaceMonitor(
-                  "window-added",
-                  metaWindow.get_monitor(),
-                  metaWindow
-                );
-              }
-            });
-            this._scheduleCurrentWindowReconcile();
+            this._tracker.onWorkspaceWindowAdded(metaWindow);
           }),
         ];
         ws.workspaceSignals = workspaceSignals;
@@ -664,387 +662,431 @@ export class WindowManager extends GObject.Object {
     }
   }
 
-  // TODO move this in command.js
-  command(action: any) {
+  /**
+   * Register AnvilAction handlers. New commands: extend AnvilAction and add a
+   * handler here — do not reintroduce a mega-switch (architecture rule 3).
+   */
+  private _initCommandHandlers() {
+    this._commandHandlers = {
+      FloatToggle: (a) => this._handleFloat(a),
+      FloatClassToggle: (a) => this._handleFloat(a),
+      FloatNonPersistentToggle: (a) => this._handleFloat(a),
+      Move: (a) => this._handleMove(a),
+      Focus: (a) => this._handleFocus(a),
+      Swap: (a) => this._handleSwap(a),
+      Split: (a) => this._handleSplit(a),
+      LayoutToggle: () => this._handleLayoutToggle(),
+      FocusBorderToggle: () => this._handleFocusBorderToggle(),
+      TilingModeToggle: () => this._handleTilingModeToggle(),
+      GapSize: (a) => this._handleGapSize(a),
+      WorkspaceActiveTileToggle: () => this._handleWorkspaceActiveTileToggle(),
+      LayoutStackedToggle: () => this._handleLayoutStackedToggle(),
+      LayoutTabbedToggle: () => this._handleLayoutTabbedToggle(),
+      CancelOperation: () => this._handleCancelOperation(),
+      PrefsOpen: () => this._handlePrefsOpen(),
+      WindowSwapLastActive: () => this._handleWindowSwapLastActive(),
+      SnapLayoutMove: (a) => this._handleSnapLayoutMove(a),
+      ShowTabDecorationToggle: () => this._handleShowTabDecorationToggle(),
+      WindowResizeRight: (a) => this._handleWindowResize(a),
+      WindowResizeLeft: (a) => this._handleWindowResize(a),
+      WindowResizeTop: (a) => this._handleWindowResize(a),
+      WindowResizeBottom: (a) => this._handleWindowResize(a),
+      WindowClose: () => this._handleWindowClose(),
+    };
+  }
+
+  /** Dispatch a typed user action via the in-WM handler registry. */
+  command(action: AnvilAction) {
+    const handler = this._commandHandlers[action.name] as ((a: AnvilAction) => void) | undefined;
+    if (handler) {
+      handler.call(this, action);
+    }
+  }
+
+  private _handleFloat(action: FloatAction) {
     const focusWindow = this.focusMetaWindow;
-    // Do not check if the node window is null, some of the commands do not need the focus window
-    let focusNodeWindow = this.findNodeWindow(focusWindow);
-    let currentLayout;
+    const focusNodeWindow = this.findNodeWindow(focusWindow);
 
-    switch (action.name) {
-      case "FloatNonPersistentToggle":
-      case "FloatToggle":
-      case "FloatClassToggle": {
-        this.toggleFloatingMode(action, focusWindow);
+    this.toggleFloatingMode(action, focusWindow);
 
-        const rectRequest = {
-          x: action.x,
-          y: action.y,
-          width: action.width,
-          height: action.height,
-        };
+    const rectRequest = {
+      x: action.x,
+      y: action.y,
+      width: action.width,
+      height: action.height,
+    };
 
-        const moveRect = {
-          x: Utils.resolveX(rectRequest, focusWindow),
-          y: Utils.resolveY(rectRequest, focusWindow),
-          width: Utils.resolveWidth(rectRequest, focusWindow),
-          height: Utils.resolveHeight(rectRequest, focusWindow),
-        };
+    const moveRect = {
+      x: Utils.resolveX(rectRequest, focusWindow),
+      y: Utils.resolveY(rectRequest, focusWindow),
+      width: Utils.resolveWidth(rectRequest, focusWindow),
+      height: Utils.resolveHeight(rectRequest, focusWindow),
+    };
 
-        this.move(focusWindow, moveRect);
+    this.move(focusWindow, moveRect);
 
-        const existParent = focusNodeWindow!.parentNode!;
+    const existParent = focusNodeWindow!.parentNode!;
 
-        if (this.tree.getTiledChildren(existParent.childNodes).length <= 1) {
-          existParent.percent = 0.0;
-          this.tree.resetSiblingPercent(existParent.parentNode!);
-        }
+    if (this.tree.getTiledChildren(existParent.childNodes).length <= 1) {
+      existParent.percent = 0.0;
+      this._layout.resetSiblingPercent(existParent.parentNode!);
+    }
 
-        this.tree.resetSiblingPercent(existParent);
-        this.renderTree("float-toggle", true);
-        break;
-      }
-      case "Move": {
-        this.unfreezeRender();
-        const moveDirection = Utils.resolveDirection(action.direction)!;
+    this._layout.resetSiblingPercent(existParent);
+    this.renderTree("float-toggle", true);
+  }
 
-        const prev = focusNodeWindow;
-        const moved = this.tree.move(focusNodeWindow!, moveDirection);
-        if (!focusNodeWindow) {
-          focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-        }
-        this.queueEvent({
-          name: "move",
-          callback: () => {
-            if (this.eventQueue.length <= 0) {
-              this.unfreezeRender();
-              if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.STACKED) {
-                focusNodeWindow!.parentNode!.appendChild(focusNodeWindow!);
-                safeRaise(focusNodeWindow!.nodeValue as Meta.Window);
-                safeActivate(
-                  focusNodeWindow!.nodeValue as Meta.Window,
-                  global.display.get_current_time()
-                );
-                this.renderTree("move-stacked-queue");
-              }
-              if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.TABBED) {
-                safeRaise(focusNodeWindow!.nodeValue as Meta.Window);
-                safeActivate(
-                  focusNodeWindow!.nodeValue as Meta.Window,
-                  global.display.get_current_time()
-                );
-                if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
-                this.renderTree("move-tabbed-queue");
-              }
-              this.notifyFocusChanged(focusNodeWindow, "move");
-            }
-          },
-        });
-        if (moved) {
-          if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
-          this.renderTree("move-window");
-        }
+  private _handleMove(action: DirectionAction) {
+    let focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    this.unfreezeRender();
+    const moveDirection = Utils.resolveDirection(action.direction)!;
 
-        break;
-      }
-      case "Focus": {
-        const focusDirection = Utils.resolveDirection(action.direction)!;
-        focusNodeWindow = this.tree.focus(focusNodeWindow, focusDirection);
-        if (!focusNodeWindow) {
-          focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
-        }
-        // In headless environments (container tests), there is no pointer
-        // to auto-focus the window. Explicitly activate so get_focus_window()
-        // returns the correct window.
-        if (focusNodeWindow) {
-          const win = focusNodeWindow.nodeValue as Meta.Window;
-          safeRaise(win);
-          safeActivate(win, global.display.get_current_time());
-        }
-        break;
-      }
-      case "Swap": {
-        if (!focusNodeWindow) return;
-        this.unfreezeRender();
-        const swapDirection = Utils.resolveDirection(action.direction)!;
-        this.tree.swap(focusNodeWindow, swapDirection);
-        const swapWin = focusNodeWindow.nodeValue as Meta.Window;
-        safeRaise(swapWin);
-        safeActivate(swapWin, global.display.get_current_time());
-        this.updateTabbedFocus(focusNodeWindow);
-        this.updateStackedFocus(focusNodeWindow);
-        this.notifyFocusChanged(focusNodeWindow, "swap");
-        this.renderTree("swap", true);
-        break;
-      }
-      case "Split": {
-        if (!focusNodeWindow) return;
-        currentLayout = focusNodeWindow!.parentNode!.layout;
-        if (currentLayout === LAYOUT_TYPES.STACKED || currentLayout === LAYOUT_TYPES.TABBED) {
-          return;
-        }
-        const orientation = action.orientation
-          ? action.orientation.toUpperCase()
-          : ORIENTATION_TYPES.NONE;
-        this.tree.split(focusNodeWindow, orientation);
-        this.renderTree("split");
-        break;
-      }
-      case "LayoutToggle":
-        if (!focusNodeWindow) return;
-        currentLayout = focusNodeWindow!.parentNode!.layout;
-        if (currentLayout === LAYOUT_TYPES.HSPLIT) {
-          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.VSPLIT;
-        } else if (currentLayout === LAYOUT_TYPES.VSPLIT) {
-          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.HSPLIT;
-        }
-        this.tree.attachNode = focusNodeWindow!.parentNode!;
-        this.renderTree("layout-split-toggle");
-        {
-          const win = focusNodeWindow.nodeValue as Meta.Window;
-          safeRaise(win);
-          safeActivate(win, global.display.get_current_time());
-        }
-        this.notifyFocusChanged(focusNodeWindow, "command");
-        break;
-      case "FocusBorderToggle": {
-        const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
-        this.ext.settings.set_boolean("focus-border-toggle", !focusBorderEnabled);
-        break;
-      }
-      case "TilingModeToggle": {
-        // FIXME, not sure if this toggle is still needed from a use case
-        // perspective, since Extension.disable also should do the same thing.
-        const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
-        this.ext.settings.set_boolean("tiling-mode-enabled", !tilingModeEnabled);
-        if (tilingModeEnabled) {
-          this.floatAllWindows();
-        } else {
-          this.unfloatAllWindows();
-        }
-        this.renderTree(`tiling-mode-toggle ${!tilingModeEnabled}`);
-        break;
-      }
-      case "GapSize": {
-        let gapIncrement = this.ext.settings.get_uint("window-gap-size-increment");
-        const amount = action.amount;
-        gapIncrement = gapIncrement + amount;
-        if (gapIncrement < 0) gapIncrement = 0;
-        if (gapIncrement > 8) gapIncrement = 8;
-        this.ext.settings.set_uint("window-gap-size-increment", gapIncrement);
-        break;
-      }
-      case "WorkspaceActiveTileToggle": {
-        const activeWorkspace = global.workspace_manager.get_active_workspace_index();
-        const skippedWorkspaces = this.ext.settings.get_string("workspace-skip-tile");
-        let workspaceSkipped = false;
-        let skippedArr: string[] = [];
-        if (skippedWorkspaces.length === 0) {
-          skippedArr.push(`${activeWorkspace}`);
-          this.floatWorkspace(activeWorkspace);
-        } else {
-          skippedArr = skippedWorkspaces.split(",");
-
-          for (let i = 0; i < skippedArr.length; i++) {
-            if (`${skippedArr[i]}` === `${activeWorkspace}`) {
-              workspaceSkipped = true;
-              break;
-            }
+    const prev = focusNodeWindow;
+    const moved = this._layout.move(focusNodeWindow!, moveDirection);
+    if (!focusNodeWindow) {
+      focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    }
+    this.queueEvent({
+      name: "move",
+      callback: () => {
+        if (this.eventQueue.length <= 0) {
+          this.unfreezeRender();
+          if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.STACKED) {
+            focusNodeWindow!.parentNode!.appendChild(focusNodeWindow!);
+            safeRaise(focusNodeWindow!.nodeValue as Meta.Window);
+            safeActivate(
+              focusNodeWindow!.nodeValue as Meta.Window,
+              global.display.get_current_time()
+            );
+            this.renderTree("move-stacked-queue");
           }
-
-          if (workspaceSkipped) {
-            // tile this workspace
-            const indexWs = skippedArr.indexOf(`${activeWorkspace}`);
-            skippedArr.splice(indexWs, 1);
-            this.unfloatWorkspace(activeWorkspace);
-          } else {
-            // skip tiling workspace
-            skippedArr.push(`${activeWorkspace}`);
-            this.floatWorkspace(activeWorkspace);
+          if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.TABBED) {
+            safeRaise(focusNodeWindow!.nodeValue as Meta.Window);
+            safeActivate(
+              focusNodeWindow!.nodeValue as Meta.Window,
+              global.display.get_current_time()
+            );
+            if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
+            this.renderTree("move-tabbed-queue");
           }
+          this.notifyFocusChanged(focusNodeWindow, "move");
         }
-        this.ext.settings.set_string("workspace-skip-tile", skippedArr.toString());
-        this.renderTree("workspace-toggle");
-        break;
-      }
-      case "LayoutStackedToggle":
-        if (!focusNodeWindow) return;
-        if (!this.ext.settings.get_boolean("stacked-tiling-mode-enabled")) return;
+      },
+    });
+    if (moved) {
+      if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
+      this.renderTree("move-window");
+    }
+  }
 
-        if (focusNodeWindow!.parentNode!.isMonitor()) {
-          this.tree.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
-        }
+  private _handleFocus(action: DirectionAction) {
+    let focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    const focusDirection = Utils.resolveDirection(action.direction)!;
+    focusNodeWindow = this._layout.focus(focusNodeWindow, focusDirection);
+    if (!focusNodeWindow) {
+      focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    }
+    // In headless environments (container tests), there is no pointer
+    // to auto-focus the window. Explicitly activate so get_focus_window()
+    // returns the correct window.
+    if (focusNodeWindow) {
+      const win = focusNodeWindow.nodeValue as Meta.Window;
+      safeRaise(win);
+      safeActivate(win, global.display.get_current_time());
+    }
+  }
 
-        currentLayout = focusNodeWindow!.parentNode!.layout;
+  private _handleSwap(action: DirectionAction) {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (!focusNodeWindow) return;
+    this.unfreezeRender();
+    const swapDirection = Utils.resolveDirection(action.direction)!;
+    this._layout.swap(focusNodeWindow, swapDirection);
+    const swapWin = focusNodeWindow.nodeValue as Meta.Window;
+    safeRaise(swapWin);
+    safeActivate(swapWin, global.display.get_current_time());
+    this.updateTabbedFocus(focusNodeWindow);
+    this.updateStackedFocus(focusNodeWindow);
+    this.notifyFocusChanged(focusNodeWindow, "swap");
+    this.renderTree("swap", true);
+  }
 
-        if (currentLayout === LAYOUT_TYPES.STACKED) {
-          focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
-          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
-        } else {
-          if (currentLayout === LAYOUT_TYPES.TABBED) {
-            focusNodeWindow!.parentNode!.lastTabFocus = null;
-          }
-          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.STACKED;
-          const lastChild = focusNodeWindow!.parentNode!.lastChild;
-          if (lastChild && lastChild.nodeType === NODE_TYPES.WINDOW) {
-            (lastChild.nodeValue as Meta.Window).activate(global.display.get_current_time());
-          }
-        }
-        this.unfreezeRender();
-        this.tree.attachNode = focusNodeWindow!.parentNode!;
-        this.renderTree("layout-stacked-toggle");
-        break;
-      case "LayoutTabbedToggle":
-        if (!focusNodeWindow) return;
-        if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
+  private _handleSplit(action: SplitAction) {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (!focusNodeWindow) return;
+    const currentLayout = focusNodeWindow!.parentNode!.layout;
+    if (currentLayout === LAYOUT_TYPES.STACKED || currentLayout === LAYOUT_TYPES.TABBED) {
+      return;
+    }
+    const orientation = action.orientation
+      ? action.orientation.toUpperCase()
+      : ORIENTATION_TYPES.NONE;
+    this._layout.split(focusNodeWindow, orientation);
+    this.renderTree("split");
+  }
 
-        if (focusNodeWindow!.parentNode!.isMonitor()) {
-          this.tree.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
-        }
+  private _handleLayoutToggle() {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (!focusNodeWindow) return;
+    const currentLayout = focusNodeWindow!.parentNode!.layout;
+    if (currentLayout === LAYOUT_TYPES.HSPLIT) {
+      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.VSPLIT;
+    } else if (currentLayout === LAYOUT_TYPES.VSPLIT) {
+      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.HSPLIT;
+    }
+    this.tree.attachNode = focusNodeWindow!.parentNode!;
+    this.renderTree("layout-split-toggle");
+    {
+      const win = focusNodeWindow.nodeValue as Meta.Window;
+      safeRaise(win);
+      safeActivate(win, global.display.get_current_time());
+    }
+    this.notifyFocusChanged(focusNodeWindow, "command");
+  }
 
-        currentLayout = focusNodeWindow!.parentNode!.layout;
+  private _handleFocusBorderToggle() {
+    const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
+    this.ext.settings.set_boolean("focus-border-toggle", !focusBorderEnabled);
+  }
 
-        if (currentLayout === LAYOUT_TYPES.TABBED) {
-          focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
-          this.tree.resetSiblingPercent(focusNodeWindow!.parentNode!);
-          focusNodeWindow!.parentNode!.lastTabFocus = null;
-        } else {
-          focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.TABBED;
-          focusNodeWindow!.parentNode!.lastTabFocus = focusNodeWindow.nodeValue;
-        }
-        this.unfreezeRender();
-        this.tree.attachNode = focusNodeWindow!.parentNode!;
-        this.renderTree("layout-tabbed-toggle");
-        break;
-      case "CancelOperation":
-        if (focusNodeWindow?.mode === WINDOW_MODES.GRAB_TILE) {
-          this.cancelGrab = true;
-        }
-        break;
-      case "PrefsOpen": {
-        const existWindow = Utils.findWindowWith(this.prefsTitle);
-        if (existWindow && existWindow.get_workspace()) {
-          existWindow
-            .get_workspace()
-            .activate_with_focus(existWindow, global.display.get_current_time());
-          this.moveCenter(existWindow);
-        } else {
-          this.ext.openPreferences();
-        }
-        break;
-      }
-      case "WindowSwapLastActive":
-        if (focusNodeWindow) {
-          const lastActiveWindow = global.display.get_tab_next(
-            Meta.TabList.NORMAL,
-            global.display.get_workspace_manager().get_active_workspace(),
-            focusNodeWindow.nodeValue as Meta.Window,
-            false
-          );
-          const lastActiveNodeWindow = this.tree.findNode(lastActiveWindow);
-          this.tree.swapPairs(lastActiveNodeWindow!, focusNodeWindow);
-          this.notifyFocusChanged(focusNodeWindow, "swap");
-          this.renderTree("swap-last-active");
-        }
-        break;
-      case "SnapLayoutMove": {
-        if (focusNodeWindow) {
-          const workareaRect = (
-            focusNodeWindow.nodeValue as Meta.Window
-          ).get_work_area_current_monitor();
-          const layoutAmount = action.amount;
-          const layoutDirection = action.direction.toUpperCase();
-          let layout = {} as Record<string, string | number | undefined>;
-          let processGap = false;
+  private _handleTilingModeToggle() {
+    // FIXME, not sure if this toggle is still needed from a use case
+    // perspective, since Extension.disable also should do the same thing.
+    const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
+    this.ext.settings.set_boolean("tiling-mode-enabled", !tilingModeEnabled);
+    if (tilingModeEnabled) {
+      this.floatAllWindows();
+    } else {
+      this.unfloatAllWindows();
+    }
+    this.renderTree(`tiling-mode-toggle ${!tilingModeEnabled}`);
+  }
 
-          switch (layoutDirection) {
-            case "LEFT":
-              layout.width = layoutAmount * workareaRect.width;
-              layout.height = workareaRect.height;
-              layout.x = workareaRect.x;
-              layout.y = workareaRect.y;
-              processGap = true;
-              break;
-            case "RIGHT":
-              layout.width = layoutAmount * workareaRect.width;
-              layout.height = workareaRect.height;
-              layout.x = workareaRect.x + (workareaRect.width - layout.width);
-              layout.y = workareaRect.y;
-              processGap = true;
-              break;
-            case "CENTER": {
-              const metaRect = this.focusMetaWindow.get_frame_rect();
-              layout.x = "center";
-              layout.y = "center";
-              layout = {
-                x: Utils.resolveX(layout, this.focusMetaWindow),
-                y: Utils.resolveY(layout, this.focusMetaWindow),
-                width: metaRect.width,
-                height: metaRect.height,
-              };
-              break;
-            }
-            default:
-              break;
-          }
-          focusNodeWindow.rect = layout as any;
-          if (processGap) {
-            focusNodeWindow.rect = this._tilingRender.processGap(focusNodeWindow) as any;
-          }
-          if (!focusNodeWindow.isFloat()) {
-            this.addFloatOverride(focusNodeWindow.nodeValue as Meta.Window, false);
-          }
-          this.move(focusNodeWindow.nodeValue as Meta.Window, focusNodeWindow.rect!);
-          this.queueEvent({
-            name: "snap-layout-move",
-            callback: () => {
-              this.renderTree("snap-layout-move");
-            },
-          });
+  private _handleGapSize(action: GapSizeAction) {
+    let gapIncrement = this.ext.settings.get_uint("window-gap-size-increment");
+    const amount = action.amount;
+    gapIncrement = gapIncrement + amount;
+    if (gapIncrement < 0) gapIncrement = 0;
+    if (gapIncrement > 8) gapIncrement = 8;
+    this.ext.settings.set_uint("window-gap-size-increment", gapIncrement);
+  }
+
+  private _handleWorkspaceActiveTileToggle() {
+    const activeWorkspace = global.workspace_manager.get_active_workspace_index();
+    const skippedWorkspaces = this.ext.settings.get_string("workspace-skip-tile");
+    let workspaceSkipped = false;
+    let skippedArr: string[] = [];
+    if (skippedWorkspaces.length === 0) {
+      skippedArr.push(`${activeWorkspace}`);
+      this.floatWorkspace(activeWorkspace);
+    } else {
+      skippedArr = skippedWorkspaces.split(",");
+
+      for (let i = 0; i < skippedArr.length; i++) {
+        if (`${skippedArr[i]}` === `${activeWorkspace}`) {
+          workspaceSkipped = true;
           break;
         }
+      }
+
+      if (workspaceSkipped) {
+        // tile this workspace
+        const indexWs = skippedArr.indexOf(`${activeWorkspace}`);
+        skippedArr.splice(indexWs, 1);
+        this.unfloatWorkspace(activeWorkspace);
+      } else {
+        // skip tiling workspace
+        skippedArr.push(`${activeWorkspace}`);
+        this.floatWorkspace(activeWorkspace);
+      }
+    }
+    this.ext.settings.set_string("workspace-skip-tile", skippedArr.toString());
+    this.renderTree("workspace-toggle");
+  }
+
+  private _handleLayoutStackedToggle() {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (!focusNodeWindow) return;
+    if (!this.ext.settings.get_boolean("stacked-tiling-mode-enabled")) return;
+
+    if (focusNodeWindow!.parentNode!.isMonitor()) {
+      this._layout.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
+    }
+
+    const currentLayout = focusNodeWindow!.parentNode!.layout;
+
+    if (currentLayout === LAYOUT_TYPES.STACKED) {
+      focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
+      this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
+    } else {
+      if (currentLayout === LAYOUT_TYPES.TABBED) {
+        focusNodeWindow!.parentNode!.lastTabFocus = null;
+      }
+      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.STACKED;
+      const lastChild = focusNodeWindow!.parentNode!.lastChild;
+      if (lastChild && lastChild.nodeType === NODE_TYPES.WINDOW) {
+        (lastChild.nodeValue as Meta.Window).activate(global.display.get_current_time());
+      }
+    }
+    this.unfreezeRender();
+    this.tree.attachNode = focusNodeWindow!.parentNode!;
+    this.renderTree("layout-stacked-toggle");
+  }
+
+  private _handleLayoutTabbedToggle() {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (!focusNodeWindow) return;
+    if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
+
+    if (focusNodeWindow!.parentNode!.isMonitor()) {
+      this._layout.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
+    }
+
+    const currentLayout = focusNodeWindow!.parentNode!.layout;
+
+    if (currentLayout === LAYOUT_TYPES.TABBED) {
+      focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
+      this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
+      focusNodeWindow!.parentNode!.lastTabFocus = null;
+    } else {
+      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.TABBED;
+      focusNodeWindow!.parentNode!.lastTabFocus = focusNodeWindow.nodeValue;
+    }
+    this.unfreezeRender();
+    this.tree.attachNode = focusNodeWindow!.parentNode!;
+    this.renderTree("layout-tabbed-toggle");
+  }
+
+  private _handleCancelOperation() {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (focusNodeWindow?.mode === WINDOW_MODES.GRAB_TILE) {
+      this.cancelGrab = true;
+    }
+  }
+
+  private _handlePrefsOpen() {
+    const existWindow = Utils.findWindowWith(this.prefsTitle);
+    if (existWindow && existWindow.get_workspace()) {
+      existWindow
+        .get_workspace()
+        .activate_with_focus(existWindow, global.display.get_current_time());
+      this.moveCenter(existWindow);
+    } else {
+      this.ext.openPreferences();
+    }
+  }
+
+  private _handleWindowSwapLastActive() {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (focusNodeWindow) {
+      const lastActiveWindow = global.display.get_tab_next(
+        Meta.TabList.NORMAL,
+        global.display.get_workspace_manager().get_active_workspace(),
+        focusNodeWindow.nodeValue as Meta.Window,
+        false
+      );
+      const lastActiveNodeWindow = this.tree.findNode(lastActiveWindow);
+      this._layout.swapPairs(lastActiveNodeWindow!, focusNodeWindow);
+      this.notifyFocusChanged(focusNodeWindow, "swap");
+      this.renderTree("swap-last-active");
+    }
+  }
+
+  private _handleSnapLayoutMove(action: SnapLayoutMoveAction) {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (!focusNodeWindow) return;
+
+    const workareaRect = (focusNodeWindow.nodeValue as Meta.Window).get_work_area_current_monitor();
+    const layoutAmount = action.amount;
+    const layoutDirection = action.direction.toUpperCase();
+    let layout = {} as Record<string, string | number | undefined>;
+    let processGap = false;
+
+    switch (layoutDirection) {
+      case "LEFT":
+        layout.width = layoutAmount! * workareaRect.width;
+        layout.height = workareaRect.height;
+        layout.x = workareaRect.x;
+        layout.y = workareaRect.y;
+        processGap = true;
+        break;
+      case "RIGHT":
+        layout.width = layoutAmount! * workareaRect.width;
+        layout.height = workareaRect.height;
+        layout.x = workareaRect.x + (workareaRect.width - (layout.width as number));
+        layout.y = workareaRect.y;
+        processGap = true;
+        break;
+      case "CENTER": {
+        const metaRect = this.focusMetaWindow.get_frame_rect();
+        layout.x = "center";
+        layout.y = "center";
+        layout = {
+          x: Utils.resolveX(layout, this.focusMetaWindow),
+          y: Utils.resolveY(layout, this.focusMetaWindow),
+          width: metaRect.width,
+          height: metaRect.height,
+        };
         break;
       }
-      case "ShowTabDecorationToggle": {
-        if (!focusNodeWindow) return;
-        if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
-
-        const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
-        this.ext.settings.set_boolean("showtab-decoration-enabled", !showTabs);
-
-        this.unfreezeRender();
-        this.tree.attachNode = focusNodeWindow!.parentNode!;
-        this.renderTree("showtab-decoration-enabled");
+      default:
         break;
-      }
+    }
+    focusNodeWindow.rect = layout as any;
+    if (processGap) {
+      focusNodeWindow.rect = this._tilingRender.processGap(focusNodeWindow) as any;
+    }
+    if (!focusNodeWindow.isFloat()) {
+      this.addFloatOverride(focusNodeWindow.nodeValue as Meta.Window, false);
+    }
+    this.move(focusNodeWindow.nodeValue as Meta.Window, focusNodeWindow.rect!);
+    this.queueEvent({
+      name: "snap-layout-move",
+      callback: () => {
+        this.renderTree("snap-layout-move");
+      },
+    });
+  }
+
+  private _handleShowTabDecorationToggle() {
+    const focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
+    if (!focusNodeWindow) return;
+    if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
+
+    const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
+    this.ext.settings.set_boolean("showtab-decoration-enabled", !showTabs);
+
+    this.unfreezeRender();
+    this.tree.attachNode = focusNodeWindow!.parentNode!;
+    this.renderTree("showtab-decoration-enabled");
+  }
+
+  private _handleWindowResize(action: WindowResizeAction) {
+    switch (action.name) {
       case "WindowResizeRight":
         this.resize(Meta.GrabOp.KEYBOARD_RESIZING_E, action.amount);
         break;
-
       case "WindowResizeLeft":
         this.resize(Meta.GrabOp.KEYBOARD_RESIZING_W, action.amount);
         break;
-
       case "WindowResizeTop":
         this.resize(Meta.GrabOp.KEYBOARD_RESIZING_N, action.amount);
         break;
-
       case "WindowResizeBottom":
         this.resize(Meta.GrabOp.KEYBOARD_RESIZING_S, action.amount);
-        break;
-
-      case "WindowClose":
-        if (focusWindow) {
-          focusWindow.delete(global.display.get_current_time());
-        }
-        break;
-
-      default:
         break;
     }
   }
 
+  private _handleWindowClose() {
+    const focusWindow = this.focusMetaWindow;
+    if (focusWindow) {
+      focusWindow.delete(global.display.get_current_time());
+    }
+  }
+
   resize(grabOp: Meta.GrabOp, amount: number) {
+    // Keyboard path keeps calling begin/end facades so existing spies/tests work.
     const metaWindow = this.focusMetaWindow;
     if (!metaWindow) return;
     const display = global.display;
@@ -1084,6 +1126,10 @@ export class WindowManager extends GObject.Object {
     );
   }
 
+  _stopLiveResizeLoop() {
+    this._grab.dispose();
+  }
+
   disable() {
     Utils._disableDecorations();
     this._removeSignals();
@@ -1107,7 +1153,20 @@ export class WindowManager extends GObject.Object {
 
   get tree() {
     if (!this._tree) {
-      this._tree = new Tree(this);
+      // Lazy recreate with TreeHost (Stage 7 — no concrete WM dependency on Tree)
+      // eslint-disable-next-line @typescript-eslint/no-this-alias
+      const self = this;
+      this._tree = new Tree({
+        get settings() {
+          return self.ext.settings;
+        },
+        get focusMetaWindow() {
+          return self.focusMetaWindow;
+        },
+        determineSplitLayout: () => self.determineSplitLayout(),
+        floatingWindow: (n) => self.floatingWindow(n),
+        bindWorkspaceSignals: (ws) => self.bindWorkspaceSignals(ws),
+      });
     }
     return this._tree;
   }
@@ -1150,12 +1209,7 @@ export class WindowManager extends GObject.Object {
   }
 
   determineSplitLayout() {
-    // if the monitor width is less than height, the monitor could be vertical orientation;
-    const monitorRect = global.display.get_monitor_geometry(global.display.get_current_monitor());
-    if (monitorRect.width < monitorRect.height) {
-      return LAYOUT_TYPES.VSPLIT;
-    }
-    return LAYOUT_TYPES.HSPLIT;
+    return this._layout.determineSplitLayout();
   }
 
   floatWorkspace(workspaceIndex: number) {
@@ -1387,7 +1441,7 @@ export class WindowManager extends GObject.Object {
           metaWindow.windowSignals = undefined;
         }
 
-        this._clearPendingWindowSignals(metaWindow);
+        this._tracker.clearPendingWindowSignals(metaWindow);
 
         const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
         if (windowActor && windowActor.actorSignals) {
@@ -1416,10 +1470,7 @@ export class WindowManager extends GObject.Object {
       }
     }
 
-    if (this._settingsChangedId) {
-      this.ext.settings.disconnect(this._settingsChangedId);
-      this._settingsChangedId = 0;
-    }
+    this._settingsBridge.disable();
 
     if (this._renderTreeSrcId) {
       GLib.Source.remove(this._renderTreeSrcId);
@@ -1431,10 +1482,8 @@ export class WindowManager extends GObject.Object {
       this._reloadTreeSrcId = 0;
     }
 
-    if (this._windowReconcileSrcId) {
-      GLib.Source.remove(this._windowReconcileSrcId);
-      this._windowReconcileSrcId = 0;
-    }
+    this._tracker.dispose();
+    this._grab.dispose();
 
     if (this._queueSourceId) {
       GLib.Source.remove(this._queueSourceId);
@@ -1477,10 +1526,6 @@ export class WindowManager extends GObject.Object {
         });
       }
     }
-  }
-
-  processFloats() {
-    this._tilingRender.processFloats();
   }
 
   get allNodeWindows() {
@@ -1538,7 +1583,7 @@ export class WindowManager extends GObject.Object {
     const focusBorderEnabled = this.ext.settings.get_boolean("focus-border-toggle");
     const splitBorderEnabled = this.ext.settings.get_boolean("split-border-toggle");
     const tilingModeEnabled = this.ext.settings.get_boolean("tiling-mode-enabled");
-    const gap = this.calculateGaps(nodeWindow);
+    const gap = this._tilingRender.calculateGaps(nodeWindow);
     const maximized = () => {
       try {
         // GNOME 49+
@@ -1688,76 +1733,12 @@ export class WindowManager extends GObject.Object {
     this.showWindowBorders();
   }
 
-  calculateGaps(node: Node<any>) {
-    return this._tilingRender.calculateGaps(node);
-  }
-
   _clearPendingWindowSignals(metaWindow: AnvilMetaWindow) {
-    if (metaWindow.pendingWindowSignals) {
-      for (const signal of metaWindow.pendingWindowSignals) {
-        metaWindow.disconnect(signal);
-      }
-      metaWindow.pendingWindowSignals.length = 0;
-      metaWindow.pendingWindowSignals = undefined;
-    }
-
-    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-    if (windowActor && metaWindow.pendingActorSignals) {
-      for (const signal of metaWindow.pendingActorSignals) {
-        windowActor.disconnect(signal);
-      }
-    }
-    if (metaWindow.pendingActorSignals) {
-      metaWindow.pendingActorSignals.length = 0;
-      metaWindow.pendingActorSignals = undefined;
-    }
+    this._tracker.clearPendingWindowSignals(metaWindow);
   }
 
   _trackWindowWhenReady(display: Meta.Display, metaWindow: Meta.Window, afterTrack?: () => void) {
-    if (this.tree.findNode(metaWindow)) {
-      this._clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
-      return;
-    }
-
-    if (this._validWindow(metaWindow)) {
-      this._clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
-      this.trackWindow(display, metaWindow);
-      afterTrack?.();
-      return;
-    }
-
-    const anvilMetaWin = metaWindow as AnvilMetaWindow;
-    if (anvilMetaWin.pendingWindowSignals) return;
-
-    const retry = () => {
-      this._trackWindowWhenReady(display, metaWindow, afterTrack);
-    };
-
-    anvilMetaWin.pendingWindowSignals = [
-      metaWindow.connect("notify::wm-class", retry),
-      metaWindow.connect("notify::title", retry),
-      metaWindow.connect("notify::window-type", retry),
-      metaWindow.connect("workspace-changed", retry),
-      metaWindow.connect("unmanaged", () => this._clearPendingWindowSignals(anvilMetaWin)),
-    ];
-
-    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-    if (windowActor) {
-      anvilMetaWin.pendingActorSignals = [windowActor.connect("first-frame", retry)];
-    }
-  }
-
-  _unmaximizeWindow(metaWindow: Meta.Window) {
-    try {
-      // GNOME 49+
-      metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
-      metaWindow.unmaximize();
-    } catch {
-      // pre-49 fallback
-      (metaWindow as any).unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-      (metaWindow as any).unmaximize(Meta.MaximizeFlags.VERTICAL);
-      (metaWindow as any).unmaximize(Meta.MaximizeFlags.BOTH);
-    }
+    this._tracker.trackWhenReady(display, metaWindow, afterTrack);
   }
 
   _trackMappedWindowActor(
@@ -1768,245 +1749,43 @@ export class WindowManager extends GObject.Object {
         })
       | null
   ) {
-    const metaWindow = actor?.meta_window ?? actor?.get_meta_window?.();
-    if (metaWindow) {
-      this._trackWindowWhenReady(global.display, metaWindow);
-    }
-    this._scheduleCurrentWindowReconcile();
+    this._tracker.trackMappedActor(actor);
   }
 
   _scheduleCurrentWindowReconcile() {
-    if (this._windowReconcileSrcId) return;
-
-    let attemptsRemaining = 120;
-    this._windowReconcileSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
-      this._reconcileCurrentWindows("window-reconcile");
-      attemptsRemaining--;
-      if (attemptsRemaining <= 0) {
-        this._windowReconcileSrcId = 0;
-        return false;
-      }
-      return true;
-    });
-  }
-
-  _currentWindowCandidates() {
-    const byId = new Map<number, Meta.Window>();
-    for (const metaWindow of this.windowsAllWorkspaces) {
-      byId.set(metaWindow.get_id(), metaWindow);
-    }
-
-    const actors = global.get_window_actors?.() ?? [];
-    for (const actor of actors as Array<
-      AnvilWindowActor & {
-        meta_window?: Meta.Window | null;
-        get_meta_window?: () => Meta.Window | null;
-      }
-    >) {
-      const metaWindow = actor.meta_window ?? actor.get_meta_window?.();
-      if (metaWindow) byId.set(metaWindow.get_id(), metaWindow);
-    }
-
-    return [...byId.values()].sort((w1, w2) => {
-      return w1.get_stable_sequence() - w2.get_stable_sequence();
-    });
+    this._tracker.scheduleReconcile();
   }
 
   _reconcileCurrentWindows(from: string) {
-    for (const metaWindow of this._currentWindowCandidates()) {
-      if (this.tree.findNode(metaWindow) || !this._validWindow(metaWindow)) continue;
-
-      this.trackWindow(global.display, metaWindow);
-      this.updateMetaWorkspaceMonitor(from, metaWindow.get_monitor(), metaWindow);
-    }
+    this._tracker.reconcileCurrentWindows(from);
   }
 
-  /**
-   * Track meta/mutter windows and append them to the tree.
-   * Windows can be attached on any of the following Node Types:
-   * MONITOR, CONTAINER
-   *
-   */
   trackWindow(_display: Meta.Display, metaWindow: Meta.Window) {
-    const autoSplit = this.ext.settings?.get_boolean("auto-split-enabled");
-    const focusMetaWindow = this.focusMetaWindow;
-    if (autoSplit && focusMetaWindow) {
-      const currentFocusNode = this.tree.findNode(focusMetaWindow);
-      if (currentFocusNode) {
-        const currentParentFocusNode = currentFocusNode!.parentNode!;
-        const layout = currentParentFocusNode.layout;
-        if (layout === LAYOUT_TYPES.HSPLIT || layout === LAYOUT_TYPES.VSPLIT) {
-          const frameRect = focusMetaWindow.get_frame_rect();
-          const splitHorizontal = frameRect.width > frameRect.height;
-          const orientation = splitHorizontal ? "horizontal" : "vertical";
-          this.command({ name: "Split", orientation: orientation });
-        }
-      }
-    }
-    // Make window types configurable
-    if (this._validWindow(metaWindow)) {
-      const existNodeWindow = this.tree.findNode(metaWindow);
-      Logger.debug(`Meta Window ${metaWindow.get_title()} ${metaWindow.get_window_type()}`);
-      if (!existNodeWindow) {
-        let attachTarget;
-
-        const activeMonitor = global.display.get_current_monitor();
-        const activeWorkspace = global.display.get_workspace_manager().get_active_workspace_index();
-        const metaMonWs = `mo${activeMonitor}ws${activeWorkspace}`;
-
-        // Check if the active monitor / workspace has windows
-        const metaMonWsNode = this.tree.findNode(metaMonWs);
-        if (!metaMonWsNode) {
-          // Reload the tree as a last resort
-          this.reloadTree("no-meta-monws");
-          return;
-        }
-
-        const windowNodes = metaMonWsNode.getNodeByType(NODE_TYPES.WINDOW);
-        const hasWindows = windowNodes.length > 0;
-
-        attachTarget = this.tree.attachNode;
-        attachTarget = attachTarget ? this.tree.findNode(attachTarget.nodeValue) : null;
-
-        if (!attachTarget) {
-          attachTarget = metaMonWsNode;
-        } else {
-          if (hasWindows) {
-            if (attachTarget && metaMonWsNode.contains(attachTarget)) {
-              // Use the attach target
-            } else {
-              // Find the first window
-              attachTarget = windowNodes[0];
-            }
-          } else {
-            attachTarget = metaMonWsNode;
-          }
-        }
-
-        const initialMode =
-          this.isFloatingExempt(metaWindow) || !this.isActiveWindowWorkspaceTiled(metaWindow)
-            ? WINDOW_MODES.FLOAT
-            : WINDOW_MODES.TILE;
-
-        const nodeWindow = this.tree.createNode(
-          attachTarget.nodeValue,
-          NODE_TYPES.WINDOW,
-          metaWindow,
-          initialMode
-        );
-
-        const anvilMetaWin = metaWindow as AnvilMetaWindow;
-        this._clearPendingWindowSignals(anvilMetaWin);
-        anvilMetaWin.firstRender = true;
-
-        const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-
-        if (!anvilMetaWin.windowSignals) {
-          const windowSignals = [
-            metaWindow.connect("position-changed", (_metaWindow: Meta.Window) => {
-              const from = "position-changed";
-              this.updateMetaPositionSize(_metaWindow, from);
-            }),
-            metaWindow.connect("size-changed", (_metaWindow: Meta.Window) => {
-              const from = "size-changed";
-              this.updateMetaPositionSize(_metaWindow, from);
-            }),
-            // Re-classify on property changes so late-arriving metadata (for
-            // Inkscape, Brave, etc.) causes a re-render + processFloats.
-            metaWindow.connect("notify::wm-class", () => {
-              this.renderTree("wm-class-notify", true);
-            }),
-            metaWindow.connect("notify::title", () => {
-              this.renderTree("title-notify", true);
-            }),
-            metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
-              this.hideActorBorder(windowActor);
-            }),
-            metaWindow.connect("focus", (_metaWindowFocus: Meta.Window) => {
-              if (Utils.isEphemeralHelperWindow(_metaWindowFocus)) {
-                return;
-              }
-              this.queueEvent({
-                name: "focus-update",
-                callback: () => {
-                  this.unfreezeRender();
-                  this.updateBorderLayout();
-                  this.updateDecorationLayout();
-                  this.updateStackedFocus(undefined);
-                  this.updateTabbedFocus(undefined);
-                  const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-                  this.notifyFocusChanged(focusNodeWindow, "signal");
-                },
-              });
-              const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-              if (focusNodeWindow) {
-                // handle the attach node
-                this.tree.attachNode = focusNodeWindow._parent;
-                if (this.floatingWindow(focusNodeWindow)) {
-                  this.queueEvent({
-                    name: "raise-float",
-                    callback: () => {
-                      this.renderTree("raise-float-queue");
-                    },
-                  });
-                }
-                this.tree.attachNode = focusNodeWindow;
-              }
-              this.renderTree("focus", true);
-            }),
-            metaWindow.connect("workspace-changed", (_metaWindow: Meta.Window) => {
-              this.updateMetaWorkspaceMonitor("metawindow-workspace-changed", null, _metaWindow);
-              this.trackCurrentMonWs();
-            }),
-          ];
-          anvilMetaWin.windowSignals = windowSignals;
-        }
-
-        if (windowActor && !windowActor.actorSignals) {
-          const actorSignals = [windowActor.connect("destroy", this.windowDestroy.bind(this))];
-          windowActor.actorSignals = actorSignals;
-        }
-
-        if (windowActor) {
-          this.ensureBorderActors(windowActor);
-
-          // Re-classify on first-frame: this is when the client has provided
-          // its first buffer, which is typically after it has set final
-          // properties (class, title, resize hints, etc.). Helps for slow
-          // starting apps like Inkscape and Brave.
-          const reclassify = () => {
-            this.renderTree("first-frame-reclassify", true);
-          };
-          windowActor.connect("first-frame", reclassify);
-        }
-
-        this.postProcessWindow(nodeWindow as Node<any> | null);
-        this._unmaximizeWindow(metaWindow);
-        this.renderTree("window-create", true);
-
-        if (nodeWindow?.parentNode) {
-          const childNodes = this.tree.getTiledChildren(nodeWindow!.parentNode!.childNodes);
-          childNodes.forEach((n) => {
-            n.percent = 0.0;
-          });
-        }
-      }
-    }
+    this._tracker.trackWindow(_display, metaWindow);
   }
 
   postProcessWindow(nodeWindow: Node<any> | null) {
-    if (!nodeWindow) return;
-    const metaWindow = nodeWindow.nodeValue as Meta.Window;
-    if (metaWindow) {
-      if (metaWindow.get_title() === this.prefsTitle) {
-        metaWindow
-          .get_workspace()
-          .activate_with_focus(metaWindow, global.display.get_current_time());
-        this.moveCenter(metaWindow);
-      } else {
-        this.notifyFocusChanged(nodeWindow, "window-create");
-      }
-    }
+    this._tracker.postProcessWindow(nodeWindow);
+  }
+
+  trackCurrentWindows() {
+    this._tracker.trackCurrentWindows();
+  }
+
+  _validWindow(metaWindow: Meta.Window) {
+    return this._tracker.validWindow(metaWindow);
+  }
+
+  windowDestroy(actor: AnvilWindowActor) {
+    this._tracker.windowDestroy(actor);
+  }
+
+  /**
+   * Restore focus to another window after one is closed (#258)
+   * Ported from jcrussell/forge
+   */
+  _restoreFocusAfterWindowClosed(closedNodeWindow: import("./tree.js").Node<any>) {
+    this._tracker.restoreFocusAfterWindowClosed(closedNodeWindow);
   }
 
   updateStackedFocus(focusNodeWindow: Node<any> | undefined | null) {
@@ -2074,160 +1853,6 @@ export class WindowManager extends GObject.Object {
     return !skipThisWs;
   }
 
-  enforceUltrawideSize(node: Node<any>, rect: RectLike): RectLike {
-    return this._tilingRender.enforceUltrawideSize(node, rect);
-  }
-
-  _getMonitorConnector(monitorIndex: number): string | null {
-    return this._tilingRender.getMonitorConnector(monitorIndex);
-  }
-
-  _getMonitorConstraints(monitorIndex: number) {
-    return this._tilingRender.getMonitorConstraints(monitorIndex);
-  }
-
-  trackCurrentWindows() {
-    this.tree.attachNode = null;
-    const windowsAll = this.windowsAllWorkspaces;
-    for (let i = 0; i < windowsAll.length; i++) {
-      const metaWindow = windowsAll[i];
-      this.trackWindow(global.display, metaWindow);
-      // This updates and handles dynamic workspaces
-      this.updateMetaWorkspaceMonitor(
-        "track-current-windows",
-        metaWindow.get_monitor(),
-        metaWindow
-      );
-    }
-    this.updateDecorationLayout();
-  }
-
-  _validWindow(metaWindow: Meta.Window) {
-    // Wayland clipboard/paste helpers (wl-clipboard, 1×1 stubs) must not enter the tree.
-    if (Utils.isEphemeralHelperWindow(metaWindow)) {
-      return false;
-    }
-
-    // Bug #309, #322 fix: Filter out XWayland Video Bridge and ddterm windows
-    // Ported from jcrussell/forge
-    const wmClass = metaWindow.get_wm_class();
-    if (wmClass && wmClass.toLowerCase().includes("xwaylandvideobridge")) {
-      return false;
-    }
-    if (wmClass && wmClass.toLowerCase().includes("ddterm")) {
-      return false;
-    }
-
-    // Bug #351 fix: Filter out invalid window types (browser popups, tooltips, etc.)
-    // Ported from jcrussell/forge
-    const windowType = metaWindow.get_window_type();
-    if (INVALID_WINDOW_TYPES.has(windowType)) return false;
-    return (
-      windowType === Meta.WindowType.NORMAL ||
-      windowType === Meta.WindowType.MODAL_DIALOG ||
-      windowType === Meta.WindowType.DIALOG
-    );
-  }
-
-  windowDestroy(actor: AnvilWindowActor) {
-    // Release any resources on the window
-    const border = actor.border;
-    if (border) {
-      if (global.window_group) {
-        global.window_group.remove_child(border);
-        border.hide();
-      }
-    }
-
-    const splitBorder = actor.splitBorder;
-    if (splitBorder) {
-      if (global.window_group) {
-        global.window_group.remove_child(splitBorder);
-        splitBorder.hide();
-      }
-    }
-
-    const nodeWindow = this.tree.findNodeByActor(actor) as unknown as
-      | import("./tree.js").Node<any>
-      | null;
-
-    // Bug #258 fix: Check if this window has focus before removing
-    // Ported from jcrussell/forge
-    const metaWindow = nodeWindow?.nodeValue as Meta.Window | undefined;
-    const hadFocus = !!metaWindow && this.focusMetaWindow === metaWindow;
-
-    if (nodeWindow?.isWindow()) {
-      const skipRelayout =
-        nodeWindow.isFloat() || (!!metaWindow && Utils.isEphemeralHelperWindow(metaWindow));
-      this.tree.removeNode(nodeWindow);
-      if (!skipRelayout) {
-        this.renderTree("window-destroy-quick", true);
-      }
-      this.removeFloatOverride(nodeWindow.nodeValue as Meta.Window, true);
-
-      // Bug #258 fix: Restore focus if this window had it and tiling is enabled
-      // Ported from jcrussell/forge
-      if (hadFocus && this.ext.settings.get_boolean("tiling-mode-enabled")) {
-        this._restoreFocusAfterWindowClosed(nodeWindow);
-      }
-    }
-
-    // find the next attachNode here
-    const focusNodeWindow = this.tree.findNode(this.focusMetaWindow);
-    if (focusNodeWindow) {
-      this.tree.attachNode = focusNodeWindow!.parentNode!;
-    }
-
-    this.queueEvent({
-      name: "window-destroy",
-      callback: () => {
-        this.renderTree("window-destroy", true);
-      },
-    });
-  }
-
-  /**
-   * Restore focus to another window after one is closed (#258)
-   * Ported from jcrussell/forge
-   */
-  _restoreFocusAfterWindowClosed(closedNodeWindow: import("./tree.js").Node<any>) {
-    if (!closedNodeWindow || !closedNodeWindow.parentNode) return;
-
-    // Try to find a sibling window in the same container
-    const parent = closedNodeWindow.parentNode;
-    const siblings = parent.childNodes.filter(
-      (node: import("./tree.js").Node<any>) =>
-        node.isWindow() && node !== closedNodeWindow && node.nodeValue
-    );
-
-    if (siblings.length > 0) {
-      // Focus the first available sibling
-      const targetWindow = siblings[0].nodeValue as Meta.Window;
-      if (targetWindow && !targetWindow.minimized) {
-        safeRaise(targetWindow);
-        safeFocus(targetWindow, global.display.get_current_time());
-        safeActivate(targetWindow, global.display.get_current_time());
-        return;
-      }
-    }
-
-    // If no siblings, try to find any window on the current workspace
-    const wsManager = global.display.get_workspace_manager();
-    const currentWs = wsManager.get_active_workspace();
-    const workspaceWindows = currentWs
-      .list_windows()
-      .filter((w: Meta.Window) => !w.minimized && w.get_window_type() === Meta.WindowType.NORMAL);
-
-    if (workspaceWindows.length > 0) {
-      safeRaise(workspaceWindows[0]);
-      safeFocus(workspaceWindows[0], global.display.get_current_time());
-      safeActivate(workspaceWindows[0], global.display.get_current_time());
-    }
-  }
-
-  /**
-   * Handles any workspace/monitor update for the Meta.Window.
-   */
   updateMetaWorkspaceMonitor(from: string, _monitor: number | null, metaWindow: Meta.Window) {
     if (this._validWindow(metaWindow)) {
       if (metaWindow.get_workspace() === null) return;
@@ -2245,7 +1870,7 @@ export class WindowManager extends GObject.Object {
             // Ported from jcrussell/forge
             const existParent = existNodeWindow.parentNode;
             metaMonWsNode.appendChild(existNodeWindow);
-            this.tree.redistributeSiblingPercent(existParent);
+            this._layout.redistributeSiblingPercent(existParent);
 
             // Ensure that the workspace tiling is honored
             if (this.isActiveWindowWorkspaceTiled(metaWindow)) {
@@ -2692,8 +2317,8 @@ export class WindowManager extends GObject.Object {
 
       if (!preview) {
         const previousParent = focusNodeWindow!.parentNode!;
-        this.tree.resetSiblingPercent(containerNode);
-        this.tree.resetSiblingPercent(previousParent);
+        this._layout.resetSiblingPercent(containerNode);
+        this._layout.resetSiblingPercent(previousParent);
 
         if (focusNodeWindow.tab) {
           const decoParent = focusNodeWindow.tab.get_parent();
@@ -2735,10 +2360,10 @@ export class WindowManager extends GObject.Object {
         } else if (childNode.detachWindow) {
           const orientation =
             isLeft || isRight ? ORIENTATION_TYPES.HORIZONTAL : ORIENTATION_TYPES.VERTICAL;
-          this.tree.split(childNode as Node<any>, orientation);
+          this._layout.split(childNode as Node<any>, orientation);
           containerNode!.insertBefore(childNode!.parentNode!, referenceNode);
         } else if (isCenter && centerLayout == "SWAP") {
-          this.tree.swapPairs(referenceNode!, focusNodeWindow);
+          this._layout.swapPairs(referenceNode!, focusNodeWindow);
           this.renderTree("drag-swap");
         } else {
           // Child Node is a WINDOW
@@ -2788,212 +2413,16 @@ export class WindowManager extends GObject.Object {
     return null;
   }
 
-  _handleGrabOpBegin(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
-    this.grabOp = grabOp;
-    this.trackCurrentMonWs();
-    const focusMetaWindow = this.focusMetaWindow;
-
-    Logger.debug(
-      `_handleGrabOpBegin: grabOp=${grabOp} metaWindow=${
-        _metaWindow?.get_title() || "none"
-      } focusMetaWindow=${focusMetaWindow?.get_title() || "none"}`
-    );
-
-    if (focusMetaWindow) {
-      const focusNodeWindow = this.findNodeWindow(focusMetaWindow);
-      if (!focusNodeWindow) return;
-
-      const frameRect = focusMetaWindow.get_frame_rect();
-      const gaps = this.calculateGaps(focusNodeWindow);
-
-      focusNodeWindow.grabMode = Utils.grabMode(grabOp);
-      if (
-        focusNodeWindow.grabMode === GRAB_TYPES.MOVING &&
-        focusNodeWindow.mode === WINDOW_MODES.TILE
-      ) {
-        this.freezeRender();
-        focusNodeWindow.mode = WINDOW_MODES.GRAB_TILE;
-      }
-
-      focusNodeWindow.initGrabOp = grabOp;
-      // Only set initRect if not already tracking a resize (preserves original during key repeat)
-      if (!focusNodeWindow.initRect) {
-        focusNodeWindow.initRect = Utils.removeGapOnRect(frameRect, gaps);
-      }
-
-      // Bug #433 fix: Track the window being dragged for preview hint cleanup
-      // Ported from jcrussell/forge
-      this._draggedNodeWindow = focusNodeWindow;
-
-      // Start live-resize polling loop for resize grabs
-      if (focusNodeWindow.grabMode === GRAB_TYPES.RESIZING) {
-        this._startLiveResizeLoop(focusNodeWindow);
-      }
-    }
+  _handleGrabOpBegin(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
+    this._grab.begin(display, metaWindow, grabOp);
   }
 
-  _startLiveResizeLoop(focusNodeWindow: Node<any>) {
-    this._stopLiveResizeLoop();
-
-    // Cache gaps once — they don't change during a resize
-    const gaps = this.calculateGaps(focusNodeWindow);
-    let lastWidth = focusNodeWindow.initRect?.width;
-    let lastHeight = focusNodeWindow.initRect?.height;
-
-    this._liveResizeSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
-      const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
-      if (!metaWindow || !focusNodeWindow.grabMode) {
-        this._liveResizeSrcId = 0;
-        return GLib.SOURCE_REMOVE;
-      }
-
-      const frameRect = metaWindow.get_frame_rect();
-      const currentRect = Utils.removeGapOnRect(frameRect, gaps);
-
-      // Skip if size hasn't changed — also prevents double-processing on X11
-      // where size-changed signals fire alongside this loop
-      if (currentRect.width === lastWidth && currentRect.height === lastHeight) {
-        return GLib.SOURCE_CONTINUE;
-      }
-      lastWidth = currentRect.width;
-      lastHeight = currentRect.height;
-
-      this._handleResizing(focusNodeWindow);
-
-      // Update initRect so next tick delta is relative to current frame,
-      // not the grab start (prevents percent accumulation)
-      focusNodeWindow.initRect = currentRect;
-
-      this._liveResizeNeighbors(focusNodeWindow);
-
-      return GLib.SOURCE_CONTINUE;
-    });
-  }
-
-  _stopLiveResizeLoop() {
-    if (this._liveResizeSrcId) {
-      GLib.Source.remove(this._liveResizeSrcId);
-      this._liveResizeSrcId = 0;
-    }
-  }
-
-  _handleGrabOpEnd(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
-    this._stopLiveResizeLoop();
-    this.unfreezeRender();
-    const focusMetaWindow = this.focusMetaWindow;
-
-    Logger.debug(
-      `_handleGrabOpEnd: grabOp=${grabOp} metaWindow=${
-        _metaWindow?.get_title() || "none"
-      } focusMetaWindow=${focusMetaWindow?.get_title() || "none"}`
-    );
-    if (focusMetaWindow) {
-      const focusNodeWindow = this.findNodeWindow(focusMetaWindow);
-      if (focusNodeWindow) {
-        Logger.debug(
-          `_handleGrabOpEnd: percent=${focusNodeWindow.percent} initRect=${JSON.stringify(
-            focusNodeWindow.initRect
-          )} grabMode=${focusNodeWindow.grabMode}`
-        );
-      }
-    }
-    if (!focusMetaWindow) return;
-    const focusNodeWindow = this.findNodeWindow(focusMetaWindow);
-
-    if (focusNodeWindow && !this.cancelGrab) {
-      // WINDOW_BASE is when grabbing the window decoration
-      // COMPOSITOR is when something like Overview requesting a grab, especially when Super is pressed.
-      if (grabOp === Meta.GrabOp.WINDOW_BASE || grabOp === Meta.GrabOp.MOVING_UNCONSTRAINED) {
-        if (this.allowDragDropTile()) {
-          this.moveWindowToPointer(focusNodeWindow);
-        }
-      }
-    }
-
-    // Bug #433 fix: Clean up preview hint from the originally dragged window
-    // This handles cases where focus changed during drag (e.g., crossing monitors)
-    // Ported from jcrussell/forge
-    if (this._draggedNodeWindow && this._draggedNodeWindow !== focusNodeWindow) {
-      this._grabCleanup(this._draggedNodeWindow);
-    }
-    this._draggedNodeWindow = null;
-
-    this._grabCleanup(focusNodeWindow);
-
-    if (
-      (() => {
-        try {
-          // GNOME 49+
-          return !focusMetaWindow.is_maximized();
-        } catch {
-          // pre-49 fallback
-          return (focusMetaWindow as AnvilMetaWindow).get_maximized() === 0;
-        }
-      })()
-    ) {
-      this.renderTree("grab-op-end");
-    }
-
-    // Track manually resized windows for per-monitor resize exemption.
-    // Must run AFTER renderTree so the first resize is still clamped by
-    // enforceUltrawideSize; subsequent renders will see the window in
-    // _resizedWindows and skip clamping.
-    // Use a timeout (instead of idle_add) to ensure all async renders
-    // triggered by the resize (e.g., from size-changed signals) complete
-    // before the counter is incremented. This prevents a race where a
-    // late render sees the incremented counter and undoes the clamping.
-    // Use _metaWindow (the window that was actually resized) instead of
-    // focusMetaWindow to avoid race conditions where focus changed during
-    // async resize operations.
-    if (_metaWindow && Utils.grabMode(grabOp) === GRAB_TYPES.RESIZING) {
-      const monitorIndex = _metaWindow.get_monitor();
-      const constraints = this._tilingRender.getMonitorConstraints(monitorIndex);
-      if (constraints?.resizeExempt) {
-        const winId = _metaWindow.get_id();
-        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, () => {
-          const currentCount = this._resizedWindows.get(winId) || 0;
-          this._resizedWindows.set(winId, currentCount + 1);
-          return GLib.SOURCE_REMOVE;
-        });
-      }
-    }
-
-    this.updateStackedFocus(focusNodeWindow);
-    this.updateTabbedFocus(focusNodeWindow);
-    this.nodeWinAtPointer = null;
-
-    // Phase C fix: Clear stale grabOp to prevent suppression of tabbed focus updates
-    // Credit: mayconrcmello/forge PR #526
-    this.grabOp = Meta.GrabOp.NONE;
+  _handleGrabOpEnd(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
+    this._grab.end(display, metaWindow, grabOp);
   }
 
   _grabCleanup(focusNodeWindow: Node<any> | null) {
-    this.cancelGrab = false;
-    this._lastResizePair = null;
-    if (!focusNodeWindow) return;
-    focusNodeWindow.initRect = null;
-    focusNodeWindow.grabMode = null;
-    focusNodeWindow.initGrabOp = null;
-
-    // Bug #175 fix: Ensure preview hint is always cleaned up (add try-catch)
-    // Ported from jcrussell/forge
-    if (focusNodeWindow.previewHint) {
-      try {
-        focusNodeWindow.previewHint.hide();
-        if (global.window_group && global.window_group.contains(focusNodeWindow.previewHint)) {
-          global.window_group.remove_child(focusNodeWindow.previewHint);
-        }
-        focusNodeWindow.previewHint.destroy();
-      } catch (e) {
-        Logger.warn(`Failed to cleanup preview hint: ${e}`);
-      } finally {
-        focusNodeWindow.previewHint = null;
-      }
-    }
-
-    if (focusNodeWindow.mode === WINDOW_MODES.GRAB_TILE) {
-      focusNodeWindow.mode = WINDOW_MODES.TILE;
-    }
+    this._grab.cleanup(focusNodeWindow);
   }
 
   allowDragDropTile() {
@@ -3001,425 +2430,18 @@ export class WindowManager extends GObject.Object {
   }
 
   _handleResizing(focusNodeWindow: Node<any> | null) {
-    if (!focusNodeWindow || focusNodeWindow.isFloat()) {
-      return;
-    }
-    const grabOps = Utils.decomposeGrabOp(this.grabOp);
-    for (const grabOp of grabOps) {
-      const initGrabOp = focusNodeWindow.initGrabOp;
-      const direction = Utils.directionFromGrab(grabOp);
-      const orientation = Utils.orientationFromGrab(grabOp);
-      let parentNodeForFocus = focusNodeWindow!.parentNode!;
-      const position = Utils.positionFromGrabOp(grabOp);
-      // normalize the rect without gaps
-      const focusMeta = this.focusMetaWindow;
-      if (!focusMeta) return;
-      const frameRect = focusMeta.get_frame_rect();
-      const gaps = this.calculateGaps(focusNodeWindow);
-      const currentRect = Utils.removeGapOnRect(frameRect, gaps);
-      let firstRect;
-      let secondRect;
-      let parentRect;
-      let resizePairForWindow;
-
-      if (initGrabOp === Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN) {
-        Logger.debug(`_handleResizing: KEYBOARD_RESIZING_UNKNOWN — return early`);
-        return;
-      } else {
-        resizePairForWindow = this.tree.nextVisible(focusNodeWindow, direction!);
-        if (!resizePairForWindow) {
-          // Edge case: window at the edge has no sibling in the resize direction
-          // (e.g. resizing the right edge of the rightmost window).
-          // Try the opposite direction to find the resize pair.
-          if (direction !== undefined) {
-            const oppositeDir = Utils.oppositeDirectionOf(direction) as Meta.MotionDirection;
-            resizePairForWindow = this.tree.nextVisible(focusNodeWindow, oppositeDir);
-          }
-        }
-      }
-
-      this._lastResizePair = resizePairForWindow || null;
-
-      const sameParent = resizePairForWindow
-        ? resizePairForWindow.parentNode === focusNodeWindow!.parentNode!
-        : false;
-
-      Logger.debug(
-        `_handleResizing: title=${focusMeta.get_title()} initRect=${JSON.stringify(
-          focusNodeWindow.initRect
-        )} currentRect=${JSON.stringify(
-          currentRect
-        )} direction=${direction} orientation=${orientation} sameParent=${sameParent} resizePair=${
-          resizePairForWindow
-            ? resizePairForWindow.isWindow()
-              ? (resizePairForWindow.nodeValue as Meta.Window)?.get_title()
-              : resizePairForWindow.nodeType
-            : "none"
-        }`
-      );
-
-      if (orientation === ORIENTATION_TYPES.HORIZONTAL) {
-        if (sameParent) {
-          // use the window or con pairs
-          if (this.tree.getTiledChildren(parentNodeForFocus.childNodes).length <= 1) {
-            return;
-          }
-
-          firstRect = focusNodeWindow.initRect;
-          if (resizePairForWindow) {
-            if (
-              !this.floatingWindow(resizePairForWindow) &&
-              !this.minimizedWindow(resizePairForWindow)
-            ) {
-              secondRect = resizePairForWindow.rect;
-            } else {
-              // TODO try to get the next resize pair?
-            }
-          }
-
-          if (!firstRect || !secondRect) {
-            return;
-          }
-
-          parentRect = parentNodeForFocus.rect!;
-          const changePx = currentRect.width - firstRect!.width;
-          const firstPercent = (firstRect!.width + changePx) / parentRect.width;
-          const secondPercent = (secondRect!.width - changePx) / parentRect.width;
-          focusNodeWindow.percent = firstPercent;
-          resizePairForWindow!.percent = secondPercent;
-        } else {
-          // use the parent pairs (con to another con or window)
-          if (resizePairForWindow && resizePairForWindow.parentNode) {
-            if (this.tree.getTiledChildren(resizePairForWindow.parentNode.childNodes).length <= 1) {
-              return;
-            }
-            const firstWindowRect = focusNodeWindow.initRect;
-            let index: number | null = resizePairForWindow.index;
-            if (position === POSITION.BEFORE) {
-              // Find the opposite node
-              index = index! + 1;
-            } else {
-              index = index! - 1;
-            }
-            const childNodes = resizePairForWindow.parentNode.childNodes;
-            if (index === null || index < 0 || index >= childNodes.length) return;
-            parentNodeForFocus = childNodes[index!];
-            firstRect = parentNodeForFocus.rect;
-            secondRect = resizePairForWindow.rect;
-            if (!firstRect || !secondRect) {
-              return;
-            }
-
-            parentRect = parentNodeForFocus.parentNode!.rect!;
-            const changePx = currentRect.width - firstWindowRect!.width;
-            const firstPercent = (firstRect.width + changePx) / parentRect.width;
-            const secondPercent = (secondRect.width - changePx) / parentRect.width;
-            parentNodeForFocus.percent = firstPercent;
-            resizePairForWindow.percent = secondPercent;
-            Logger.debug(
-              `_handleResizing HORIZONTAL diffParent: changePx=${changePx} firstPercent=${firstPercent} secondPercent=${secondPercent} parentW=${parentRect.width}`
-            );
-          }
-        }
-      } else if (orientation === ORIENTATION_TYPES.VERTICAL) {
-        if (sameParent) {
-          // use the window or con pairs
-          if (this.tree.getTiledChildren(parentNodeForFocus.childNodes).length <= 1) {
-            return;
-          }
-          firstRect = focusNodeWindow.initRect;
-          if (resizePairForWindow) {
-            if (
-              !this.floatingWindow(resizePairForWindow) &&
-              !this.minimizedWindow(resizePairForWindow)
-            ) {
-              secondRect = resizePairForWindow.rect;
-            } else {
-              // TODO try to get the next resize pair?
-            }
-          }
-          if (!firstRect || !secondRect) {
-            return;
-          }
-          parentRect = parentNodeForFocus.rect!;
-          const changePx = currentRect.height - firstRect!.height;
-          const firstPercent = (firstRect!.height + changePx) / parentRect.height;
-          const secondPercent = (secondRect!.height - changePx) / parentRect.height;
-          focusNodeWindow.percent = firstPercent;
-          resizePairForWindow!.percent = secondPercent;
-          Logger.debug(
-            `_handleResizing VERTICAL sameParent: changePx=${changePx} firstPercent=${firstPercent} secondPercent=${secondPercent} parentH=${parentRect.height}`
-          );
-        } else {
-          // use the parent pairs (con to another con or window)
-          if (resizePairForWindow && resizePairForWindow.parentNode) {
-            if (this.tree.getTiledChildren(resizePairForWindow.parentNode.childNodes).length <= 1) {
-              return;
-            }
-            const firstWindowRect = focusNodeWindow.initRect;
-            let index: number | null = resizePairForWindow.index;
-            if (position === POSITION.BEFORE) {
-              // Find the opposite node
-              index = index! + 1;
-            } else {
-              index = index! - 1;
-            }
-            const childNodes = resizePairForWindow.parentNode.childNodes;
-            if (index === null || index < 0 || index >= childNodes.length) return;
-            parentNodeForFocus = childNodes[index!];
-            firstRect = parentNodeForFocus.rect;
-            secondRect = resizePairForWindow.rect;
-            if (!firstRect || !secondRect) {
-              return;
-            }
-
-            parentRect = parentNodeForFocus.parentNode!.rect!;
-            const changePx = currentRect.height - firstWindowRect!.height;
-            const firstPercent = (firstRect.height + changePx) / parentRect.height;
-            const secondPercent = (secondRect.height - changePx) / parentRect.height;
-            parentNodeForFocus.percent = firstPercent;
-            resizePairForWindow.percent = secondPercent;
-            Logger.debug(
-              `_handleResizing VERTICAL diffParent: changePx=${changePx} firstPercent=${firstPercent} secondPercent=${secondPercent} parentH=${parentRect.height}`
-            );
-          }
-        }
-      }
-    }
-
-    // Reposition focused window to prevent "traveling" during resize
-    // Ported from jcrussell/forge
-    this._repositionDuringResize(focusNodeWindow);
-  }
-
-  /**
-   * Repositions the focused window during resize to prevent "traveling".
-   * Uses initRect as reference to calculate correct position based on which
-   * edge is being dragged.
-   * Ported from jcrussell/forge
-   */
-  _repositionDuringResize(focusNodeWindow: Node<any> | null) {
-    if (!focusNodeWindow || !focusNodeWindow.initRect) {
-      Logger.debug(`_repositionDuringResize: skip — no focusNodeWindow or no initRect`);
-      return;
-    }
-
-    const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
-    if (!metaWindow) return;
-
-    const frameRect = metaWindow.get_frame_rect();
-    const initRect = focusNodeWindow.initRect;
-    const gaps = this.calculateGaps(focusNodeWindow);
-
-    const grabOps = Utils.decomposeGrabOp(this.grabOp);
-    let targetX = frameRect.x;
-    let targetY = frameRect.y;
-
-    for (const grabOp of grabOps) {
-      const position = Utils.positionFromGrabOp(grabOp);
-      const orientation = Utils.orientationFromGrab(grabOp);
-
-      if (orientation === ORIENTATION_TYPES.HORIZONTAL) {
-        if (position === POSITION.AFTER) {
-          // Resizing right edge - x should stay fixed at initRect.x + gaps
-          targetX = initRect.x + gaps;
-        } else if (position === POSITION.BEFORE) {
-          // Resizing left edge - x should adjust based on width change
-          targetX = initRect.x + gaps - (frameRect.width - (initRect.width - gaps * 2));
-        }
-      } else if (orientation === ORIENTATION_TYPES.VERTICAL) {
-        if (position === POSITION.AFTER) {
-          // Resizing bottom edge - y should stay fixed at initRect.y + gaps
-          targetY = initRect.y + gaps;
-        } else if (position === POSITION.BEFORE) {
-          // Resizing top edge - y should adjust based on height change
-          targetY = initRect.y + gaps - (frameRect.height - (initRect.height - gaps * 2));
-        }
-      }
-    }
-
-    // Only reposition if position actually differs
-    if (targetX !== frameRect.x || targetY !== frameRect.y) {
-      metaWindow.move_frame(true, targetX, targetY);
-    }
-  }
-
-  /**
-   * During a mouse-drag resize, immediately re-layout all tiled windows
-   * EXCEPT the one currently being dragged (GNOME owns its position).
-   * Bypasses this.move() which is blocked by metaWindow.grabbed on Wayland.
-   */
-  _liveResizeNeighbors(draggingNodeWindow: Node<any>) {
-    const draggingMetaWin = draggingNodeWindow.nodeValue as Meta.Window;
-
-    // Only reprocess the affected container subtree, not the entire tree.
-    // When the resize pair lives in a different parent (diffParent case),
-    // we must process the common ancestor so that both subtrees get
-    // updated rects.
-    let parentNode = draggingNodeWindow.parentNode;
-    if (parentNode && this._lastResizePair) {
-      const resizePairParent = this._lastResizePair.parentNode;
-      if (resizePairParent && resizePairParent !== parentNode) {
-        const ancestors = new Set<Node<any>>();
-        let ancestor: Node<any> | null = draggingNodeWindow.parentNode;
-        while (ancestor) {
-          ancestors.add(ancestor);
-          ancestor = ancestor.parentNode;
-        }
-        ancestor = this._lastResizePair.parentNode;
-        while (ancestor) {
-          if (ancestors.has(ancestor)) {
-            parentNode = ancestor;
-            break;
-          }
-          ancestor = ancestor.parentNode;
-        }
-      }
-    }
-    if (parentNode) {
-      this._tilingRender.processNode(parentNode);
-    }
-
-    // Move all tiled windows except the one being dragged
-    const tiledWindows = this.tree.getNodeByType(NODE_TYPES.WINDOW);
-    tiledWindows.forEach((nodeWin) => {
-      if (nodeWin.nodeValue === draggingMetaWin) return; // GNOME owns this
-      if (nodeWin.isFloat()) return;
-      if (!nodeWin.renderRect) return;
-      const r = nodeWin.renderRect;
-      if (r.width > 0 && r.height > 0) {
-        // Call move_resize_frame directly — this.move() bails out because
-        // metaWindow.grabbed is true for all windows during a Wayland grab
-        const actor = (
-          nodeWin.nodeValue as Meta.Window
-        ).get_compositor_private() as Clutter.Actor | null;
-        if (!actor) return;
-        actor.remove_all_transitions();
-        (nodeWin.nodeValue as Meta.Window).move_resize_frame(true, r.x, r.y, r.width, r.height);
-      }
-    });
+    this._grab.handleResizing(focusNodeWindow);
   }
 
   _handleMoving(focusNodeWindow: Node<any> | null) {
-    if (!focusNodeWindow || focusNodeWindow.mode !== WINDOW_MODES.GRAB_TILE) return;
-
-    const nodeWinAtPointer = this.findNodeWindowAtPointer(focusNodeWindow);
-    this.nodeWinAtPointer = nodeWinAtPointer ?? null;
-
-    const hidePreview = () => {
-      if (focusNodeWindow.previewHint) {
-        focusNodeWindow.previewHint.hide();
-      }
-    };
-
-    if (nodeWinAtPointer) {
-      if (!focusNodeWindow.previewHint) {
-        const previewHint = new St.Bin();
-        global.window_group.add_child(previewHint);
-        focusNodeWindow.previewHint = previewHint;
-      }
-
-      if (this.allowDragDropTile()) {
-        this.moveWindowToPointer(focusNodeWindow, true);
-      } else {
-        hidePreview();
-      }
-    } else {
-      hidePreview();
-    }
+    this._grab.handleMoving(focusNodeWindow);
   }
 
-  isFloatingExempt(metaWindow: Meta.Window) {
-    if (!metaWindow) return true;
-    const windowTitle = metaWindow.get_title();
-    const windowType = metaWindow.get_window_type();
-    const wmClass = metaWindow.get_wm_class();
-
-    // Bug #294 fix: explicit TILE overrides take precedence over all
-    // built-in float rules. Ported from jcrussell/forge
-    for (const override of this.windowProps.overrides) {
-      if (override.mode !== "tile") continue;
-
-      if (override.wmClass) {
-        const reported = (wmClass || "").toLowerCase();
-        const cfg = override.wmClass.toLowerCase();
-        if (reported.length === 0 || !cfg.includes(reported)) continue;
-      }
-      if (override.wmTitle) {
-        if (!windowTitleMatchesOverride(windowTitle, override.wmTitle)) continue;
-      }
-      if (override.wmId) {
-        const matchId = override.wmId === String(metaWindow.get_id());
-        if (!matchId) continue;
-      }
-
-      // All specified criteria (class/title/id) for this tile override matched.
-      // (matchClass may be false for title/id-only rules, but we passed the guards.)
-      return false;
-    }
-
-    if (Utils.isEphemeralHelperWindow(metaWindow)) {
-      return true;
-    }
-
-    // Bug #383 fix: Firefox PIP (Picture-in-Picture) windows should always float
-    // Ported from jcrussell/forge
-    if (windowTitle && windowTitle.toLowerCase().includes("picture-in-picture")) {
-      return true;
-    }
-
-    // Bug #260 fix: Blender has rendering issues with tiling (cogl_framebuffer errors)
-    // Ported from jcrussell/forge
-    if (wmClass && wmClass.toLowerCase().includes("blender")) {
-      return true;
-    }
-
-    // Bug #271 fix: Steam app has overlapping/sizing issues when tiled
-    // Ported from jcrussell/forge
-    if (
-      wmClass &&
-      (wmClass.toLowerCase().includes("steam") || wmClass.toLowerCase() === "steamwebhelper")
-    ) {
-      return true;
-    }
-
-    const hasIdentity = !!(wmClass || windowTitle);
-    const trans = metaWindow.get_transient_for();
-    const resizable = metaWindow.allows_resize();
-    const isDialogType =
-      windowType === Meta.WindowType.DIALOG || windowType === Meta.WindowType.MODAL_DIALOG;
-    const hasTransient = hasIdentity && trans !== null;
-    const noResize = hasIdentity && !resizable;
-    const floatByType = isDialogType || hasTransient || noResize;
-
-    const knownFloats = this.windowProps.overrides.filter((wprop) => wprop.mode === "float");
-
-    const floatOverride =
-      knownFloats.filter((kf) => {
-        let matchTitle = false;
-        let matchClass = false;
-        let matchId = false;
-
-        if (kf.wmTitle) {
-          matchTitle = windowTitleMatchesOverride(windowTitle, kf.wmTitle);
-        }
-        if (kf.wmClass) {
-          const reported = (metaWindow.get_wm_class() || "").toLowerCase();
-          const cfg = kf.wmClass.toLowerCase();
-          matchClass = reported.length > 0 && cfg.includes(reported);
-        }
-        if (kf.wmId) {
-          matchId = kf.wmId === String(metaWindow.get_id());
-        }
-
-        const classOk = !kf.wmClass || matchClass;
-        const titleOk = !kf.wmTitle || matchTitle;
-        const idOk = !kf.wmId || matchId;
-        const ok = classOk && titleOk && idOk;
-        return ok;
-      }).length > 0;
-
-    return floatByType || floatOverride;
+  /** Float/tile classification — delegated to RulesEngine (sole owner). */
+  isFloatingExempt(metaWindow: Meta.Window | null) {
+    // Keep rules cache aligned with WM windowProps (tests may mutate either).
+    this._rules.windowProps = this.windowProps;
+    return this._rules.isFloatingExempt(metaWindow);
   }
 
   _getDragDropCenterPreviewStyle() {
@@ -3464,13 +2486,8 @@ export class WindowManager extends GObject.Object {
    * This is called when the preferences page modifies the overrides
    */
   reloadWindowOverrides() {
-    // Get fresh data from the ConfigManager
-    const freshProps = this.ext.configMgr.windowProps;
-    if (freshProps) {
-      this.windowProps = freshProps;
-      this.windowProps.overrides = this.windowProps.overrides.filter((override) => !override.wmId);
-      Logger.info(`Reloaded ${this.windowProps.overrides.length} window overrides from file`);
-    }
+    this._rules.reloadFromConfig(this.ext.configMgr);
+    this.windowProps = this._rules.windowProps;
   }
 
   floatAllWindows() {

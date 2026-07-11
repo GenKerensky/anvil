@@ -9,7 +9,6 @@
     "typecheck": "tsc -b",
     "typecheck:test": "tsc -b tsconfig.unit.json",
     "typecheck:e2e": "tsc -b tsconfig.e2e.json",
-    "typecheck:integration": "tsc -b tsconfig.integration.json",
     "typecheck:clean": "tsc -b --clean",
     "typecheck:all": "npm run typecheck",
     "lint": "eslint . && prettier --check \"./**/*.{js,jsx,ts,tsx,json,md}\"",
@@ -17,9 +16,6 @@
     "test": "npm run typecheck && npm run lint && npm run test:unit",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",
-    "test:integration": "make test-integration",
-    "test:integration:all": "make test-integration-all",
-    "test:integration:build": "make test-integration-build-all",
     "test:e2e": "make test-e2e",
     "prepare": "husky install"
   },

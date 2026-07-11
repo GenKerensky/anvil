@@ -1,5 +1,15 @@
 /*
- * Tiling Render — float classification, layout geometry, gaps, constraints, apply.
+ * Tiling Render — sole owner of layout geometry apply.
+ *
+ * Owns: processFloats (layout float flags), percent/split layout, gaps,
+ * ultrawide/monitor constraints, and frame application via moveWindow.
+ *
+ * Callers use `wm.tilingRender` (or this class directly). WindowManager must
+ * not reintroduce thin wrappers (calculateGaps / processFloats /
+ * enforceUltrawideSize / getMonitor*). WM.renderTree only schedules idle
+ * coalesce, freeze, tiling-mode gate, then borders/decorations.
+ *
+ * @see codebase-review.md F5 Stage 3, architecture rule 2 (one owner per state)
  */
 
 import Clutter from "gi://Clutter";
@@ -24,6 +34,8 @@ export interface TilingRenderDeps {
   getTiledChildren: (childNodes: Node<any>[]) => Node<any>[];
   getResizeCount: (windowId: number) => number;
   findParent: (node: Node<any>, type: string) => Node<any> | null;
+  /** LayoutEngine.computeSizes — not via Tree facade (Stage 7). */
+  computeSizes: (node: Node<any>, childItems: Node<any>[]) => number[];
 }
 
 export class TilingRender extends GObject.Object {
@@ -274,7 +286,7 @@ export class TilingRender extends GObject.Object {
       }
 
       const tiledChildren = tree.getTiledChildren(node.childNodes);
-      const sizes = tree.computeSizes(node, tiledChildren);
+      const sizes = this._deps.computeSizes(node, tiledChildren);
 
       params.sizes = sizes;
       const showTabs = this._deps.settings.get_boolean("showtab-decoration-enabled");

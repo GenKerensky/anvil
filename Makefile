@@ -5,10 +5,7 @@ MSGSRC = $(wildcard src/po/*.po)
 .PHONY: all build install uninstall clean dist debug \
         enable disable restart purge log journal \
         potfile compilemsgs metadata schemas format lint check \
-        test-unit test-integration test-integration-build-all test-integration-all \
-        test-integration-parallel test-integration-run-shard-% \
-        test-e2e-container test-e2e-all-container test-e2e-build-container test-e2e \
-        test-debug-loop-lib
+        test-unit test-e2e test-debug-loop-lib
 
 all: build install
 
@@ -113,61 +110,11 @@ journal:
 test-unit:
 	npm run test:unit
 
-# Build and run Integration tests in a container (formerly test-e2e)
-# Usage: make test-integration             (Fedora 44, default)
-#        make test-integration FEDORA_VERSION=43
-#        make test-integration FEDORA_VERSION=42
-FEDORA_VERSION ?= 44
-# Optional: run only specific spec(s). Omit to run all specs.
-#   SPEC=resize make test-integration          -> run resize.js only
-#   SPEC=focus,keyboard make test-integration   -> run focus.js + keyboard.js
-SPEC ?=
-# Sharding: split specs across N parallel containers.
-#   SPLIT=1 make test-integration              -> run shard 1 only
-#   SPLIT=1 SHARDS=4 make test-integration      -> run shard 1 of 4
-SPLIT ?=
-SHARDS ?= 3
-test-integration: dist
-	@if ! podman image exists anvil-test-pod:fedora-$(FEDORA_VERSION); then \
-		echo "Container image not found. Building..."; \
-		bash test/integration/build-container.sh $(FEDORA_VERSION); \
-	fi
-	python3 test/integration/run.py -v $(FEDORA_VERSION) \
-		$(if $(SPEC),--spec $(SPEC),) \
-		$(if $(SPLIT),--shard $(SPLIT) --total-shards $(SHARDS),)
-
-# Run all shards in parallel (wall clock << sequential).
-# Builds dist once, then dispatches SHARDS parallel container executions.
-# Usage: make test-integration-parallel
-#        make test-integration-parallel FEDORA_VERSION=43
-#        make test-integration-parallel SHARDS=4
-#        make test-integration-parallel SHARDS=3 FEDORA_VERSION=42
-test-integration-parallel: dist
-	$(MAKE) -j$(SHARDS) $(shell for i in $$(seq 1 $(SHARDS)); do echo test-integration-run-shard-$$i; done)
-
-# Shard execution targets (no dist dependency — it was built by the caller).
-test-integration-run-shard-%:
-	python3 test/integration/run.py -v $(FEDORA_VERSION) --shard $* --total-shards $(SHARDS)
-
-# Build Integration container images for all supported Fedora versions
-test-integration-build-all:
-	bash test/integration/build-container.sh 42
-	bash test/integration/build-container.sh 43
-	bash test/integration/build-container.sh 44
-
-# Run Integration tests across all supported Fedora versions
-# Uses run-all.py to launch all versions in parallel, cutting wall-clock
-# time from ~210 s to ~75 s.
-test-integration-all: dist
-	python3 test/integration/run-all.py
-
-# Backward-compat aliases for old test-e2e targets
-test-e2e-container: test-integration
-test-e2e-all-container: test-integration-all
-test-e2e-build-container: test-integration-build-all
-
-# Devkit-based E2E tests (local Wayland devkit compositor)
+# Host headless E2E tests (gnome-shell --headless --virtual-monitor)
+# Requires host GNOME Shell + jasmine-gjs at /usr/share/jasmine-gjs/
 # Usage: make test-e2e
+#        python3 test/e2e/run.py --tag resize
+#        python3 test/e2e/run.py --no-build
 test-e2e: dist
 	python3 test/e2e/run.py
 

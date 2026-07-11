@@ -109,10 +109,9 @@ User is encouraged to bind the following:
 
 ## Testing
 
-Anvil has three levels of automated tests: **unit tests** (fast, no GNOME runtime needed),
-**integration tests** (full GNOME Shell session in a Podman container), and
-**E2E tests** (local headless compositor). For agent-driven debugging of behavioral and
-layout bugs, use the **agent debug loop** (headless, JSON artifacts) — see below.
+Anvil has two automated test layers: **unit tests** (fast, no GNOME runtime) and
+**E2E tests** (host `gnome-shell --headless` with Jasmine). For agent-driven debugging
+of behavioral and layout bugs, use the **agent debug loop** — see below.
 
 ### Unit Tests
 
@@ -129,49 +128,51 @@ npm run test:unit
 # Run unit tests in watch mode (re-runs on file save)
 npm run test:unit:watch
 
-# Run lint + unit tests together
+# Run typecheck + lint + unit tests together
 npm test
 ```
 
-### Integration Tests (Container)
+### E2E Tests (Headless)
 
-Integration tests run a real GNOME Shell session inside a [Podman](https://podman.io)
-container using `gnome-shell --headless --wayland` — the correct headless mode for
-GNOME 50, which removed the `--nested` flag. This brings up a complete Wayland compositor
-with a virtual framebuffer; no Xvfb, no DRM device, and no real GPU are required.
-D-Bus system services are provided by
-[python-dbusmock](https://github.com/martinpitt/python-dbusmock) stubs, matching the
-approach used by GNOME Shell's own GitLab CI.
+E2E tests run a real GNOME Shell session on the host using
+`gnome-shell --wayland --headless --virtual-monitor 1920x1080` with an isolated session
+bus and [python-dbusmock](https://github.com/martinpitt/python-dbusmock) stubs. Specs are
+**Jasmine** modules loaded via `--automation-script` (`test/e2e/runner.js`).
 
-Tests are written as **Jasmine** specs that run inside gnome-shell via
-`--automation-script`. The runner (`runner.js`) bootstraps Jasmine from the
-system-installed `jasmine-gjs` package, imports all spec files, executes them, and
-writes results as JSON.
+Suites cover: extension lifecycle, tiling geometry, keyboard shortcuts, window operations,
+resize clamping (data-driven matrix), focus/swap/move, floating and snap layouts, advanced
+layouts, workspace skip-tile, borders/gaps, minimize, and monitor constraints.
 
-Before running specs, the runner performs **D-Bus pre-activation** — it polls for the
-`org.gnome.Shell.Extensions` service (15s timeout), preventing race conditions in
-preferences tests that depend on that D-Bus path. If the service is unavailable, the
-runner records a cascade failure and downstream specs can gracefully skip via
-`global.__anvil_skipIfFailed(prereq, reason)`.
+Shared helpers live in `test/lib/shared-commands.js` (`launchApp`, `waitForWindowCount`,
+`getFocusedWindowId`, `sendAnvilCommand`, etc.).
 
-Specs cover: extension lifecycle, tiling geometry, keyboard shortcuts, window operations,
-resize clamping, monitor constraints, GSettings, preferences UI (via `gi://Atspi`), and
-tiling layouts — approximately 115+ data-driven tests.
+**Prerequisites:**
 
-All tests import shared GJS helpers from `test/lib/shared-commands.js`, which provides
-reliable async utilities for launching apps, polling window state, and simulating
-Anvil keyboard shortcuts. Key polling helpers include `getFocusedWindowId()`,
-`waitForWindowCount()`, `waitForGeometry()`, `waitForFocusChange()`, and
-`waitForFocusWindow()` — these use GLib timeout-based polling to handle the
-inherently asynchronous nature of Wayland window management in headless mode.
-Focus detection uses stable **window IDs** (`Meta.Window.get_id()`) rather than
-titles, eliminating title-collision flakiness when multiple windows share the
-same application title.
+- Host GNOME Shell with `--headless` and `--virtual-monitor` (GNOME 49+)
+- `jasmine-gjs` installed at `/usr/share/jasmine-gjs/` (from source if not packaged)
+- `nautilus` (test app — Text Editor’s preferred size does not tile reliably in headless)
+- `python3`, `dbusmock` recommended, `glib2-devel` for `make dist`
 
-**What is NOT testable headless:**
+On Bazzite, prefer running E2E inside `fedora-devbox` (mutable `dnf`) rather than layering packages on the host.
 
-- Mouse drag-and-drop (no pointer device)
-- Pixel-level visual rendering (no GPU framebuffer)
+Install jasmine-gjs from source if missing:
+
+```bash
+git clone --depth=1 https://github.com/ptomato/jasmine-gjs.git
+cd jasmine-gjs && meson setup _build --prefix=/usr
+ninja -C _build && sudo ninja -C _build install
+```
+
+```bash
+# Full E2E suite
+make test-e2e
+
+# Filter by suite name substring
+python3 test/e2e/run.py --tag resize
+python3 test/e2e/run.py --no-build --tag focus
+```
+
+**What is NOT testable headless:** mouse drag-and-drop, pixel-level visual rendering.
 
 ### Agent Debug Loop (headless)
 
@@ -181,7 +182,7 @@ real session is never touched. One invocation = one iteration; the agent (or you
 outer loop.
 
 **Prerequisites:** `gnome-shell` with `--headless` and `--virtual-monitor` (GNOME 49+),
-`python3`, `dbusmock` (recommended — same as integration/E2E), built `dist/` (`make build debug`)
+`python3`, `dbusmock` (recommended — same as E2E), built `dist/` (`make build debug`)
 
 ```bash
 # First iteration (builds dist/)
@@ -210,131 +211,24 @@ make test-debug-loop-lib
 
 Full documentation: `.agents/skills/gnome-shell-debug/SKILL.md` (v3.0).
 
-**Prerequisites:**
-
-- [Podman](https://podman.io/docs/installation) installed
-- `glib2-devel` installed (`sudo dnf install glib2-devel`, for `make dist`)
-
-**Supported GNOME Shell versions:**
-
-| Fedora | GNOME Shell | Status       |
-| ------ | ----------- | ------------ |
-| 44     | 50          | ✅ Primary   |
-| 43     | 49          | ✅ Supported |
-| 42     | 48          | ✅ Supported |
-
-**Step 1: Build the container image** (one-time, per Fedora version)
-
-```bash
-# Build for Fedora 44 (GNOME 50) — the primary target
-./test/integration/build-container.sh 44
-
-# Or build for all supported versions
-make test-integration-build-all
-```
-
-#### Step 2: Run the tests
-
-```bash
-# Run against Fedora 44 (default)
-make test-integration
-
-# Run against a specific Fedora version
-make test-integration FEDORA_VERSION=43
-
-# Run against all supported versions (parallel)
-make test-integration-all
-```
-
-#### Step 3: Run a subset of spec files
-
-Use `SPEC=<name>` to run only specific spec(s) by exact filename match (`.js` extension
-is optional). Supports comma-separated values:
-
-```bash
-# Run only resize tests
-make test-integration SPEC=resize
-
-# Run multiple specs
-make test-integration SPEC=resize,keyboard
-
-# Run with a specific Fedora version
-make test-integration FEDORA_VERSION=43 SPEC=constraints
-```
-
-When `SPEC` is unset, all 16 spec files run (backward compatible). Unknown spec names
-produce a warning in the GNOME Shell log without causing test failure.
-
-**Available spec names:** `extension-lifecycle`, `tiling`, `keyboard`, `focus`, `swap`,
-`move`, `operations`, `resize`, `constraints`, `layouts`, `floating`, `workspace`,
-`borders`, `minimize`, `settings`, `preferences`
-
-**Debugging a failed test:**
-
-On failure, the test runner saves the full GNOME Shell **journal log** to
-`test/integration/output/journal.log`.
-
-Use `-k` to keep the container running for manual inspection:
-
-```bash
-python3 test/integration/run.py -v 44 -k
-# Container is left running — connect to it for debugging:
-podman exec -it --user gnomeshell <container-id> set-env.sh bash
-```
-
 #### Test structure
 
 ```text
 test/
 ├── lib/
-│   ├── shared-commands.js       # Shared GJS helpers (E2E + integration + debug loop)
-│   ├── shell_session.py         # HeadlessShellSession (E2E parity + agent loop)
+│   ├── shared-commands.js       # Shared GJS helpers (E2E + debug loop)
+│   ├── shell_session.py         # HeadlessShellSession (agent loop)
 │   ├── host_guard.py            # Host-session guardrails for debug loop
 │   └── log_analysis.py          # Anvil log signatures for debug loop
 ├── debug/
 │   ├── examples/                # Checked-in repro scripts (e.g. minimal-repro.js)
 │   └── local/                   # Gitignored local repro scripts
-└── integration/
-    ├── run.py                   # Python orchestrator (container lifecycle, results polling)
-    ├── runner.js                # Jasmine automation-script loaded by gnome-shell
-    ├── start-session.sh         # Session D-Bus + dbusmock + gnome-shell --headless
-    ├── set-env.sh               # Environment wrapper for podman exec commands
-    ├── build-container.sh       # Build container image for a Fedora version
-    ├── run-all.py               # Runs all Fedora versions in parallel
-    ├── specs/                   # Jasmine spec files (GJS ES modules)
-    │   ├── extension-lifecycle.js
-    │   ├── tiling.js
-    │   ├── keyboard.js
-    │   ├── focus.js
-    │   ├── swap.js
-    │   ├── move.js
-    │   ├── operations.js
-    │   ├── resize.js
-    │   ├── constraints.js
-    │   ├── layouts.js
-    │   ├── floating.js
-    │   ├── workspace.js
-    │   ├── borders.js
-    │   ├── minimize.js
-    │   ├── settings.js
-    │   └── preferences.js
-    └── output/                  # Test artifacts (journal, screenshots, results JSON)
+├── e2e/
+│   ├── run.py                   # Host orchestrator (D-Bus, shell, results)
+│   ├── runner.js                # Jasmine automation-script
+│   └── suites/                  # Jasmine suite files
+└── unit/                        # vitest unit tests
 ```
-
-### E2E Tests (Headless)
-
-E2E tests run on the host using `gnome-shell --headless --wayland --virtual-monitor`
-with an isolated session bus. They use the same Jasmine automation-script pattern as
-integration tests.
-
-```bash
-# Run E2E tests
-make test-e2e
-```
-
-E2E specs live in `test/e2e/suites/` and cover extension lifecycle, tiling geometry,
-keyboard shortcuts, and window operations. For interactive visual debugging, use
-`run-devkit-session.sh` (see Agent Debug Loop section above).
 
 ## Local Development Setup
 

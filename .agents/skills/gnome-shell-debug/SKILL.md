@@ -17,15 +17,15 @@ metadata:
 
 This module owns **three seams** for debugging GNOME Shell sessions.
 
-| Seam                              | Default for                              | Launcher                                     |
-| --------------------------------- | ---------------------------------------- | -------------------------------------------- |
-| **Devkit**                        | Human visual debugging, LG, flicker      | `run-devkit-session.sh`                      |
-| **Headless**                      | CI, settings-only tasks, E2E/integration | `test/e2e/run.py`, `test/integration/run.py` |
-| **Agent Loop** (v1 headless only) | Autonomous agent debug iterations        | `run-debug-loop.sh` → `debug_loop.py`        |
+| Seam                              | Default for                         | Launcher                              |
+| --------------------------------- | ----------------------------------- | ------------------------------------- |
+| **Devkit**                        | Human visual debugging, LG, flicker | `run-devkit-session.sh`               |
+| **Headless**                      | E2E, settings-only tasks            | `test/e2e/run.py`                     |
+| **Agent Loop** (v1 headless only) | Autonomous agent debug iterations   | `run-debug-loop.sh` → `debug_loop.py` |
 
 **Devkit Seam**: Interactive debugging with the full devkit viewer, Looking Glass, visual inspection, and rebuild loops. Primary path for human visual work.
 
-**Headless Seam**: Automation, E2E, integration, CI, or self-contained settings/GSettings tasks without LG.
+**Headless Seam**: Automation, E2E, or self-contained settings/GSettings tasks without LG.
 
 **Agent Loop Seam**: Structured single-iteration runs with JSON artifacts, log analysis, and host guardrails. **Default for behavioral/layout bugs** when an agent drives repro → fix loops.
 
@@ -153,7 +153,7 @@ gnome-shell --wayland --headless --virtual-monitor 1920x1080 --automation-script
 - Multiple monitors: repeat `--virtual-monitor`.
 - For pure settings toggles or GSettings-driven behaviors, headless is often sufficient on its own.
 
-See the testing skill for how E2E and integration runners construct headless sessions using these facts.
+See the testing skill for how the E2E runner constructs headless sessions using these facts.
 
 ## Agent Loop Seam (v1 headless)
 
@@ -215,7 +215,7 @@ Exit codes: `0` pass, `1` repro fail, `2` guardrail abort, `3` shell crash, `130
      b. Read iteration-NNN.json; SESSION_DIR=$(jq -r .session.dir …)
      c. If .results.passed → break
      d. Edit src/; npm run typecheck && npm run lint
-4. npm run test:unit (+ integration/e2e if touching window.ts)
+4. npm run test:unit (+ make test-e2e if touching window.ts)
 5. Post-fix ritual (below)
 6. Optional: run-debug-loop.sh teardown --session-dir "$SESSION_DIR"
 ```
@@ -278,7 +278,7 @@ All scripts are relative to this skill directory. The agent executes them direct
 
 Shared Python libraries live in `test/lib/`: `shell_session.py`, `host_guard.py`, `log_analysis.py`, `runner_utils.py`.
 
-For the Headless Seam (CI/E2E), launchers are `test/e2e/run.py` and `test/integration/run.py`.
+For the Headless Seam (E2E), the launcher is `test/e2e/run.py`.
 
 ## Rare paths
 

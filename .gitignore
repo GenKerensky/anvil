@@ -8,7 +8,6 @@ src/po/anvil.pot
 .vscode
 node_modules
 src/lib/prefs/metadata.js
-test/integration/output
 test/e2e/.venv
 test/e2e/output
 test/debug/local/

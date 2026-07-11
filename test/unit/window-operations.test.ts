@@ -170,7 +170,7 @@ describe("Integration - Window Operations", () => {
       ctx.settings.set_uint("window-gap-size", 4);
       ctx.settings.set_uint("window-gap-size-increment", 2);
 
-      expect(wm().calculateGaps(node)).toBe(8);
+      expect(wm().tilingRender.calculateGaps(node)).toBe(8);
     });
   });
 
@@ -239,7 +239,7 @@ describe("Integration - Window Operations", () => {
       const { metaWindow, node } = createWindow();
       ctx.settings.set_string("workspace-skip-tile", "0");
 
-      wm().processFloats();
+      wm().tilingRender.processFloats();
 
       expect(node.mode).toBe(WINDOW_MODES.FLOAT);
     });

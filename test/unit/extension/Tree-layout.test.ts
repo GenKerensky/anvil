@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterAll, vi } from "vitest";
 import St from "gi://St";
 import { Tree, Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import { TilingRender } from "../../../src/lib/extension/tiling-render.js";
+import { LayoutEngine } from "../../../src/lib/extension/layout-engine.js";
 
 const savedDisplay = (global as any).display;
 const savedWindowGroup = (global as any).window_group;
@@ -44,19 +45,44 @@ describe("TilingRender Layout Algorithms", () => {
       remove_child: vi.fn(),
     } as any;
 
+    const mockSettings = {
+      get_boolean: vi.fn(() => false),
+      get_uint: vi.fn(() => 0),
+    };
     mockWindowManager = {
       ext: {
-        settings: {
-          get_boolean: vi.fn(() => false),
-          get_uint: vi.fn(() => 0),
-        },
+        settings: mockSettings,
       },
+      get settings() {
+        return mockSettings;
+      },
+      focusMetaWindow: null,
       determineSplitLayout: vi.fn(() => LAYOUT_TYPES.HSPLIT),
+      floatingWindow: vi.fn(() => false),
       bindWorkspaceSignals: vi.fn(),
       notifyFocusChanged: vi.fn(),
     };
 
     tree = new Tree(mockWindowManager as any);
+    mockWindowManager.layoutEngine = new LayoutEngine({
+      get tree() {
+        return tree;
+      },
+      get settings() {
+        return mockWindowManager.ext.settings as any;
+      },
+      get focusMetaWindow() {
+        return null;
+      },
+      get currentMonWsNode() {
+        return null;
+      },
+      notifyFocusChanged: vi.fn(),
+      moveWindow: vi.fn(),
+      rectForMonitor: vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1080 })),
+      sameParentMonitor: vi.fn(() => true),
+      floatingWindow: vi.fn(() => false),
+    });
     tilingRender = new TilingRender({
       settings: mockWindowManager.ext.settings as any,
       getTree: () => tree,
@@ -67,6 +93,7 @@ describe("TilingRender Layout Algorithms", () => {
       getTiledChildren: (nodes) => tree.getTiledChildren(nodes),
       getResizeCount: () => 0,
       findParent: (node, type) => tree.findParent(node, type),
+      computeSizes: (n, c) => mockWindowManager.layoutEngine.computeSizes(n, c),
     });
     mockWindowManager.tilingRender = tilingRender;
   });
@@ -80,7 +107,7 @@ describe("TilingRender Layout Algorithms", () => {
       const child1 = new Node(NODE_TYPES.CON, new St.Bin());
       const child2 = new Node(NODE_TYPES.CON, new St.Bin());
 
-      const sizes = tree.computeSizes(container, [child1, child2]);
+      const sizes = mockWindowManager.layoutEngine.computeSizes(container, [child1, child2]);
 
       expect(sizes).toHaveLength(2);
       expect(sizes[0]).toBe(500);
@@ -95,7 +122,7 @@ describe("TilingRender Layout Algorithms", () => {
       const child1 = new Node(NODE_TYPES.CON, new St.Bin());
       const child2 = new Node(NODE_TYPES.CON, new St.Bin());
 
-      const sizes = tree.computeSizes(container, [child1, child2]);
+      const sizes = mockWindowManager.layoutEngine.computeSizes(container, [child1, child2]);
 
       expect(sizes).toHaveLength(2);
       expect(sizes[0]).toBe(300);
@@ -113,7 +140,7 @@ describe("TilingRender Layout Algorithms", () => {
       const child2 = new Node(NODE_TYPES.CON, new St.Bin());
       child2.percent = 0.3;
 
-      const sizes = tree.computeSizes(container, [child1, child2]);
+      const sizes = mockWindowManager.layoutEngine.computeSizes(container, [child1, child2]);
 
       expect(sizes[0]).toBe(700);
       expect(sizes[1]).toBe(300);
@@ -130,7 +157,7 @@ describe("TilingRender Layout Algorithms", () => {
         new Node(NODE_TYPES.CON, new St.Bin()),
       ];
 
-      const sizes = tree.computeSizes(container, children);
+      const sizes = mockWindowManager.layoutEngine.computeSizes(container, children);
 
       expect(sizes).toHaveLength(3);
       expect(sizes[0]).toBe(300);
@@ -149,9 +176,9 @@ describe("TilingRender Layout Algorithms", () => {
         new Node(NODE_TYPES.CON, new St.Bin()),
       ];
 
-      const sizes = tree.computeSizes(container, children);
+      const sizes = mockWindowManager.layoutEngine.computeSizes(container, children);
 
-      sizes.forEach((size) => {
+      sizes.forEach((size: number) => {
         expect(Number.isInteger(size)).toBe(true);
       });
     });
@@ -163,7 +190,7 @@ describe("TilingRender Layout Algorithms", () => {
 
       const child1 = new Node(NODE_TYPES.CON, new St.Bin());
 
-      const sizes = tree.computeSizes(container, [child1]);
+      const sizes = mockWindowManager.layoutEngine.computeSizes(container, [child1]);
 
       expect(sizes).toHaveLength(1);
       expect(sizes[0]).toBe(1000);
@@ -510,7 +537,7 @@ describe("TilingRender Layout Algorithms", () => {
       child2.percent = 0.4;
 
       const children = [child1, child2];
-      const sizes = tree.computeSizes(container, children);
+      const sizes = mockWindowManager.layoutEngine.computeSizes(container, children);
       const params = { sizes };
 
       tilingRender.processSplit(container, child1, params, 0);

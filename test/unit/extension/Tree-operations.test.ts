@@ -125,7 +125,7 @@ describe("Tree Operations", () => {
       const window = createMockWindow();
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window);
 
-      ctx.tree.split(node, ORIENTATION_TYPES.HORIZONTAL, true);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.HORIZONTAL, true);
 
       // Node should now be inside a container
       expect(node.parentNode.nodeType).toBe(NODE_TYPES.CON);
@@ -137,7 +137,7 @@ describe("Tree Operations", () => {
       const window = createMockWindow();
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window);
 
-      ctx.tree.split(node, ORIENTATION_TYPES.VERTICAL, true);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.VERTICAL, true);
 
       // Node should now be inside a container
       expect(node.parentNode.nodeType).toBe(NODE_TYPES.CON);
@@ -153,7 +153,7 @@ describe("Tree Operations", () => {
       const node = ctx.tree.createNode(container.nodeValue, NODE_TYPES.WINDOW, window);
 
       // Split should toggle the parent layout
-      ctx.tree.split(node, ORIENTATION_TYPES.VERTICAL, false);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.VERTICAL, false);
 
       expect(container.layout).toBe(LAYOUT_TYPES.VSPLIT);
     });
@@ -166,7 +166,7 @@ describe("Tree Operations", () => {
       const window = createMockWindow();
       const node = ctx.tree.createNode(container.nodeValue, NODE_TYPES.WINDOW, window);
 
-      ctx.tree.split(node, ORIENTATION_TYPES.VERTICAL, true);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.VERTICAL, true);
 
       // Should create new container instead of toggling
       expect(node.parentNode.layout).toBe(LAYOUT_TYPES.VSPLIT);
@@ -180,7 +180,7 @@ describe("Tree Operations", () => {
       node.mode = WINDOW_MODES.FLOAT;
 
       const parentBefore = node.parentNode;
-      ctx.tree.split(node, ORIENTATION_TYPES.HORIZONTAL);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.HORIZONTAL);
 
       // Should not have changed
       expect(node.parentNode).toBe(parentBefore);
@@ -193,7 +193,7 @@ describe("Tree Operations", () => {
       node.rect = { x: 100, y: 100, width: 500, height: 500 };
       node.percent = 0.6;
 
-      ctx.tree.split(node, ORIENTATION_TYPES.HORIZONTAL, true);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.HORIZONTAL, true);
 
       const container = node.parentNode;
       expect(container.rect).toEqual({ x: 100, y: 100, width: 500, height: 500 });
@@ -205,7 +205,7 @@ describe("Tree Operations", () => {
       const window = createMockWindow();
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window);
 
-      ctx.tree.split(node, ORIENTATION_TYPES.HORIZONTAL, true);
+      ctx.layoutEngine.split(node, ORIENTATION_TYPES.HORIZONTAL, true);
 
       expect(ctx.tree.attachNode).toBe(node.parentNode);
     });
@@ -227,7 +227,7 @@ describe("Tree Operations", () => {
       const index1Before = node1.index;
       const index2Before = node2.index;
 
-      ctx.tree.swapPairs(node1, node2, false);
+      ctx.layoutEngine.swapPairs(node1, node2, false);
 
       // Indexes should be swapped
       expect(node1.index).toBe(index2Before);
@@ -245,7 +245,7 @@ describe("Tree Operations", () => {
       const node1 = ctx.tree.createNode(container1.nodeValue, NODE_TYPES.WINDOW, window1);
       const node2 = ctx.tree.createNode(container2.nodeValue, NODE_TYPES.WINDOW, window2);
 
-      ctx.tree.swapPairs(node1, node2, false);
+      ctx.layoutEngine.swapPairs(node1, node2, false);
 
       // Parents should be swapped
       expect(node1.parentNode).toBe(container2);
@@ -263,7 +263,7 @@ describe("Tree Operations", () => {
       node1.mode = WINDOW_MODES.TILE;
       node2.mode = WINDOW_MODES.FLOAT;
 
-      ctx.tree.swapPairs(node1, node2, false);
+      ctx.layoutEngine.swapPairs(node1, node2, false);
 
       expect(node1.mode).toBe(WINDOW_MODES.FLOAT);
       expect(node2.mode).toBe(WINDOW_MODES.TILE);
@@ -280,7 +280,7 @@ describe("Tree Operations", () => {
       node1.percent = 0.7;
       node2.percent = 0.3;
 
-      ctx.tree.swapPairs(node1, node2, false);
+      ctx.layoutEngine.swapPairs(node1, node2, false);
 
       expect(node1.percent).toBe(0.3);
       expect(node2.percent).toBe(0.7);
@@ -294,7 +294,7 @@ describe("Tree Operations", () => {
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
       const node2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window2);
 
-      ctx.tree.swapPairs(node1, node2, false);
+      ctx.layoutEngine.swapPairs(node1, node2, false);
 
       expect(ctx.extWm.move).toHaveBeenCalledTimes(2);
     });
@@ -310,7 +310,7 @@ describe("Tree Operations", () => {
       const raiseSpy = vi.spyOn(window1, "raise");
       const focusSpy = vi.spyOn(window1, "focus");
 
-      ctx.tree.swapPairs(node1, node2, true);
+      ctx.layoutEngine.swapPairs(node1, node2, true);
 
       expect(raiseSpy).toHaveBeenCalled();
       expect(focusSpy).toHaveBeenCalled();
@@ -325,7 +325,7 @@ describe("Tree Operations", () => {
       const node2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window2);
 
       const parentBefore = node1.parentNode;
-      ctx.tree.swapPairs(node1, node2, false);
+      ctx.layoutEngine.swapPairs(node1, node2, false);
 
       // Should not have swapped
       expect(node1.parentNode).toBe(parentBefore);
@@ -340,7 +340,7 @@ describe("Tree Operations", () => {
       const node2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window2);
 
       const parentBefore = node1.parentNode;
-      ctx.tree.swapPairs(node1, node2, false);
+      ctx.layoutEngine.swapPairs(node1, node2, false);
 
       // Should not have swapped
       expect(node1.parentNode).toBe(parentBefore);
@@ -360,7 +360,7 @@ describe("Tree Operations", () => {
       node1.mode = WINDOW_MODES.TILE;
       node2.mode = WINDOW_MODES.TILE;
 
-      const result = ctx.tree.swap(node1, Meta.MotionDirection.RIGHT);
+      const result = ctx.layoutEngine.swap(node1, Meta.MotionDirection.RIGHT);
 
       expect(result).toBe(node2);
     });
@@ -384,7 +384,7 @@ describe("Tree Operations", () => {
       node2.mode = WINDOW_MODES.TILE;
       node3.mode = WINDOW_MODES.TILE;
 
-      const result = ctx.tree.swap(node1, Meta.MotionDirection.RIGHT);
+      const result = ctx.layoutEngine.swap(node1, Meta.MotionDirection.RIGHT);
 
       // Should swap with first window in container
       expect(result).toBe(node2);
@@ -409,7 +409,7 @@ describe("Tree Operations", () => {
       node2.mode = WINDOW_MODES.TILE;
       node3.mode = WINDOW_MODES.TILE;
 
-      const result = ctx.tree.swap(node1, Meta.MotionDirection.RIGHT);
+      const result = ctx.layoutEngine.swap(node1, Meta.MotionDirection.RIGHT);
 
       // Should swap with last window in stacked container
       expect(result).toBe(node3);
@@ -424,7 +424,7 @@ describe("Tree Operations", () => {
       // Mock next to return null
       vi.spyOn(ctx.tree, "next").mockReturnValue(null);
 
-      const result = ctx.tree.swap(node, Meta.MotionDirection.RIGHT);
+      const result = ctx.layoutEngine.swap(node, Meta.MotionDirection.RIGHT);
 
       expect(result).toBeUndefined();
     });
@@ -443,7 +443,7 @@ describe("Tree Operations", () => {
       // Mock sameParentMonitor to return false
       ctx.extWm.sameParentMonitor.mockReturnValue(false);
 
-      const result = ctx.tree.swap(node1, Meta.MotionDirection.RIGHT);
+      const result = ctx.layoutEngine.swap(node1, Meta.MotionDirection.RIGHT);
 
       expect(result).toBeUndefined();
     });
@@ -466,7 +466,7 @@ describe("Tree Operations", () => {
       node3.mode = WINDOW_MODES.TILE;
 
       // Move node1 to the right (should swap with node2)
-      const result = ctx.tree.move(node1, Meta.MotionDirection.RIGHT);
+      const result = ctx.layoutEngine.move(node1, Meta.MotionDirection.RIGHT);
 
       expect(result).toBe(true);
       // node1 should now be at index 1 (swapped with node2)
@@ -486,7 +486,7 @@ describe("Tree Operations", () => {
       node2.mode = WINDOW_MODES.TILE;
 
       // Move node2 to the left (should swap with node1)
-      const result = ctx.tree.move(node2, Meta.MotionDirection.LEFT);
+      const result = ctx.layoutEngine.move(node2, Meta.MotionDirection.LEFT);
 
       expect(result).toBe(true);
       expect(node2.index).toBe(0);
@@ -510,7 +510,7 @@ describe("Tree Operations", () => {
       expect(initialIndex1).toBe(0);
       expect(initialIndex2).toBe(1);
 
-      ctx.tree.move(node1, Meta.MotionDirection.RIGHT);
+      ctx.layoutEngine.move(node1, Meta.MotionDirection.RIGHT);
 
       // After move, indices should be swapped
       expect(node1.index).toBe(initialIndex2);
@@ -532,7 +532,7 @@ describe("Tree Operations", () => {
       const node2 = ctx.tree.createNode(container.nodeValue, NODE_TYPES.WINDOW, window2);
       node2.mode = WINDOW_MODES.TILE;
 
-      ctx.tree.move(node1, Meta.MotionDirection.RIGHT);
+      ctx.layoutEngine.move(node1, Meta.MotionDirection.RIGHT);
 
       // node1 should now be inside container
       expect(node1.parentNode).toBe(container);
@@ -554,7 +554,7 @@ describe("Tree Operations", () => {
       node1.percent = 0.4;
       node2.percent = 0.6;
 
-      ctx.tree.move(node1, Meta.MotionDirection.RIGHT);
+      ctx.layoutEngine.move(node1, Meta.MotionDirection.RIGHT);
 
       // Percentages should be exchanged (each position keeps its size)
       expect(node1.percent).toBe(0.6);
@@ -573,7 +573,7 @@ describe("Tree Operations", () => {
       ctx.extWm.currentMonWsNode = monitor;
 
       // Should append/prepend to currentMonWsNode instead of returning false
-      const result = ctx.tree.move(node, Meta.MotionDirection.RIGHT);
+      const result = ctx.layoutEngine.move(node, Meta.MotionDirection.RIGHT);
 
       expect(result).toBe(true);
     });
@@ -592,7 +592,7 @@ describe("Tree Operations", () => {
       const window2 = createMockWindow();
       ctx.tree.createNode(container.nodeValue, NODE_TYPES.WINDOW, window2);
 
-      ctx.tree.move(node1, Meta.MotionDirection.RIGHT);
+      ctx.layoutEngine.move(node1, Meta.MotionDirection.RIGHT);
 
       // Should be appended to stacked container
       expect(node1.parentNode).toBe(container);

@@ -25,7 +25,7 @@ describe("WindowManager - Gaps", () => {
 
   describe("calculateGaps", () => {
     it("should return 0 for null node", () => {
-      expect(wm().calculateGaps(null)).toBe(0);
+      expect(wm().tilingRender.calculateGaps(null)).toBe(0);
     });
 
     it("should return 0 when gap size is 0", () => {
@@ -35,7 +35,7 @@ describe("WindowManager - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().calculateGaps(node)).toBe(0);
+      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
     });
 
     it("should calculate gap as size * increment", () => {
@@ -45,7 +45,7 @@ describe("WindowManager - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().calculateGaps(node)).toBe(15);
+      expect(wm().tilingRender.calculateGaps(node)).toBe(15);
     });
 
     it("should return 0 when gap-increment is 0", () => {
@@ -55,7 +55,7 @@ describe("WindowManager - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().calculateGaps(node)).toBe(0);
+      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
     });
 
     it("should use gap size 5 with increment 1 as default gap 5", () => {
@@ -63,7 +63,7 @@ describe("WindowManager - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().calculateGaps(node)).toBe(0);
+      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
     });
   });
 
@@ -76,7 +76,7 @@ describe("WindowManager - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().calculateGaps(node)).toBe(0);
+      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
     });
 
     it("should show gap when multiple tiled windows on monitor", () => {
@@ -89,7 +89,7 @@ describe("WindowManager - Gaps", () => {
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win1);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win2);
 
-      expect(wm().calculateGaps(node1)).toBe(10);
+      expect(wm().tilingRender.calculateGaps(node1)).toBe(10);
     });
 
     it("should show gap when setting is disabled even with single window", () => {
@@ -100,7 +100,7 @@ describe("WindowManager - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().calculateGaps(node)).toBe(10);
+      expect(wm().tilingRender.calculateGaps(node)).toBe(10);
     });
 
     it("should still show gap when single tiled but floated windows exist", () => {
@@ -115,7 +115,7 @@ describe("WindowManager - Gaps", () => {
       floatNode.mode = WINDOW_MODES.FLOAT;
       floatNode.tile = false;
 
-      expect(wm().calculateGaps(tiledNode)).toBe(0);
+      expect(wm().tilingRender.calculateGaps(tiledNode)).toBe(0);
     });
 
     it("should still show gap when single tiled but minimized windows exist", () => {
@@ -132,7 +132,7 @@ describe("WindowManager - Gaps", () => {
       const tiledNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, tiledWin);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, minimizedWin);
 
-      expect(wm().calculateGaps(tiledNode)).toBe(0);
+      expect(wm().tilingRender.calculateGaps(tiledNode)).toBe(0);
     });
 
     it("should apply to root node without monitor parent check", () => {
@@ -140,7 +140,7 @@ describe("WindowManager - Gaps", () => {
       ctx.settings.set_uint("window-gap-size-increment", 3);
       ctx.settings.set_boolean("window-gap-hidden-on-single", true);
 
-      expect(wm().calculateGaps(ctx.tree)).toBe(15);
+      expect(wm().tilingRender.calculateGaps(ctx.tree)).toBe(15);
     });
   });
 

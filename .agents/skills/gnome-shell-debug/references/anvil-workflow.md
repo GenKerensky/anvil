@@ -9,7 +9,7 @@ Extension UUID: `anvil@GenKerensky.github.com`
 3. **Host logs:** `journalctl -f -o cat /usr/bin/gnome-shell | grep -i anvil`
 4. **Looking Glass:** `lg` → Extensions → Anvil → Errors
 5. **Unit tests (no shell):** `npm run test:unit`
-6. **Automated tests:** `make test-integration` (headless Podman), `make test-e2e` (host devkit)
+6. **Automated tests:** `npm run test:unit`, `make test-e2e` (host headless)
 
 ## Source layout
 

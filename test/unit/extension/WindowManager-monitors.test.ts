@@ -1,7 +1,7 @@
 /*
  * WindowManager per-monitor window size constraint tests
  *
- * Covers _getMonitorConnector, _getMonitorConstraints, enforceUltrawideSize,
+ * Covers tilingRender getMonitorConnector, getMonitorConstraints, enforceUltrawideSize,
  * grab-op-end resize exemption tracking, and settings-changed handler.
  */
 
@@ -63,12 +63,12 @@ describe("WindowManager - Per-Monitor Constraints", () => {
   }
 
   // ----------------------------------------------------------------
-  //  _getMonitorConnector
+  //  getMonitorConnector
   // ----------------------------------------------------------------
-  describe("_getMonitorConnector", () => {
+  describe("getMonitorConnector", () => {
     it("returns connector for valid monitor index", () => {
       setupMonitor("DP-1");
-      expect(wm()._getMonitorConnector(0)).toBe("DP-1");
+      expect(wm().tilingRender.getMonitorConnector(0)).toBe("DP-1");
     });
 
     it("returns connector for second monitor", () => {
@@ -78,16 +78,16 @@ describe("WindowManager - Per-Monitor Constraints", () => {
         new Meta.LogicalMonitor({ monitors: [m1] }),
         new Meta.LogicalMonitor({ monitors: [m2] }),
       ]);
-      expect(wm()._getMonitorConnector(1)).toBe("DP-1");
+      expect(wm().tilingRender.getMonitorConnector(1)).toBe("DP-1");
     });
 
     it("returns null for out-of-range index", () => {
       setupMonitor("DP-1");
-      expect(wm()._getMonitorConnector(5)).toBeNull();
+      expect(wm().tilingRender.getMonitorConnector(5)).toBeNull();
     });
 
     it("returns null when MonitorManager has no monitors", () => {
-      expect(wm()._getMonitorConnector(0)).toBeNull();
+      expect(wm().tilingRender.getMonitorConnector(0)).toBeNull();
     });
 
     it("returns null when get_logical_monitors throws", () => {
@@ -98,7 +98,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
         throw new Error("fail");
       });
       try {
-        expect(wm()._getMonitorConnector(0)).toBeNull();
+        expect(wm().tilingRender.getMonitorConnector(0)).toBeNull();
       } finally {
         mgr.get_logical_monitors = orig;
       }
@@ -106,13 +106,13 @@ describe("WindowManager - Per-Monitor Constraints", () => {
   });
 
   // ----------------------------------------------------------------
-  //  _getMonitorConstraints
+  //  getMonitorConstraints
   // ----------------------------------------------------------------
-  describe("_getMonitorConstraints", () => {
+  describe("getMonitorConstraints", () => {
     it("returns constraints when connector matches", () => {
       setupMonitor("DP-1");
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, false]];
-      expect(wm()._getMonitorConstraints(0)).toEqual({
+      expect(wm().tilingRender.getMonitorConstraints(0)).toEqual({
         maxWidth: 1920,
         maxHeight: 1000,
         enabled: true,
@@ -123,18 +123,18 @@ describe("WindowManager - Per-Monitor Constraints", () => {
     it("returns null when no matching connector in constraints", () => {
       setupMonitor("DP-1");
       ctx.settings._values["monitor-constraints"] = [["HDMI-1", 1920, 1080, true, false]];
-      expect(wm()._getMonitorConstraints(0)).toBeNull();
+      expect(wm().tilingRender.getMonitorConstraints(0)).toBeNull();
     });
 
     it("returns null when connector lookup fails", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1080, true, false]];
-      expect(wm()._getMonitorConstraints(0)).toBeNull();
+      expect(wm().tilingRender.getMonitorConstraints(0)).toBeNull();
     });
 
     it("returns null when constraints array is empty", () => {
       setupMonitor("DP-1");
       ctx.settings._values["monitor-constraints"] = [];
-      expect(wm()._getMonitorConstraints(0)).toBeNull();
+      expect(wm().tilingRender.getMonitorConstraints(0)).toBeNull();
     });
   });
 
@@ -146,7 +146,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
 
     it("returns rect unchanged for non-window node", () => {
       const wsNode = ctx.tree.findNode("ws0");
-      const result = wm().enforceUltrawideSize(wsNode, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(wsNode, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -154,7 +154,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       setupMonitor("DP-1");
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -163,7 +163,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, false, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -172,7 +172,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1440, true, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 1920) / 2),
         y: 0,
@@ -186,7 +186,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 3440, 1000, true, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: 0,
         y: Math.floor((1440 - 1000) / 2),
@@ -200,7 +200,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 1920) / 2),
         y: Math.floor((1440 - 1000) / 2),
@@ -216,7 +216,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       setupWindowOnMonitor(0, 43); // second window so it's not solo
       wm()._resizedWindows.set(42, 2);
       const node = ctx.tree.findNode(metaWindow1);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -235,7 +235,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       wm()._resizedWindows.set(42, 2);
 
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 800) / 2),
         y: Math.floor((1440 - 600) / 2),
@@ -259,7 +259,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       wm()._resizedWindows.set(43, 2);
 
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: 0,
         y: 0,
@@ -273,7 +273,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, true]];
       const metaWindow = setupWindowOnMonitor(0, 42);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 1920) / 2),
         y: Math.floor((1440 - 1000) / 2),
@@ -288,7 +288,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
       const rect = { x: 0, y: 0, width: 1920, height: 1080 };
-      const result = wm().enforceUltrawideSize(node, rect);
+      const result = wm().tilingRender.enforceUltrawideSize(node, rect);
       expect(result).toBe(rect);
     });
 
@@ -304,7 +304,7 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       // Window is on eDP-1 (index 0)
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().enforceUltrawideSize(node, BIG_RECT);
+      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
   });

@@ -2,8 +2,8 @@
 runner_utils.py — Shared utilities for Anvil test orchestrators.
 
 Used by:
-  test/e2e/run.py          — devkit (gnome-shell --devkit --wayland)
-  test/integration/run.py  — container (gnome-shell --headless --wayland)
+  test/e2e/run.py          — host headless (gnome-shell --headless --virtual-monitor)
+  test/lib/shell_session.py / agent debug loop
 
 What lives here
 ===============
@@ -14,14 +14,14 @@ What lives here
 
 What does NOT live here
 ========================
-- Session-specific lifecycle (DevkitSession, ContainerSession)
-- Display discovery / stderr threading (devkit-only)
+- Session-specific lifecycle (DevkitSession / HeadlessShellSession)
+- Display discovery / stderr threading
 - Extension build / install (each runner owns its own strategy)
 - Path constants (callers define UUID, PROJECT_ROOT, OUTPUT_DIR)
 
-The dbusmock stubs are identical for both runners: both need the same five
-services before gnome-shell will start cleanly. The SessionManager template
-requires a Setenv method; the others just need their bus names to exist.
+The dbusmock stubs need the same five services before gnome-shell will start
+cleanly. The SessionManager template requires a Setenv method; the others just
+need their bus names to exist.
 """
 
 from __future__ import annotations

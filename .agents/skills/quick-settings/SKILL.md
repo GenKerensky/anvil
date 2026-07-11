@@ -40,12 +40,7 @@ const MyIndicator = GObject.registerClass(
       this._indicator.icon_name = "selection-mode-symbolic";
 
       // Show/hide based on a setting
-      extension.settings.bind(
-        "feature-enabled",
-        this._indicator,
-        "visible",
-        Gio.SettingsBindFlags.DEFAULT
-      );
+      extension.settings.bind("feature-enabled", this._indicator, "visible", Gio.SettingsBindFlags.DEFAULT);
 
       // Add items to the quick settings grid
       this.quickSettingsItems.push(new MyToggle(extension));

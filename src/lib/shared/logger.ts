@@ -52,31 +52,37 @@ export class Logger {
     return params.reduce((acc: string, val) => acc.replace("{}", val), msg);
   }
 
+  /** GJS `log` typings only allow string|object; cast for multi-arg shell logging. */
+  static #emit(level: string, args: unknown[]) {
+    const gjsLog = log as (message: string, ...rest: unknown[]) => void;
+    gjsLog(`[Anvil] [${level}]`, ...args);
+  }
+
   static fatal(...args: unknown[]) {
-    if (this.#level > Logger.LOG_LEVELS.OFF) log(`[Anvil] [FATAL]`, ...(args as any[]));
+    if (this.#level > Logger.LOG_LEVELS.OFF) this.#emit("FATAL", args);
   }
 
   static error(...args: unknown[]) {
-    if (this.#level > Logger.LOG_LEVELS.FATAL) log(`[Anvil] [ERROR]`, ...(args as any[]));
+    if (this.#level > Logger.LOG_LEVELS.FATAL) this.#emit("ERROR", args);
   }
 
   static warn(...args: unknown[]) {
-    if (this.#level > Logger.LOG_LEVELS.ERROR) log(`[Anvil] [WARN]`, ...(args as any[]));
+    if (this.#level > Logger.LOG_LEVELS.ERROR) this.#emit("WARN", args);
   }
 
   static info(...args: unknown[]) {
-    if (this.#level > Logger.LOG_LEVELS.WARN) log(`[Anvil] [INFO]`, ...(args as any[]));
+    if (this.#level > Logger.LOG_LEVELS.WARN) this.#emit("INFO", args);
   }
 
   static debug(...args: unknown[]) {
-    if (this.#level > Logger.LOG_LEVELS.INFO) log(`[Anvil] [DEBUG]`, ...(args as any[]));
+    if (this.#level > Logger.LOG_LEVELS.INFO) this.#emit("DEBUG", args);
   }
 
   static trace(...args: unknown[]) {
-    if (this.#level > Logger.LOG_LEVELS.DEBUG) log(`[Anvil] [TRACE]`, ...(args as any[]));
+    if (this.#level > Logger.LOG_LEVELS.DEBUG) this.#emit("TRACE", args);
   }
 
   static log(...args: unknown[]) {
-    if (this.#level > Logger.LOG_LEVELS.OFF) log(`[Anvil] [LOG]`, ...(args as any[]));
+    if (this.#level > Logger.LOG_LEVELS.OFF) this.#emit("LOG", args);
   }
 }

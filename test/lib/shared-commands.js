@@ -1,11 +1,10 @@
 /**
- * Shared test helpers for Anvil — usable by both E2E and integration test suites.
+ * Shared test helpers for Anvil — usable by E2E suites and the agent debug loop.
  *
  * All functions execute in the gnome-shell JS context and have direct
  * access to global.display, Meta, Main, Clutter, etc.
  *
- * Import in E2E suites:     import { ... } from "../../lib/shared-commands.js";
- * Import in integration:    import { ... } from "../lib/shared-commands.js";
+ * Import in E2E suites: import { ... } from "../../lib/shared-commands.js";
  */
 
 import Meta from "gi://Meta";
@@ -96,7 +95,6 @@ export async function launchApp(desktopFile, timeoutMs = 10000) {
     const count = getWindowCount();
     if (count > before) {
       log("[SharedCommands] Window appeared for " + desktopFile + " (windows now=" + count + ")");
-      await sleep(500);
       // In headless environments, the new window may not receive focus
       // automatically. Explicitly activate it so tests can interact.
       const wins = global.display.get_tab_list(
@@ -104,11 +102,18 @@ export async function launchApp(desktopFile, timeoutMs = 10000) {
         global.display.get_workspace_manager().get_active_workspace()
       );
       for (let i = wins.length - 1; i >= 0; i--) {
-        if (wins[i].get_title() && wins[i].get_title().length > 0) {
+        if (!wins[i].minimized) {
           wins[i].activate(global.get_current_time());
           break;
         }
       }
+      // Force a render pass — first-frame tracking can lag behind map.
+      try {
+        getAnvilWM().renderTree("e2e-launch", true);
+      } catch {
+        /* extWm may not be ready for the first window yet */
+      }
+      await waitForGeometryStable(1800);
       return;
     }
   }
@@ -116,17 +121,67 @@ export async function launchApp(desktopFile, timeoutMs = 10000) {
 }
 
 /**
- * Convenience: open gnome-text-editor (used by integration specs).
+ * Poll until window geometries stop changing. Optionally prefers a full-tile
+ * single window for a short grace period, then accepts any stable geometry.
+ * @param {number} [timeoutMs=2000]
+ * @returns {Promise<void>}
+ */
+export async function waitForGeometryStable(timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  const preferFullUntil = Date.now() + Math.min(1200, timeoutMs);
+  let prev = "";
+  let stableCount = 0;
+  try {
+    getAnvilWM().renderTree("e2e-settle", true);
+  } catch {
+    /* ignore */
+  }
+  while (Date.now() < deadline) {
+    const area = getMonitorWorkArea();
+    const wins = getWindowGeometries().filter(function (w) {
+      return !w.minimized && w.width > 0 && w.height > 0;
+    });
+
+    if (wins.length === 1 && Date.now() < preferFullUntil) {
+      const w = wins[0];
+      const full = w.width >= area.width * 0.8 && w.height >= area.height * 0.75;
+      if (!full) {
+        stableCount = 0;
+        prev = "";
+        await sleep(150);
+        continue;
+      }
+    }
+
+    const sig = wins
+      .map(function (w) {
+        return w.x + "," + w.y + "," + w.width + "," + w.height;
+      })
+      .join("|");
+    if (sig && sig === prev && wins.length > 0) {
+      stableCount++;
+      if (stableCount >= 2) return;
+    } else {
+      stableCount = 0;
+      prev = sig;
+    }
+    await sleep(120);
+  }
+}
+
+/**
+ * Convenience: open gnome-text-editor.
  * @param {number} [timeoutMs=10000]
  */
 export async function openWindow(timeoutMs = 10000) {
-  return launchApp("org.gnome.TextEditor.desktop", timeoutMs);
+  return launchApp("org.gnome.Nautilus.desktop", timeoutMs);
 }
 
-/** @returns {number} */
+/** @returns {number} non-minimized windows on the active workspace */
 export function getWindowCount() {
-  const ws = global.display.get_workspace_manager().get_active_workspace();
-  return global.display.get_tab_list(Meta.TabList.NORMAL_ALL, ws).length;
+  return getWindowGeometries().filter(function (w) {
+    return !w.minimized;
+  }).length;
 }
 
 /**
@@ -279,16 +334,23 @@ export async function closeAllWindows() {
  * @param {Array<{x: number, y: number, width: number, height: number}>} wins
  * @returns {boolean}
  */
-export function windowsOverlap(wins) {
+/**
+ * Axis-aligned overlap test. Uses a 2px inset so shared tile edges do not
+ * count as overlap (common with gapless layouts / rounding).
+ * @param {Array<{x:number,y:number,width:number,height:number}>} wins
+ * @param {number} [inset=2]
+ * @returns {boolean}
+ */
+export function windowsOverlap(wins, inset = 2) {
   for (let i = 0; i < wins.length; i++) {
     for (let j = i + 1; j < wins.length; j++) {
       const a = wins[i];
       const b = wins[j];
       if (
-        a.x < b.x + b.width &&
-        a.x + a.width > b.x &&
-        a.y < b.y + b.height &&
-        a.y + a.height > b.y
+        a.x + inset < b.x + b.width - inset &&
+        a.x + a.width - inset > b.x + inset &&
+        a.y + inset < b.y + b.height - inset &&
+        a.y + a.height - inset > b.y + inset
       )
         return true;
     }
@@ -346,6 +408,17 @@ export function sendKeyCombo(combo) {
 export function sendAnvilCommand(action) {
   const wm = getAnvilWM();
   wm.command(action);
+}
+
+/**
+ * Send a command and wait for tiling geometry to settle.
+ * @param {{ name: string, [key: string]: any }} action
+ * @param {number} [timeoutMs=3000]
+ * @returns {Promise<void>}
+ */
+export async function sendAnvilCommandAndSettle(action, timeoutMs = 3000) {
+  sendAnvilCommand(action);
+  await waitForGeometryStable(timeoutMs);
 }
 
 // ---------------------------------------------------------------------------
@@ -464,7 +537,7 @@ export function takeScreenshot(path) {
       15000,
       null
     );
-  } catch (e) {
+  } catch {
     /* screenshot may fail silently in headless */
   }
 }

@@ -2,7 +2,10 @@ declare module "gi://Shell" {
   const Shell: {
     WindowTracker: {
       get_default(): {
-        get_window_app(window: any): { get_id(): string; get_name(): string };
+        get_window_app(window: import("gi://Meta").default.Window): {
+          get_id(): string;
+          get_name(): string;
+        };
       };
     };
     ActionMode: {

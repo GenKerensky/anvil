@@ -91,8 +91,7 @@ Connect to the `destroy` signal to know why a notification was removed:
 
 ```ts
 notification.connect("destroy", (_notification, reason) => {
-  if (reason === MessageTray.NotificationDestroyedReason.DISMISSED)
-    log("User closed the notification");
+  if (reason === MessageTray.NotificationDestroyedReason.DISMISSED) log("User closed the notification");
 });
 ```
 

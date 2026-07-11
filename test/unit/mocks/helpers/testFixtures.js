@@ -10,6 +10,7 @@ import { vi } from "vitest";
 import { installGnomeGlobals } from "./globalSetup.js";
 import { WindowManager } from "../../../../src/lib/extension/window.js";
 import { Tree, LAYOUT_TYPES } from "../../../../src/lib/extension/tree.js";
+import { LayoutEngine } from "../../../../src/lib/extension/layout-engine.js";
 
 export const DEFAULT_SETTINGS = {
   "tiling-mode-enabled": true,
@@ -167,7 +168,12 @@ export function createTreeFixture(options = {}) {
     ext: {
       settings: mockSettings,
     },
+    get settings() {
+      return mockSettings;
+    },
+    focusMetaWindow: null,
     determineSplitLayout: vi.fn(() => LAYOUT_TYPES[defaultLayout] || LAYOUT_TYPES.HSPLIT),
+    floatingWindow: vi.fn(() => false),
     bindWorkspaceSignals: vi.fn(),
   };
 
@@ -179,13 +185,14 @@ export function createTreeFixture(options = {}) {
       rectForMonitor: vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1080 })),
       sameParentMonitor: vi.fn(() => true),
       floatingWindow: vi.fn(() => false),
-      calculateGaps: vi.fn(() => 0),
       tilingRender: {
         render: vi.fn(),
         processNode: vi.fn(),
         processGap: vi.fn((node) => node?.rect ?? { x: 0, y: 0, width: 0, height: 0 }),
         calculateGaps: vi.fn(() => 0),
         enforceUltrawideSize: vi.fn((_, r) => r),
+        getMonitorConnector: vi.fn(() => null),
+        getMonitorConstraints: vi.fn(() => null),
       },
       notifyFocusChanged: vi.fn(),
     });
@@ -193,10 +200,35 @@ export function createTreeFixture(options = {}) {
 
   const tree = new Tree(mockWindowManager);
 
+  // Stage 5: tree layout ops (move/split/swap/focus/percent) delegate to LayoutEngine
+  mockWindowManager.layoutEngine = new LayoutEngine({
+    get tree() {
+      return tree;
+    },
+    get settings() {
+      return mockSettings;
+    },
+    get focusMetaWindow() {
+      return mockWindowManager.focusMetaWindow ?? null;
+    },
+    get currentMonWsNode() {
+      return mockWindowManager.currentMonWsNode ?? null;
+    },
+    notifyFocusChanged: (...args) => mockWindowManager.notifyFocusChanged?.(...args),
+    moveWindow: (...args) => mockWindowManager.move?.(...args),
+    rectForMonitor: (...args) =>
+      mockWindowManager.rectForMonitor?.(...args) ?? { x: 0, y: 0, width: 1920, height: 1080 },
+    sameParentMonitor: (...args) => mockWindowManager.sameParentMonitor?.(...args) ?? true,
+    floatingWindow: (...args) => mockWindowManager.floatingWindow?.(...args) ?? false,
+  });
+  mockWindowManager.determineSplitLayout = (...args) =>
+    mockWindowManager.layoutEngine.determineSplitLayout(...args);
+
   return {
     tree,
     settings: mockSettings,
     extWm: mockWindowManager,
+    layoutEngine: mockWindowManager.layoutEngine,
     display: globalCtx.display,
     workspaceManager: globalCtx.workspaceManager,
     workspaces: globalCtx.workspaces,

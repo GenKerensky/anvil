@@ -10,46 +10,26 @@ testing, and ongoing maintainability.
 
 ### 2026 — Unreleased
 
-#### Added
-
-- **Spec filter for integration tests** — `SPEC=<name>` variable on
-  `make test-integration` runs only matching spec files (exact filename match,
-  `.js` extension optional). Supports comma-separated values
-  (`SPEC=resize,keyboard`). Unknown spec names produce a warning log without
-  crashing. Omit `SPEC` to run all 16 specs (backward compatible).
-- **Conditional-wait helpers in shared-commands.js** — Four new polling-based
-  async helpers for reliable window operations in headless tests:
-  `waitForWindowCount(target, timeoutMs)`, `waitForGeometry(predicate, timeoutMs)`,
-  `waitForFocusChange(previousId, timeoutMs)`, and
-  `waitForFocusWindow(expectedId, timeoutMs)`. Added `getFocusedWindowId()`
-  helper. Converted `closeFocusedWindow()` to use polling instead of one-shot
-  delete.
-- **D-Bus pre-activation in integration runner** — `runner.js` polls for
-  `org.gnome.Shell.Extensions` service before running tests (15s timeout),
-  preventing race conditions in preferences tests that depend on the D-Bus
-  service.
-- **Cascade-failure tracking in integration runner** — `runner.js` sets
-  `global.__anvil_cascade_failures` and exposes
-  `global.__anvil_skipIfFailed(prereq, reason)` so specs can gracefully
-  skip (via `pending()`) when a prerequisite like the extensions D-Bus
-  service was unavailable.
-
 #### Changed
 
-- **Window-ID-based focus detection** — All 16 integration spec files now use
-  `getFocusedWindowId()` instead of `getFocusedWindowTitle()` for focus
-  assertions, eliminating title-collision flakiness when multiple windows of
-  the same application are open.
+- **Consolidated real-shell tests into host E2E** — Removed Podman container
+  integration tests (`test/integration/`, multi-Fedora CI matrix). Unique
+  behavioral suites (focus, swap, move, floating, layouts, workspace, borders,
+  minimize, constraints, richer lifecycle/tiling) now live under
+  `test/e2e/suites/`. Canonical command: `make test-e2e`. Requires host
+  `jasmine-gjs`. CI remains unit-only; E2E is a local/pre-release gate.
+- **Conditional-wait helpers in shared-commands.js** — Polling helpers for
+  reliable window operations in headless tests: `waitForWindowCount`,
+  `waitForGeometry`, `waitForFocusChange`, `waitForFocusWindow`,
+  `getFocusedWindowId`.
+- **Window-ID-based focus detection** — E2E suites use
+  `getFocusedWindowId()` instead of titles for focus assertions.
 - **Reduced resize settle delay** — `COMMAND_DELAY` lowered from 600ms to
   250ms across all resize tests, speeding up the 74 data-driven resize tests
   while maintaining reliability via conditional-wait polling.
 - **Fixed Jasmine timeout configuration in runner.js** — Uses
   `jasmine.DEFAULT_TIMEOUT_INTERVAL = 15000` correctly as a global property,
   ensuring the configured 15s timeout actually applies to all specs.
-- **Fixed `podman cp` path for spec files** — Added `/.` suffix to the specs
-  source path in `run.py` (`_pod_cp`), ensuring updated spec files correctly
-  overwrite their baked-in container copies rather than nesting under the
-  existing directory.
 
 #### Fixed
 

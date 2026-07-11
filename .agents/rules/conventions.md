@@ -8,11 +8,9 @@
 - **Test globals**: `log`, `logError`, `print`, `global` mocked in `test/unit/setup.js`.
 - **ESLint**: Flat config (`eslint.config.js`). Test files: `vitest/no-focused-tests: error`.
 - **Prettier**: `printWidth: 100`, `tabWidth: 2`.
-- **Integration**: `gnome-shell --headless --wayland` in Podman. Jasmine specs via
-  `--automation-script`. No keyboard/pixel/drag-drop in headless.
-- **E2E**: `gnome-shell --devkit --wayland` on host. `wtype` + `gnome-screenshot` supported.
-- **Container runner.js**: Module-level code (not `run()`). Bootstraps jasmine-gjs, writes results
-  JSON.
+- **E2E**: host `gnome-shell --headless --virtual-monitor 1920x1080` + Jasmine via
+  `--automation-script`. `export async function run()` is the entrypoint. Requires
+  jasmine-gjs at `/usr/share/jasmine-gjs/`.
 - **`Shell.Eval` is dead**: Returns `(false, '')` always. Use D-Bus + direct GJS APIs.
 - **Extension UUID**: `anvil@GenKerensky.github.com`
 - **Install path**: `~/.local/share/gnome-shell/extensions/anvil@GenKerensky.github.com/`

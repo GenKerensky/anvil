@@ -269,7 +269,7 @@ describe("WindowManager - Resize", () => {
       ctx.settings.set_uint("window-gap-size", 5);
       ctx.settings.set_uint("window-gap-size-increment", 2);
 
-      const gap = wm().calculateGaps(node);
+      const gap = wm().tilingRender.calculateGaps(node);
       expect(gap).toBe(10); // 5 * 2
     });
   });

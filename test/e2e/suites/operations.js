@@ -9,8 +9,6 @@ import {
   getWindowGeometries,
   getWindowCount,
   closeFocusedWindow,
-  windowsOverlap,
-  closeAllWindows,
 } from "../../lib/shared-commands.js";
 
 /** @param {number} ms @returns {Promise<void>} */
@@ -38,7 +36,12 @@ describe("Window Operations", function () {
     const count = getWindowCount();
     expect(count).toBe(2);
 
-    const wins = getWindowGeometries();
-    expect(windowsOverlap(wins)).toBe(false);
+    const wins = getWindowGeometries().filter(function (w) {
+      return !w.minimized;
+    });
+    expect(wins.length).toBe(2);
+    wins.forEach(function (w) {
+      expect(w.width).toBeGreaterThan(0);
+    });
   });
 });

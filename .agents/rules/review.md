@@ -7,10 +7,10 @@ Comprehensive pre-submission checklist for getting the Anvil extension approved 
 Run this single command to verify all automated checks:
 
 ```bash
-npm test && make test-e2e-all
+npm test && make test-e2e
 ```
 
-This runs: typecheck → lint → unit tests → E2E builds → E2E all. If it passes, proceed to the manual checklist below.
+This runs: typecheck → lint → unit tests → host E2E. If it passes, proceed to the manual checklist below.
 
 ---
 
@@ -73,37 +73,19 @@ npx vitest run --coverage
 
 - **No tests allowed to fail** — the pre-commit hook (husky + lint-staged) blocks commits with failing unit tests.
 
-### 4. E2E Tests (all Fedora/GNOME versions)
-
-| Fedora | GNOME Shell | Status         |
-| ------ | ----------- | -------------- |
-| 44     | 50          | Primary target |
-| 43     | 49          | Supported      |
-| 42     | 48          | Supported      |
+### 4. E2E Tests (host GNOME Shell)
 
 ```bash
-# All three versions (sequential):
-make test-e2e-all
-
-# Single version:
-make test-e2e FEDORA_VERSION=44
-make test-e2e FEDORA_VERSION=43
-make test-e2e FEDORA_VERSION=42
+make test-e2e
+# Optional filter:
+python3 test/e2e/run.py --tag resize
 ```
 
-**Prerequisites**: Podman + `glib2-devel` (`make dist` requires it). Container images built once per Fedora version:
+**Prerequisites**: host `gnome-shell` with `--headless --virtual-monitor`, `jasmine-gjs` at
+`/usr/share/jasmine-gjs/`, `glib2-devel` for `make dist`.
 
-```bash
-make test-e2e-build-all
-```
-
-E2E tests cover:
-
-- D-Bus API: extension enable/disable, error states
-- GSettings: value read/write, layout mode toggles, window effects
-- AT-SPI: preferences dialog widget tree, role names, switch states, tab navigation
-
-Tests that must pass: Behave scenarios in `test/integration/features/` (extension lifecycle, tiling, settings, AT-SPI tree, preferences) via `make test-integration`.
+E2E suites cover extension lifecycle, tiling, keyboard, operations, resize matrix, focus/swap/move,
+floating, layouts, workspace, borders, minimize, and monitor constraints.
 
 ### 5. Build
 
@@ -259,7 +241,7 @@ Summarizing everything that must pass before uploading to extensions.gnome.org:
 
 1. [ ] `npm test` passes (typecheck + lint + unit)
 2. [ ] Unit test coverage ≥ 75%
-3. [ ] `make test-e2e-all` passes (Fedora 44, 43, 42)
+3. [ ] `make test-e2e` passes on the host GNOME Shell
 4. [ ] `make dist` produces a clean `.zip`
 5. [ ] `.zip` contains no unnecessary files (inspect with `unzip -l`)
 6. [ ] `metadata.json` passes all MUST rules

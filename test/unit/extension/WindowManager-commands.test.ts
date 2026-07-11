@@ -89,7 +89,7 @@ describe("WindowManager - Commands", () => {
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
       const unfreezeSpy = vi.spyOn(wm(), "unfreezeRender");
-      const treeMoveSpy = vi.spyOn(ctx.tree, "move");
+      const treeMoveSpy = vi.spyOn(wm().layoutEngine, "move");
 
       wm().command({ name: "Move", direction: "UP" });
 
@@ -112,13 +112,13 @@ describe("WindowManager - Commands", () => {
   });
 
   describe("Focus", () => {
-    it("should call tree.focus with the resolved direction", () => {
+    it("should call layoutEngine.focus with the resolved direction", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const focusSpy = vi.spyOn(ctx.tree, "focus");
+      const focusSpy = vi.spyOn(wm().layoutEngine, "focus");
 
       wm().command({ name: "Focus", direction: "DOWN" });
 
@@ -133,7 +133,7 @@ describe("WindowManager - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const swapSpy = vi.spyOn(ctx.tree, "swap");
+      const swapSpy = vi.spyOn(wm().layoutEngine, "swap");
       const pointerSpy = vi.spyOn(wm(), "notifyFocusChanged");
 
       wm().command({ name: "Swap", direction: "RIGHT" });
@@ -146,7 +146,7 @@ describe("WindowManager - Commands", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const swapSpy = vi.spyOn(ctx.tree, "swap");
+      const swapSpy = vi.spyOn(wm().layoutEngine, "swap");
 
       wm().command({ name: "Swap", direction: "RIGHT" });
 
@@ -161,7 +161,7 @@ describe("WindowManager - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const splitSpy = vi.spyOn(ctx.tree, "split");
+      const splitSpy = vi.spyOn(wm().layoutEngine, "split");
 
       wm().command({ name: "Split" });
 
@@ -179,7 +179,7 @@ describe("WindowManager - Commands", () => {
       node.parentNode.layout = LAYOUT_TYPES.STACKED;
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const splitSpy = vi.spyOn(ctx.tree, "split");
+      const splitSpy = vi.spyOn(wm().layoutEngine, "split");
 
       wm().command({ name: "Split" });
 
@@ -193,7 +193,7 @@ describe("WindowManager - Commands", () => {
       node.parentNode.layout = LAYOUT_TYPES.TABBED;
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const splitSpy = vi.spyOn(ctx.tree, "split");
+      const splitSpy = vi.spyOn(wm().layoutEngine, "split");
 
       wm().command({ name: "Split" });
 
@@ -412,7 +412,7 @@ describe("WindowManager - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow2);
       ctx.display.get_focus_window.mockReturnValue(metaWindow1);
 
-      const swapPairsSpy = vi.spyOn(ctx.tree, "swapPairs");
+      const swapPairsSpy = vi.spyOn(wm().layoutEngine, "swapPairs");
 
       wm().command({ name: "WindowSwapLastActive" });
 

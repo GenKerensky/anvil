@@ -127,10 +127,7 @@ Anvil only tiles normal application windows (src/lib/extension/window.ts:1712-17
 import Meta from "gi://Meta";
 
 const windowType = metaWindow.window_type;
-const tileable =
-  windowType === Meta.WindowType.NORMAL ||
-  windowType === Meta.WindowType.MODAL_DIALOG ||
-  windowType === Meta.WindowType.DIALOG;
+const tileable = windowType === Meta.WindowType.NORMAL || windowType === Meta.WindowType.MODAL_DIALOG || windowType === Meta.WindowType.DIALOG;
 ```
 
 ### Transient / parent relationships
@@ -458,12 +455,7 @@ function showWindowBorders() {
 
     // Skip non-tileable windows
     const windowType = metaWindow.window_type;
-    if (
-      windowType !== Meta.WindowType.NORMAL &&
-      windowType !== Meta.WindowType.MODAL_DIALOG &&
-      windowType !== Meta.WindowType.DIALOG
-    )
-      continue;
+    if (windowType !== Meta.WindowType.NORMAL && windowType !== Meta.WindowType.MODAL_DIALOG && windowType !== Meta.WindowType.DIALOG) continue;
 
     // Unmaximize if needed before tiling
     if (metaWindow.is_maximized()) {
@@ -473,13 +465,7 @@ function showWindowBorders() {
 
     // Move and resize atomically
     const targetRect = calculateTileRect(metaWindow); // Mtk.Rectangle
-    metaWindow.move_resize_frame(
-      true,
-      targetRect.x,
-      targetRect.y,
-      targetRect.width,
-      targetRect.height
-    );
+    metaWindow.move_resize_frame(true, targetRect.x, targetRect.y, targetRect.width, targetRect.height);
   }
 }
 ```

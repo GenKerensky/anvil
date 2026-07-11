@@ -4,11 +4,11 @@ The authoritative treatment lives in the `gnome-shell-debug` skill (`.agents/ski
 
 ## Three seams
 
-| Seam                                                 | When                                           | Launcher                                     |
-| ---------------------------------------------------- | ---------------------------------------------- | -------------------------------------------- |
-| **Devkit** (human default)                           | Visual debugging, LG, flicker, rendering       | `run-devkit-session.sh`                      |
-| **Headless**                                         | CI, E2E, integration, settings-only automation | `test/e2e/run.py`, `test/integration/run.py` |
-| **Agent Loop** (agent default for behavioral/layout) | Autonomous repro iterations with JSON status   | `run-debug-loop.sh`                          |
+| Seam                                                 | When                                         | Launcher                |
+| ---------------------------------------------------- | -------------------------------------------- | ----------------------- |
+| **Devkit** (human default)                           | Visual debugging, LG, flicker, rendering     | `run-devkit-session.sh` |
+| **Headless**                                         | E2E, settings-only automation                | `test/e2e/run.py`       |
+| **Agent Loop** (agent default for behavioral/layout) | Autonomous repro iterations with JSON status | `run-debug-loop.sh`     |
 
 ## Quick entrypoints
 

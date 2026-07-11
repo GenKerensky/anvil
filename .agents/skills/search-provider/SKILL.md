@@ -145,11 +145,7 @@ class MySearchProvider {
   }
 
   // Refine search results with expanded terms — return subset of results
-  async getSubsearchResultSet(
-    results: string[],
-    terms: string[],
-    cancellable: Gio.Cancellable
-  ): Promise<string[]> {
+  async getSubsearchResultSet(results: string[], terms: string[], cancellable: Gio.Cancellable): Promise<string[]> {
     if (cancellable.is_cancelled()) throw new Error("Search Cancelled");
 
     // Simple: re-run full search. Override for efficiency.

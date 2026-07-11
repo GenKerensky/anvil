@@ -21,10 +21,7 @@ import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 import Meta from "gi://Meta";
-// Used in type annotations: import('gi://Mtk').Rectangle; also bootstraps Meta namespace transitively
-
-import { safeRaise, safeFocus, safeActivate } from "./mutter-safe.js";
-import Mtk from "gi://Mtk";
+// Mtk is available via Meta for Rectangle types; keep Shell/St runtime imports.
 import Shell from "gi://Shell";
 import type ShellNS from "@girs/shell-18";
 import St from "gi://St";
@@ -35,7 +32,31 @@ import { Logger } from "../shared/logger.js";
 // App imports
 import * as Utils from "./utils.js";
 import { WINDOW_MODES } from "./window/constants.js";
-import type { WindowManager } from "./window.js";
+import {
+  ensureWindowTab,
+  ensureConDecoration,
+  destroyConDecoration,
+  refreshTabTitle,
+} from "./tab-decoration.js";
+
+/**
+ * Narrow host for Tree — no concrete WindowManager import (Stage 7).
+ * Dependency direction: tree ← layout ← wm.
+ */
+export interface TreeHost {
+  readonly settings: Gio.Settings;
+  readonly focusMetaWindow: Meta.Window | null;
+  determineSplitLayout(): string;
+  floatingWindow(node: Node<any>): boolean;
+  bindWorkspaceSignals(workspace: Meta.Workspace): void;
+}
+
+/**
+ * Tree invariants:
+ * (1) every WINDOW has a MONITOR ancestor
+ * (2) after redistributeSiblingPercent, tiled sibling percents sum to ~1
+ * (3) FLOAT windows may exist but skip size compute in layout
+ */
 
 export const NODE_TYPES = Utils.createEnum([
   "ROOT",
@@ -150,11 +171,11 @@ export class Node<T extends string> extends GObject.Object {
       // available so we store it immediately
       this._initMetaWindow();
       this._actor = this._data.get_compositor_private();
-      this._createWindowTab();
+      ensureWindowTab(this);
     }
 
     if (this.isCon()) {
-      this._createDecoration();
+      ensureConDecoration(this);
     }
   }
 
@@ -418,10 +439,7 @@ export class Node<T extends string> extends GObject.Object {
 
   removeChild(node: Node<any>) {
     if (node.isTabbed() && node.decoration) {
-      node.decoration.hide();
-      node.decoration.destroy_all_children();
-      node.decoration.destroy();
-      node.decoration = null;
+      destroyConDecoration(node);
     }
 
     let refNode;
@@ -520,94 +538,6 @@ export class Node<T extends string> extends GObject.Object {
     }
   }
 
-  _createWindowTab() {
-    if (this.tab || !this.isWindow()) return;
-
-    const tabContents = new St.BoxLayout({
-      style_class: "window-tabbed-tab",
-      x_expand: true,
-    });
-    // Window tracker may not resolve an app for a dying window
-    const app = this.app;
-    if (!app) return;
-    const labelText = this._getTitle();
-    const metaWin = this.nodeValue;
-    const titleButton = new St.Button({
-      x_expand: true,
-      label: `${labelText}`,
-    });
-    const iconBin = new St.Button({
-      style_class: "window-tabbed-tab-icon",
-    });
-    const icon = app.create_icon_texture(24 * Utils.dpi());
-    iconBin.child = icon;
-    const closeButton = new St.Button({
-      style_class: "window-tabbed-tab-close",
-      child: new St.Icon({ icon_name: "window-close-symbolic" }),
-    });
-
-    tabContents.add_child(iconBin);
-    tabContents.add_child(titleButton);
-    tabContents.add_child(closeButton);
-
-    const clickFn = () => {
-      if (!this.parentNode) return;
-      this.parentNode.childNodes.forEach((c) => {
-        if (c.tab) {
-          c.tab.remove_style_class_name("window-tabbed-tab-active");
-          c.render();
-        }
-      });
-      tabContents.add_style_class_name("window-tabbed-tab-active");
-      metaWin.activate(global.display.get_current_time());
-    };
-
-    const closeFn = () => {
-      metaWin.delete(global.get_current_time());
-    };
-
-    const middleClickCloseFn = (_: Clutter.Actor, event: Clutter.Event) => {
-      if (event.get_button() === Clutter.BUTTON_MIDDLE) {
-        metaWin.delete(global.get_current_time());
-      }
-    };
-
-    iconBin.connect("clicked", clickFn);
-    iconBin.connect("button-release-event", middleClickCloseFn);
-    titleButton.connect("clicked", clickFn);
-    titleButton.connect("button-release-event", middleClickCloseFn);
-    closeButton.connect("clicked", closeFn);
-    closeButton.connect("button-release-event", middleClickCloseFn);
-
-    if (metaWin === global.display.get_focus_window()) {
-      tabContents.add_style_class_name("window-tabbed-tab-active");
-    }
-    this.tab = tabContents;
-  }
-
-  _createDecoration() {
-    if (this.decoration) return;
-    const decoration = new St.BoxLayout();
-    (decoration as any).type = "anvil-deco";
-    (decoration as any).parentNode = this;
-    const globalWinGrp = global.window_group;
-    decoration.style_class = "window-tabbed-bg";
-
-    if (!globalWinGrp.contains(decoration)) {
-      globalWinGrp.add_child(decoration);
-    }
-
-    decoration.hide();
-    this.decoration = decoration;
-  }
-
-  _getTitle() {
-    if (this.isWindow()) {
-      return this.nodeValue.title ? this.nodeValue.title : this.app!.get_name();
-    }
-    return null;
-  }
-
   // Check if the underlying window actor is still alive. GJS throws
   // on property access of finalized GObjects rather than segfaulting,
   // so a cheap get_name() call is enough to detect dead actors.
@@ -624,11 +554,7 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   render(_from?: any) {
-    // Always update the title for the tab
-    if (this.tab !== null && this.tab !== undefined) {
-      const titleLabel = this.tab.get_child_at_index(1);
-      if (titleLabel) (titleLabel as St.Button).label = this._getTitle()!;
-    }
+    refreshTabTitle(this);
   }
 
   get float(): boolean {
@@ -707,31 +633,30 @@ export class Queue<T = any> extends GObject.Object {
   }
 }
 
-export class Tree extends Node<string> {
+export class Tree extends Node<any> {
   static {
     GObject.registerClass(this);
   }
-  _extWm!: WindowManager;
-  ext!: import("../../extension.js").default;
+  private _host!: TreeHost;
   windows: Record<string, any> = {};
   allNodeWindows: any[] = [];
   attachNode: Node<any> | null = null;
   defaultStackHeight!: number;
 
-  constructor(extWm: WindowManager) {
+  constructor(host: TreeHost) {
     const rootBin = new St.Bin();
     super(NODE_TYPES.ROOT, rootBin);
-    this._extWm = extWm;
+    this._host = host;
     this.defaultStackHeight = 35;
-    this.settings = this.extWm.ext.settings;
+    this.settings = host.settings;
     this.layout = LAYOUT_TYPES.ROOT;
     if (!global.window_group.contains(rootBin)) global.window_group.add_child(rootBin);
 
     this._initWorkspaces();
   }
 
-  get extWm(): WindowManager {
-    return this._extWm;
+  get host(): TreeHost {
+    return this._host;
   }
 
   /**
@@ -755,7 +680,7 @@ export class Tree extends Node<string> {
         `mo${mi}ws${wsIndex}`
       );
       if (!monitorWsNode) continue;
-      monitorWsNode.layout = this.extWm.determineSplitLayout();
+      monitorWsNode.layout = this._host.determineSplitLayout();
       monitorWsNode.actorBin = new St.Bin();
       if (!global.window_group.contains(monitorWsNode.actorBin))
         global.window_group.add_child(monitorWsNode.actorBin);
@@ -782,7 +707,7 @@ export class Tree extends Node<string> {
     if (!global.window_group.contains(newWsNode.actorBin))
       global.window_group.add_child(newWsNode.actorBin);
 
-    this.extWm.bindWorkspaceSignals(workspace!);
+    this._host.bindWorkspaceSignals(workspace!);
     this.addMonitor(wsIndex);
 
     return true;
@@ -902,90 +827,6 @@ export class Tree extends Node<string> {
   }
 
   /**
-   * Focuses on the next node, if metaWindow and tiled, raise it
-   */
-  focus(node: Node<any> | null, direction: Meta.MotionDirection): Node<any> | null {
-    if (!node) return null;
-    let next = this.next(node, direction);
-
-    if (!next) return null;
-
-    const type = next.nodeType;
-    const position = Utils.positionFromDirection(direction);
-    const previous = position === POSITION.BEFORE;
-
-    switch (type) {
-      case NODE_TYPES.WINDOW:
-        break;
-      case NODE_TYPES.CON: {
-        const tiledConWindows = next
-          .getNodeByType(NODE_TYPES.WINDOW)
-          .filter((w: Node<any>) => w.isTile());
-        if (next.layout === LAYOUT_TYPES.STACKED) {
-          next = next.lastChild;
-        } else {
-          if (tiledConWindows.length > 1) {
-            if (previous) {
-              next = tiledConWindows[tiledConWindows.length - 1];
-            } else {
-              next = tiledConWindows[0];
-            }
-          } else {
-            next = tiledConWindows[0];
-          }
-        }
-        break;
-      }
-      case NODE_TYPES.MONITOR:
-        if (next.layout === LAYOUT_TYPES.STACKED) {
-          next = next.lastChild;
-        } else {
-          if (previous) {
-            next = next.lastChild;
-          } else {
-            next = next.firstChild;
-          }
-        }
-
-        if (next && next.nodeType === NODE_TYPES.CON) {
-          const tiledConWindows = next
-            .getNodeByType(NODE_TYPES.WINDOW)
-            .filter((w: Node<any>) => w.isTile());
-          if (next.layout === LAYOUT_TYPES.STACKED) {
-            next = next.lastChild;
-          } else {
-            if (tiledConWindows.length > 1) {
-              if (previous) {
-                next = tiledConWindows[tiledConWindows.length - 1];
-              } else {
-                next = tiledConWindows[0];
-              }
-            } else {
-              next = tiledConWindows[0];
-            }
-          }
-        }
-        break;
-    }
-
-    if (!next) return null;
-
-    const metaWindow = next.nodeValue as Meta.Window;
-    if (!metaWindow) return null;
-    if (metaWindow.minimized) {
-      next = this.focus(next, direction);
-    } else {
-      safeRaise(metaWindow);
-      safeFocus(metaWindow, global.display.get_current_time());
-      safeActivate(metaWindow, global.display.get_current_time());
-
-      this.extWm.notifyFocusChanged(next, "keyboard");
-      this.debugParentNodes(next);
-    }
-    return next;
-  }
-
-  /**
    * Obtains the non-floating, non-minimized list of nodes
    * Useful for calculating the rect areas
    */
@@ -1009,107 +850,6 @@ export class Tree extends Node<string> {
     };
 
     return items ? items.filter(filterFn) : [];
-  }
-
-  /**
-   * Move a given node into a direction
-   *
-   * TODO, handle minimized or floating windows
-   *
-   */
-  move(node: Node<any>, direction: Meta.MotionDirection) {
-    const next = this.next(node, direction);
-    const position = Utils.positionFromDirection(direction);
-
-    if (!next) {
-      // No adjacent node on the same monitor — append or prepend
-      const currMonWsNode = this.extWm.currentMonWsNode;
-      if (currMonWsNode) {
-        if (position === POSITION.AFTER) {
-          currMonWsNode.appendChild(node);
-        } else {
-          currMonWsNode.insertBefore(node, currMonWsNode.firstChild);
-        }
-        return true;
-      }
-      return false;
-    }
-
-    const parentNode = node.parentNode;
-    let parentTarget;
-
-    switch (next.nodeType) {
-      case NODE_TYPES.WINDOW:
-        // If same parent, swap
-        if (next === node.previousSibling || next === node.nextSibling) {
-          this.swapPairs(node, next);
-          this.extWm.notifyFocusChanged(node, "move");
-          this.debugParentNodes(node);
-          // do not reset percent when swapped
-          return true;
-        } else {
-          parentTarget = next.parentNode;
-          if (parentTarget) {
-            if (position === POSITION.AFTER) {
-              parentTarget.insertBefore(node, next);
-            } else {
-              parentTarget.insertBefore(node, next.nextSibling);
-            }
-          }
-        }
-        break;
-      case NODE_TYPES.CON:
-        parentTarget = next;
-
-        if (next.isStacked()) {
-          next.appendChild(node);
-        } else {
-          if (position === POSITION.AFTER) {
-            next.insertBefore(node, next.firstChild);
-          } else {
-            next.appendChild(node);
-          }
-        }
-        break;
-      case NODE_TYPES.MONITOR: {
-        parentTarget = next;
-        const currMonWsNode = this.extWm.currentMonWsNode;
-        if (!currMonWsNode) return false;
-
-        if (
-          !next.contains(node) &&
-          (node === currMonWsNode.firstChild || node === currMonWsNode.lastChild)
-        ) {
-          const targetMonRect = this.extWm.rectForMonitor(
-            node,
-            Utils.monitorIndex(next.nodeValue as string)
-          );
-          if (!targetMonRect) return false;
-          if (position === POSITION.AFTER) {
-            next.insertBefore(node, next.firstChild);
-          } else {
-            next.appendChild(node);
-          }
-          const rect = targetMonRect;
-          this.extWm.move(node.nodeValue as Meta.Window, rect);
-          this.extWm.notifyFocusChanged(node, "move");
-          this.debugParentNodes(node);
-        } else {
-          if (position === POSITION.AFTER) {
-            currMonWsNode.appendChild(node);
-          } else {
-            currMonWsNode.insertBefore(node, currMonWsNode.firstChild);
-          }
-        }
-        break;
-      }
-      default:
-        break;
-    }
-    this.resetSiblingPercent(parentNode!);
-    this.resetSiblingPercent(parentTarget!);
-    parentNode!.resetLayoutSingleChild();
-    return true;
   }
 
   /**
@@ -1219,135 +959,6 @@ export class Tree extends Node<string> {
   }
 
   /**
-   * Credits: i3-like split
-   */
-  split(node: Node<any>, orientation: string, forceSplit: boolean = false) {
-    if (!node) return;
-    const type = node.nodeType;
-
-    if (type === NODE_TYPES.WINDOW && node.mode === WINDOW_MODES.FLOAT) {
-      return;
-    }
-
-    if (!(type === NODE_TYPES.MONITOR || type === NODE_TYPES.CON || type === NODE_TYPES.WINDOW)) {
-      return;
-    }
-
-    const parentNode = node.parentNode;
-    if (!parentNode) return;
-    const numChildren = parentNode.childNodes.length;
-
-    // toggle the split
-    if (
-      !forceSplit &&
-      numChildren === 1 &&
-      (parentNode.layout === LAYOUT_TYPES.HSPLIT || parentNode.layout === LAYOUT_TYPES.VSPLIT)
-    ) {
-      parentNode.layout =
-        orientation === ORIENTATION_TYPES.HORIZONTAL ? LAYOUT_TYPES.HSPLIT : LAYOUT_TYPES.VSPLIT;
-      this.attachNode = parentNode;
-      return;
-    }
-
-    // Push down the Meta.Window into a new Container
-    const currentIndex = node.index;
-    const container = new St.Bin();
-    const newConNode = new Node(NODE_TYPES.CON, container);
-    newConNode.settings = this.settings;
-
-    // Take the direction of the parent
-    newConNode.layout =
-      orientation === ORIENTATION_TYPES.HORIZONTAL ? LAYOUT_TYPES.HSPLIT : LAYOUT_TYPES.VSPLIT;
-    newConNode.rect = node.rect;
-    newConNode.percent = node.percent;
-    newConNode.parentNode = parentNode;
-    parentNode.childNodes[currentIndex!] = newConNode;
-    this.createNode(container, node.nodeType, node.nodeValue);
-    node.parentNode = newConNode;
-    this.attachNode = newConNode;
-  }
-
-  swap(node: Node<any>, direction: Meta.MotionDirection) {
-    let nextSwapNode = this.next(node, direction);
-    if (!nextSwapNode) {
-      return;
-    }
-    const nodeSwapType = nextSwapNode.nodeType;
-
-    switch (nodeSwapType) {
-      case NODE_TYPES.WINDOW:
-        break;
-      case NODE_TYPES.CON:
-      case NODE_TYPES.MONITOR: {
-        const childWindowNodes = nextSwapNode
-          .getNodeByMode(WINDOW_MODES.TILE)
-          .filter((t: Node<any>) => t.nodeType === NODE_TYPES.WINDOW);
-        if (nextSwapNode.layout === LAYOUT_TYPES.STACKED) {
-          nextSwapNode = childWindowNodes[childWindowNodes.length - 1];
-        } else {
-          nextSwapNode = childWindowNodes[0];
-        }
-        break;
-      }
-    }
-
-    const isNextNodeWin =
-      nextSwapNode && nextSwapNode.nodeValue && nextSwapNode.nodeType === NODE_TYPES.WINDOW;
-    if (isNextNodeWin) {
-      if (!this.extWm.sameParentMonitor(node, nextSwapNode)) {
-        // TODO, there is a freeze bug if there are not in same monitor.
-        return;
-      }
-      this.swapPairs(node, nextSwapNode);
-    }
-    return nextSwapNode;
-  }
-
-  swapPairs(fromNode: Node<any>, toNode: Node<any>, focus: boolean = true) {
-    if (!(this._swappable(fromNode) && this._swappable(toNode))) return;
-    // Swap the items in the array
-    const parentForFrom = fromNode ? fromNode.parentNode : undefined;
-    const parentForTo = toNode.parentNode;
-    if (parentForTo && parentForFrom) {
-      const nextIndex = toNode.index;
-      const focusIndex = fromNode.index;
-
-      const transferMode = fromNode.mode;
-      fromNode.mode = toNode.mode;
-      toNode.mode = transferMode;
-
-      const transferRect = (fromNode.nodeValue as Meta.Window).get_frame_rect();
-      const transferToRect = (toNode.nodeValue as Meta.Window).get_frame_rect();
-      const transferPercent = fromNode.percent;
-
-      fromNode.percent = toNode.percent;
-      toNode.percent = transferPercent;
-
-      parentForTo.childNodes[nextIndex!] = fromNode;
-      fromNode.parentNode = parentForTo;
-      parentForFrom.childNodes[focusIndex!] = toNode;
-      toNode.parentNode = parentForFrom;
-
-      this.extWm.move(fromNode.nodeValue as Meta.Window, transferToRect);
-      this.extWm.move(toNode.nodeValue as Meta.Window, transferRect);
-
-      if (focus) {
-        // The fromNode is now on the parent-target
-        safeRaise(fromNode.nodeValue as Meta.Window);
-        safeFocus(fromNode.nodeValue as Meta.Window, global.get_current_time());
-      }
-    }
-  }
-
-  _swappable(node: Node<any> | null) {
-    if (!node) return false;
-    if (node.nodeType === NODE_TYPES.WINDOW && !(node.nodeValue as Meta.Window).minimized) {
-      return true;
-    }
-    return false;
-  }
-
-  /**
    * Performs cleanup of dangling parents in addition to removing the
    * node from the parent.
    */
@@ -1386,7 +997,7 @@ export class Tree extends Node<string> {
     } else {
       const existParent = node.parentNode!;
       oldChild = existParent.removeChild(node);
-      if (!this.extWm.floatingWindow(node)) cleanUpParent(existParent);
+      if (!this._host.floatingWindow(node)) cleanUpParent(existParent);
     }
 
     // If only a single tab remains, exit tabbed layout
@@ -1396,7 +1007,7 @@ export class Tree extends Node<string> {
       parentNode.layout === LAYOUT_TYPES.TABBED &&
       parentNode.childNodes.length === 1
     ) {
-      parentNode.layout = this.extWm.determineSplitLayout();
+      parentNode.layout = this._host.determineSplitLayout();
       this.resetSiblingPercent(parentNode);
       parentNode.lastTabFocus = null;
     }
@@ -1405,32 +1016,18 @@ export class Tree extends Node<string> {
       this.attachNode = null;
     } else {
       // Find the next focus node as attachNode
-      this.attachNode = this.findNode(this.extWm.focusMetaWindow);
+      this.attachNode = this.findNode(this._host.focusMetaWindow);
     }
 
     return oldChild ? true : false;
   }
 
-  computeSizes(node: Node<any>, childItems: Node<any>[]) {
-    const sizes: number[] = [];
-    const orientation = Utils.orientationFromLayout(node.layout!);
-    const rect = node.rect!;
-    const totalSize = orientation === ORIENTATION_TYPES.HORIZONTAL ? rect.width : rect.height;
-    const grabTiled = node.getNodeByMode(WINDOW_MODES.GRAB_TILE).length > 0;
-    childItems.forEach((childNode: Node<any>, index: number) => {
-      const percent =
-        childNode.percent && childNode.percent > 0.0 && !grabTiled
-          ? childNode.percent
-          : 1.0 / childItems.length;
-      sizes[index] = Math.floor(percent * totalSize);
+  /** Zero sibling percents (equal-share on next layout). Pure structure helper. */
+  resetSiblingPercent(parentNode: Node<any> | null) {
+    if (!parentNode) return;
+    parentNode.childNodes.forEach((n: Node<any>) => {
+      n.percent = 0.0;
     });
-    // Bug #330 fix: Ensure total allocated size equals parent size
-    // Ported from jcrussell/forge
-    const totalAllocated = sizes.reduce((a: number, b: number) => a + b, 0);
-    if (totalAllocated !== totalSize) {
-      sizes[sizes.length - 1] += totalSize - totalAllocated;
-    }
-    return sizes;
   }
 
   findFirstNodeWindowFrom(node: Node<any>) {
@@ -1439,43 +1036,6 @@ export class Tree extends Node<string> {
       return results[0];
     }
     return null;
-  }
-
-  resetSiblingPercent(parentNode: Node<any> | null) {
-    if (!parentNode) return;
-    const children = parentNode.childNodes;
-    children.forEach((n: Node<any>) => {
-      n.percent = 0.0;
-    });
-  }
-
-  /**
-   * Redistribute sibling percents proportionally after a node is removed.
-   * Ported from jcrussell/forge
-   */
-  redistributeSiblingPercent(parentNode: Node<any> | null) {
-    if (!parentNode) return;
-    const children = parentNode.childNodes;
-    if (children.length === 0) return;
-
-    // Calculate sum of remaining children's percents
-    let totalPercent = 0;
-    children.forEach((n: Node<any>) => {
-      totalPercent += n.percent || 0;
-    });
-
-    if (totalPercent > 0) {
-      // Scale remaining children proportionally to sum to 1.0
-      const scale = 1.0 / totalPercent;
-      children.forEach((n: Node<any>) => {
-        n.percent = (n.percent || 0) * scale;
-      });
-    } else {
-      // Fallback: if no percents were set, use equal distribution
-      children.forEach((n: Node<any>) => {
-        n.percent = 1.0 / children.length;
-      });
-    }
   }
 
   debugTree() {
@@ -1514,7 +1074,7 @@ export class Tree extends Node<string> {
       const metaWindow = node.nodeValue;
       attributes += `class:'${metaWindow.get_wm_class()}',title:'${
         metaWindow.title
-      }',string:'${metaWindow}'${metaWindow === this.extWm.focusMetaWindow ? " FOCUS" : ""}`;
+      }',string:'${metaWindow}'${metaWindow === this._host.focusMetaWindow ? " FOCUS" : ""}`;
     } else if (node.isCon() || node.isMonitor() || node.isWorkspace()) {
       attributes += `${node.nodeValue}`;
       if (node.isCon() || node.isMonitor()) {

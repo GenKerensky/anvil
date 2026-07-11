@@ -1,12 +1,10 @@
 /**
- * Anvil E2E Test Runner — Jasmine automation-script for gnome-shell --devkit.
+ * Anvil E2E Test Runner — Jasmine automation-script for gnome-shell --headless.
  *
- * Loaded by gnome-shell --devkit --wayland --automation-script.
- * Called via: Scripting.runPerfScript(module, outputFile)
+ * Loaded by gnome-shell --wayland --headless --automation-script.
+ * GNOME calls `export async function run()` on the automation script.
  *
- * Uses Jasmine (same as the integration test runner) instead of a custom
- * framework. Results are collected and written to JSON so run.py can poll
- * the file for completion.
+ * Results are written to /tmp/anvil-e2e-results.json for test/e2e/run.py to poll.
  */
 
 import GLib from "gi://GLib";
@@ -20,6 +18,7 @@ const UUID = "anvil@GenKerensky.github.com";
 const SCHEMA_ID = "org.gnome.shell.extensions.anvil";
 const RESULTS_PATH = "/tmp/anvil-e2e-results.json";
 const OUTPUT_DIR = GLib.getenv("ANVIL_E2E_OUTPUT_DIR") || "/tmp/anvil-e2e-output";
+const JASMINE_DIR = "/usr/share/jasmine-gjs";
 
 // ---------------------------------------------------------------------------
 // Startup helpers
@@ -39,45 +38,55 @@ function waitForMain() {
   });
 }
 
-/** @returns {Promise<boolean>} */
-async function ensureExtensionEnabled() {
-  log("[E2E] Ensuring extension is enabled…");
-  let ext = Main.extensionManager.lookup(UUID);
+/**
+ * Wait until the extension is ACTIVE and test-mode state (extWm) is ready.
+ * @returns {Promise<void>}
+ */
+function ensureExtensionReady() {
+  return new Promise(function (resolve) {
+    function check() {
+      const ext = Main.extensionManager.lookup(UUID);
+      const g = /** @type {any} */ (global);
+      const hasTestState = g.__anvil_test_state != null && g.__anvil_test_state.extWm != null;
 
-  if (!ext) {
-    log("[E2E] Extension not loaded, attempting load…");
-    try {
-      /** @type {any} */ (Main.extensionManager).loadNewByUUID(UUID);
-    } catch (e) {
-      log("[E2E] loadNewByUUID failed: " + (e instanceof Error ? e.message : String(e)));
+      if (ext && ext.state === 1 && hasTestState) {
+        log("[E2E] Extension ACTIVE with __anvil_test_state.extWm");
+        resolve(undefined);
+        return GLib.SOURCE_REMOVE;
+      }
+
+      if (ext && ext.state === 1 && !hasTestState) {
+        log("[E2E] Extension ACTIVE but __anvil_test_state not ready — re-enabling");
+        try {
+          Main.extensionManager.disableExtension(UUID);
+        } catch (e) {
+          log("[E2E] disableExtension failed: " + (e instanceof Error ? e.message : String(e)));
+        }
+        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 500, function () {
+          try {
+            Main.extensionManager.enableExtension(UUID);
+          } catch (e) {
+            log("[E2E] enableExtension failed: " + (e instanceof Error ? e.message : String(e)));
+          }
+          return GLib.SOURCE_REMOVE;
+        });
+      } else if (!ext) {
+        try {
+          /** @type {any} */ (Main.extensionManager).loadNewByUUID(UUID);
+        } catch (e) {
+          log("[E2E] loadNewByUUID failed: " + (e instanceof Error ? e.message : String(e)));
+        }
+      } else if (ext && ext.state !== 1) {
+        try {
+          Main.extensionManager.enableExtension(UUID);
+        } catch (e) {
+          log("[E2E] enableExtension failed: " + (e instanceof Error ? e.message : String(e)));
+        }
+      }
+      return GLib.SOURCE_CONTINUE;
     }
-    ext = Main.extensionManager.lookup(UUID);
-  }
-
-  if (ext && ext.state === 1) {
-    log("[E2E] Extension is ACTIVE");
-    return true;
-  }
-
-  if (ext && ext.state !== 1) {
-    try {
-      log("[E2E] Enabling extension via D-Bus…");
-      Main.extensionManager.enableExtension(UUID);
-    } catch (e) {
-      log("[E2E] enableExtension failed: " + (e instanceof Error ? e.message : String(e)));
-    }
-
-    // Wait a bit and re-check
-    await sleep(1000);
-    ext = Main.extensionManager.lookup(UUID);
-    if (ext && ext.state === 1) {
-      log("[E2E] Extension is now ACTIVE");
-      return true;
-    }
-  }
-
-  log("[E2E] Extension NOT active (state=" + (ext ? ext.state : "null") + ")");
-  return false;
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, check);
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -173,7 +182,7 @@ function makeJsonReporter(outputPath) {
 
 /** @returns {Promise<any>} */
 async function bootJasmine() {
-  const pkgdatadir = "/usr/share/jasmine-gjs";
+  const pkgdatadir = JASMINE_DIR;
 
   const oldSearchPath = imports.searchPath.slice();
   imports.searchPath.unshift(GLib.path_get_dirname(pkgdatadir));
@@ -185,12 +194,13 @@ async function bootJasmine() {
 
   runner.installAPI(globalThis);
   runner.env.configure({ random: false });
+  /** @type {any} */ (globalThis).jasmine.DEFAULT_TIMEOUT_INTERVAL = 15000;
 
   return runner;
 }
 
 // ---------------------------------------------------------------------------
-// Entry point called by gnome-shell --devkit
+// Entry point called by gnome-shell --headless / --devkit
 // ---------------------------------------------------------------------------
 
 export async function run() {
@@ -214,7 +224,7 @@ export async function run() {
     log("[E2E] Warning: could not set test-mode: " + (e instanceof Error ? e.message : String(e)));
   }
 
-  await ensureExtensionEnabled();
+  await ensureExtensionReady();
 
   let runner;
   try {
@@ -234,8 +244,6 @@ export async function run() {
 
   runner.env.addReporter(makeJsonReporter(RESULTS_PATH));
 
-  // If a tag filter is provided, use Jasmine's specFilter to skip non-matching suites.
-  // This filters individual specs (it blocks), not top-level describes.
   if (filterTag) {
     const tag = filterTag.toLowerCase();
     const originalFilter = runner.env.specFilter;
@@ -243,19 +251,28 @@ export async function run() {
       /** @param {jasmine.Spec} spec */
       specFilter: function (spec) {
         if (!originalFilter(spec)) return false;
-        // Allow specs whose full description includes the tag
         return spec.getFullName().toLowerCase().includes(tag);
       },
     });
   }
 
-  // Import spec files — side-effect imports register describe/it suites
+  // extension.js is last: disable/re-enable can leave the WM half-initialized and
+  // would poison later suites if run first.
   const suites = [
-    "./suites/extension.js",
     "./suites/tiling.js",
     "./suites/keyboard.js",
     "./suites/operations.js",
     "./suites/resize.js",
+    "./suites/focus.js",
+    "./suites/swap.js",
+    "./suites/move.js",
+    "./suites/floating.js",
+    "./suites/layouts.js",
+    "./suites/workspace.js",
+    "./suites/borders.js",
+    "./suites/minimize.js",
+    "./suites/constraints.js",
+    "./suites/extension.js",
   ];
 
   for (const path of suites) {
@@ -279,7 +296,6 @@ export async function run() {
     log("[E2E] Fatal error during spec execution: " + (e instanceof Error ? e.message : String(e)));
   }
 
-  // Read the results written by the reporter to determine if we need a screenshot
   let results = { totalFailed: 0 };
   try {
     const bytes = GLib.file_get_contents(RESULTS_PATH);
@@ -287,7 +303,7 @@ export async function run() {
       const json = new TextDecoder().decode(bytes[1]);
       results = JSON.parse(json);
     }
-  } catch (e) {
+  } catch {
     /* ignore — reporter already wrote the file */
   }
 

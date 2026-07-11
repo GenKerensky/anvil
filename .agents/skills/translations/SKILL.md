@@ -39,10 +39,7 @@ Files using this import:
 ### Preferences side (GTK4/Adwaita process)
 
 ```js
-import {
-  ExtensionPreferences,
-  gettext as _,
-} from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
+import { ExtensionPreferences, gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
 ```
 
 Files using this import:
@@ -94,11 +91,7 @@ For strings that vary by count in different languages:
 ```js
 import { gettext as _, ngettext } from "resource:///org/gnome/shell/extensions/extension.js";
 
-const body = ngettext(
-  "You have been notified %d time",
-  "You have been notified %d times",
-  count
-).format(count);
+const body = ngettext("You have been notified %d time", "You have been notified %d times", count).format(count);
 ```
 
 **Note**: `ngettext` is not currently used in Anvil, but is available if needed.
@@ -135,7 +128,7 @@ make compilemsgs
 
 This runs `xgettext` to scan for new strings → `src/po/anvil.pot`, then `msgmerge -U` to update each `.po` file with new/removed entries, then `msgfmt -c` to compile `.mo` files.
 
-3. Rebuild the extension:
+1. Rebuild the extension:
 
 ```bash
 make build
@@ -163,10 +156,10 @@ From `Makefile:59-51`:
 cp src/po/anvil.pot src/po/<lang_code>.po
 ```
 
-2. Edit the `.po` file header (`Language`, `Plural-Forms`, etc.) and translate the `msgstr` entries using a tool like [Gtranslator](https://flathub.org/apps/details/org.gnome.Gtranslator) or [POEdit](https://flathub.org/apps/details/net.poedit.Poedit).
+1. Edit the `.po` file header (`Language`, `Plural-Forms`, etc.) and translate the `msgstr` entries using a tool like [Gtranslator](https://flathub.org/apps/details/org.gnome.Gtranslator) or [POEdit](https://flathub.org/apps/details/net.poedit.Poedit).
 
-3. Run `make compilemsgs` to compile and merge.
-4. Rebuild: `make build` (the new `.mo` will be included automatically since the Makefile matches `src/po/*.po` via `MSGSRC`).
+2. Run `make compilemsgs` to compile and merge.
+3. Rebuild: `make build` (the new `.mo` will be included automatically since the Makefile matches `src/po/*.po` via `MSGSRC`).
 
 ## Testing Translations
 
