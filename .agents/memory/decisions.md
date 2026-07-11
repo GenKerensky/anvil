@@ -133,6 +133,13 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 20 — CommandBus + schema (2026-07-11)
+
+- **CommandBus** owns AnvilAction handler table; WM.command delegates; injectable
+  `commandBus` for keybindings/tests (B3-1 full, B10-2).
+- **WindowConfig** shared types + `isWindowConfig` guard for prefs/shell (C4-1).
+- **QuickSettingsExternalIndicator** adapter type (C1-1); architecture rule 7 reaffirmed (D3-1).
+
 ### Residual Stage 19 — utils split + class match (2026-07-11)
 
 - Split utils into `utils/geometry`, `window-filters`, `decorations`, `version`,

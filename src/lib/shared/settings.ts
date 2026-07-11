@@ -26,15 +26,33 @@ import { Logger } from "./logger.js";
 // Dev or Prod mode, see Makefile:debug
 export const production = true;
 
+/**
+ * Shared WindowConfig schema for shell + prefs (C4-1).
+ * Mode is a closed set; title/class matchers use RulesEngine grammars.
+ */
+export type WindowOverrideMode = "float" | "tile";
+
 export interface WindowOverride {
   wmClass: string;
   wmTitle?: string;
   wmId?: string;
-  mode: string;
+  mode: WindowOverrideMode | string;
 }
 
 export interface WindowConfig {
   overrides: WindowOverride[];
+}
+
+/** Runtime check for JSON loaded from windows.json. */
+export function isWindowConfig(value: unknown): value is WindowConfig {
+  if (!value || typeof value !== "object") return false;
+  const o = value as { overrides?: unknown };
+  if (!Array.isArray(o.overrides)) return false;
+  return o.overrides.every((item) => {
+    if (!item || typeof item !== "object") return false;
+    const row = item as WindowOverride;
+    return typeof row.wmClass === "string" && typeof row.mode === "string";
+  });
 }
 
 export class ConfigManager extends GObject.Object {

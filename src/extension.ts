@@ -27,7 +27,11 @@ import { ConfigManager } from "./lib/shared/settings.js";
 
 import { Keybindings } from "./lib/extension/keybindings.js";
 import { WindowManager } from "./lib/extension/window.js";
-import { FeatureIndicator, FeatureMenuToggle } from "./lib/extension/indicator.js";
+import {
+  FeatureIndicator,
+  FeatureMenuToggle,
+  type QuickSettingsExternalIndicator,
+} from "./lib/extension/indicator.js";
 import { ExtensionThemeManager } from "./lib/extension/extension-theme-manager.js";
 
 // Credit: jcrussell/forge — descriptors for GNOME settings overridden while enabled.

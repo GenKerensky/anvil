@@ -55,6 +55,7 @@ import { GrabResizeSession } from "./grab-resize-session.js";
 import { SettingsBridge } from "./settings-bridge.js";
 import { FocusController } from "./focus-controller.js";
 import { BorderController } from "./border-controller.js";
+import { CommandBus } from "./command-bus.js";
 import { computeSnapLayout } from "./snap-layout.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type {
@@ -65,7 +66,6 @@ import type {
 } from "./window/types.js";
 import type {
   AnvilAction,
-  AnvilActionName,
   FloatAction,
   DirectionAction,
   SplitAction,
@@ -165,10 +165,8 @@ export class WindowManager extends GObject.Object {
   declare _workspaceChangingTimeoutId: number;
   declare _prefsOpenSrcId: number;
 
-  // --- Command registry (AnvilAction name → handler) ---
-  private _commandHandlers!: {
-    [K in AnvilActionName]: (action: Extract<AnvilAction, { name: K }>) => void;
-  };
+  /** CommandBus — typed AnvilAction dispatch (B3-1 / B10-2). */
+  private _commandBus!: CommandBus;
 
   constructor(ext: AnvilExtension) {
     super();
@@ -728,41 +726,41 @@ export class WindowManager extends GObject.Object {
   }
 
   /**
-   * Register AnvilAction handlers. New commands: extend AnvilAction and add a
-   * handler here — do not reintroduce a mega-switch (architecture rule 3).
+   * Wire CommandBus to private handlers. New commands: extend AnvilAction and
+   * CommandBusHost — do not reintroduce a mega-switch (architecture rule 3).
    */
   private _initCommandHandlers() {
-    this._commandHandlers = {
-      FloatToggle: (a) => this._handleFloat(a),
-      FloatClassToggle: (a) => this._handleFloat(a),
-      FloatNonPersistentToggle: (a) => this._handleFloat(a),
-      Move: (a) => this._handleMove(a),
-      Focus: (a) => this._handleFocus(a),
-      Swap: (a) => this._handleSwap(a),
-      Split: (a) => this._handleSplit(a),
-      LayoutToggle: () => this._handleLayoutToggle(),
-      FocusBorderToggle: () => this._handleFocusBorderToggle(),
-      TilingModeToggle: () => this._handleTilingModeToggle(),
-      GapSize: (a) => this._handleGapSize(a),
-      WorkspaceActiveTileToggle: () => this._handleWorkspaceActiveTileToggle(),
-      LayoutStackedToggle: () => this._handleLayoutStackedToggle(),
-      LayoutTabbedToggle: () => this._handleLayoutTabbedToggle(),
-      CancelOperation: () => this._handleCancelOperation(),
-      PrefsOpen: () => this._handlePrefsOpen(),
-      WindowSwapLastActive: () => this._handleWindowSwapLastActive(),
-      SnapLayoutMove: (a) => this._handleSnapLayoutMove(a),
-      ShowTabDecorationToggle: () => this._handleShowTabDecorationToggle(),
-      WindowResize: (a) => this._handleWindowResize(a),
-      WindowClose: () => this._handleWindowClose(),
-    };
+    this._commandBus = new CommandBus({
+      handleFloat: (a) => this._handleFloat(a),
+      handleMove: (a) => this._handleMove(a),
+      handleFocus: (a) => this._handleFocus(a),
+      handleSwap: (a) => this._handleSwap(a),
+      handleSplit: (a) => this._handleSplit(a),
+      handleLayoutToggle: () => this._handleLayoutToggle(),
+      handleFocusBorderToggle: () => this._handleFocusBorderToggle(),
+      handleTilingModeToggle: () => this._handleTilingModeToggle(),
+      handleGapSize: (a) => this._handleGapSize(a),
+      handleWorkspaceActiveTileToggle: () => this._handleWorkspaceActiveTileToggle(),
+      handleLayoutStackedToggle: () => this._handleLayoutStackedToggle(),
+      handleLayoutTabbedToggle: () => this._handleLayoutTabbedToggle(),
+      handleCancelOperation: () => this._handleCancelOperation(),
+      handlePrefsOpen: () => this._handlePrefsOpen(),
+      handleWindowSwapLastActive: () => this._handleWindowSwapLastActive(),
+      handleSnapLayoutMove: (a) => this._handleSnapLayoutMove(a),
+      handleShowTabDecorationToggle: () => this._handleShowTabDecorationToggle(),
+      handleWindowResize: (a) => this._handleWindowResize(a),
+      handleWindowClose: () => this._handleWindowClose(),
+    });
   }
 
-  /** Dispatch a typed user action via the in-WM handler registry. */
+  /** Dispatch a typed user action via CommandBus (B3-1). */
   command(action: AnvilAction) {
-    const handler = this._commandHandlers[action.name] as ((a: AnvilAction) => void) | undefined;
-    if (handler) {
-      handler.call(this, action);
-    }
+    this._commandBus.dispatch(action);
+  }
+
+  /** Injectable command bus for tests / keybinding service (B10-2). */
+  get commandBus(): CommandBus {
+    return this._commandBus;
   }
 
   private _handleFloat(action: FloatAction) {

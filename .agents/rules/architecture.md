@@ -55,8 +55,6 @@ Do **not** add a new write path for frames, percents, or Meta listeners outside 
   lives in **`tab-decoration.ts`**. Layout ops only via **LayoutEngine**.
 - **Stage 8:** New keybindings go in **`KEYBINDING_TABLE`** (not ad-hoc lambdas). New GSettings
   reactions go in **`SettingsBridge`** handlers (not a switch on `WindowManager`).
-
-## F5 roadmap
-
-**Complete (stages 0–8).** Further extractions (full CommandBus modules, DecorationsController,
-percent semantics) are optional follow-ups outside the original prioritized list.
+- **CommandBus (residual):** Dispatch only via **`CommandBus` / `WindowManager.command()`**. Do
+  not add open-coded switches for user actions.
+- **Rule 7 (types):** No new public `any` on APIs; Meta patches only in `window/types.ts`.

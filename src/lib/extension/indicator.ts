@@ -34,6 +34,14 @@ const iconName = "view-grid-symbolic";
 
 type AnvilExtension = import("../../extension.js").default;
 
+/**
+ * Thin adapter for Quick Settings addExternalIndicator (C1-1).
+ * GIR typings for Quick Settings are incomplete; keep the cast in one place.
+ */
+export type QuickSettingsExternalIndicator = Parameters<
+  typeof Main.panel.statusArea.quickSettings.addExternalIndicator
+>[0];
+
 class SettingsPopupSwitch extends PopupSwitchMenuItem {
   static {
     GObject.registerClass(this);
