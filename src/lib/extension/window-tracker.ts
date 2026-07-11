@@ -61,6 +61,12 @@ export interface WindowTrackerHost {
   autoSplitFromFocus(): boolean;
 }
 
+/** Reconcile backoff (B4-2): start at 16ms, double until max; stop when stable or budget. */
+const RECONCILE_INITIAL_MS = 16;
+const RECONCILE_MAX_MS = 256;
+const RECONCILE_MAX_DURATION_MS = 2000;
+const RECONCILE_STABLE_TICKS = 2;
+
 export class WindowTracker {
   private _host: WindowTrackerHost;
   private _windowReconcileSrcId = 0;
@@ -188,19 +194,42 @@ export class WindowTracker {
     this.scheduleReconcile();
   }
 
+  /**
+   * Schedule window admit reconcile with exponential backoff (B4-2).
+   * Stops early when consecutive ticks admit zero windows, or after max duration.
+   * Re-entrant schedule while a loop is active is a no-op (loop already covers admissions).
+   */
   scheduleReconcile() {
     if (this._windowReconcileSrcId) return;
 
-    let attemptsRemaining = 120;
-    this._windowReconcileSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
-      this.reconcileCurrentWindows("window-reconcile");
-      attemptsRemaining--;
-      if (attemptsRemaining <= 0) {
+    let intervalMs = RECONCILE_INITIAL_MS;
+    let stableTicks = 0;
+    const startedAt = Date.now();
+
+    const arm = () => {
+      this._windowReconcileSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, intervalMs, () => {
+        const admitted = this.reconcileCurrentWindows("window-reconcile");
+        if (admitted > 0) {
+          stableTicks = 0;
+          intervalMs = RECONCILE_INITIAL_MS;
+        } else {
+          stableTicks++;
+          intervalMs = Math.min(intervalMs * 2, RECONCILE_MAX_MS);
+        }
+
+        const elapsedMs = Date.now() - startedAt;
+        if (stableTicks >= RECONCILE_STABLE_TICKS || elapsedMs >= RECONCILE_MAX_DURATION_MS) {
+          this._windowReconcileSrcId = 0;
+          return false;
+        }
+
+        // Reschedule with new interval (GLib timeout_add interval is fixed per source).
         this._windowReconcileSrcId = 0;
+        arm();
         return false;
-      }
-      return true;
-    });
+      });
+    };
+    arm();
   }
 
   private _currentWindowCandidates() {
@@ -226,15 +255,21 @@ export class WindowTracker {
     });
   }
 
-  /** Admit any valid windows not yet in the tree (also used by unit tests). */
-  reconcileCurrentWindows(from: string) {
+  /**
+   * Admit any valid windows not yet in the tree (also used by unit tests).
+   * @returns number of windows newly tracked this pass
+   */
+  reconcileCurrentWindows(from: string): number {
     const host = this._host;
+    let admitted = 0;
     for (const metaWindow of this._currentWindowCandidates()) {
       if (host.tree.findNode(metaWindow) || !this.validWindow(metaWindow)) continue;
 
       this.trackWindow(global.display, metaWindow);
       host.updateMetaWorkspaceMonitor(from, metaWindow.get_monitor(), metaWindow);
+      admitted++;
     }
+    return admitted;
   }
 
   /**

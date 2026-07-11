@@ -133,6 +133,11 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 13 — reconcile exponential backoff (2026-07-11)
+
+- Replaced 120×16ms busy loop with backoff (16→256ms), stop after 2 stable ticks
+  or 2s budget; `reconcileCurrentWindows` returns admit count (B4-2).
+
 ### Residual Stage 12 — WindowResize + snap layout (2026-07-11)
 
 - Single **`WindowResize`** action with `direction` enum (B3-5); keybindings/tests/e2e updated.
