@@ -7,8 +7,32 @@ import Meta from "gi://Meta";
 import {
   RulesEngine,
   windowTitleMatchesOverride,
+  classMatches,
 } from "../../../src/lib/extension/rules-engine.js";
 import { createMockWindow } from "../mocks/helpers/index.js";
+
+describe("classMatches", () => {
+  it("matches exact (case-insensitive)", () => {
+    expect(classMatches("Firefox", "firefox")).toBe(true);
+    expect(classMatches("Firefox", "Fire")).toBe(false);
+  });
+
+  it("matches contains with ~ prefix", () => {
+    expect(classMatches("org.gnome.Nautilus", "~nautilus")).toBe(true);
+    expect(classMatches("Firefox", "~chrome")).toBe(false);
+  });
+
+  it("matches simple globs", () => {
+    expect(classMatches("steamwebhelper", "steam*")).toBe(true);
+    expect(classMatches("steam", "steam*")).toBe(true);
+    expect(classMatches("other", "steam*")).toBe(false);
+  });
+
+  it("matches re: regex", () => {
+    expect(classMatches("FooBar", "re:^foo")).toBe(true);
+    expect(classMatches("BarFoo", "re:^foo")).toBe(false);
+  });
+});
 
 describe("windowTitleMatchesOverride", () => {
   it("matches substring (case-insensitive)", () => {

@@ -1,10 +1,10 @@
 import Meta from "gi://Meta";
-import * as Utils from "../utils.js";
+import { createEnum } from "../utils/create-enum.js";
 
-export const WINDOW_MODES = Utils.createEnum(["FLOAT", "TILE", "GRAB_TILE", "DEFAULT"]);
+export const WINDOW_MODES = createEnum(["FLOAT", "TILE", "GRAB_TILE", "DEFAULT"]);
 
 // Simplify the grab modes
-export const GRAB_TYPES = Utils.createEnum(["RESIZING", "MOVING", "UNKNOWN"]);
+export const GRAB_TYPES = createEnum(["RESIZING", "MOVING", "UNKNOWN"]);
 
 // Bug #351 fix: Window types that shouldn't be tiled (browser popups, tooltips, etc.)
 // Ported from jcrussell/forge

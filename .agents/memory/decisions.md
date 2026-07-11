@@ -133,6 +133,12 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 19 — utils split + class match (2026-07-11)
+
+- Split utils into `utils/geometry`, `window-filters`, `decorations`, `version`,
+  `create-enum` with barrel re-export (B11-1).
+- **classMatches** policy: exact / `~` contains / glob / `re:` regex (B12-3).
+
 ### Residual Stage 18 — grab session ownership (2026-07-11)
 
 - Grab initRect/grabMode/initGrabOp owned by GrabResizeSession map (mirrored on Node) (B8-6).

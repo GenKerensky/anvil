@@ -31,6 +31,7 @@ import { Logger } from "../shared/logger.js";
 
 // App imports
 import * as Utils from "./utils.js";
+import { createEnum } from "./utils/create-enum.js";
 import { WINDOW_MODES } from "./window/constants.js";
 import {
   ensureWindowTab,
@@ -58,7 +59,7 @@ export interface TreeHost {
  * (3) FLOAT windows may exist but skip size compute in layout
  */
 
-export const NODE_TYPES = Utils.createEnum([
+export const NODE_TYPES = createEnum([
   "ROOT",
   "MONITOR", //Output in i3
   "CON", //Container in i3
@@ -66,18 +67,11 @@ export const NODE_TYPES = Utils.createEnum([
   "WORKSPACE",
 ]);
 
-export const LAYOUT_TYPES = Utils.createEnum([
-  "STACKED",
-  "TABBED",
-  "ROOT",
-  "HSPLIT",
-  "VSPLIT",
-  "PRESET",
-]);
+export const LAYOUT_TYPES = createEnum(["STACKED", "TABBED", "ROOT", "HSPLIT", "VSPLIT", "PRESET"]);
 
-export const ORIENTATION_TYPES = Utils.createEnum(["NONE", "HORIZONTAL", "VERTICAL"]);
+export const ORIENTATION_TYPES = createEnum(["NONE", "HORIZONTAL", "VERTICAL"]);
 
-export const POSITION = Utils.createEnum(["BEFORE", "AFTER", "UNKNOWN"]);
+export const POSITION = createEnum(["BEFORE", "AFTER", "UNKNOWN"]);
 
 export interface RectLike {
   x: number;

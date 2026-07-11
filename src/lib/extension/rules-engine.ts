@@ -20,7 +20,11 @@
  *   !foo  — title does NOT contain "foo"
  *   " "   — exact match to single-space title (special case)
  *
- * Class matching uses cfg.includes(reported) substring (legacy; B12-3).
+ * Class match policy (B12-3), case-insensitive:
+ *   plain text   — exact match
+ *   ~text        — reported class contains text
+ *   * or ?       — simple glob (whole-string)
+ *   re:pattern   — JavaScript RegExp
  *
  * @see codebase-review.md F5 Stage 2, architecture rule 6
  */
@@ -77,10 +81,46 @@ export function windowTitleMatchesOverride(
   );
 }
 
-function classMatches(reportedClass: string | null, cfgClass: string): boolean {
+/**
+ * Match window class against override pattern (B12-3).
+ * Exported for unit tests.
+ */
+export function classMatches(reportedClass: string | null, cfgClass: string): boolean {
   const reported = (reportedClass || "").toLowerCase();
-  const cfg = cfgClass.toLowerCase();
-  return reported.length > 0 && cfg.includes(reported);
+  if (!reported) return false;
+  const raw = cfgClass.trim();
+  if (!raw) return false;
+
+  // re:pattern — regex
+  if (raw.toLowerCase().startsWith("re:")) {
+    try {
+      return new RegExp(raw.slice(3), "i").test(reportedClass || "");
+    } catch {
+      return false;
+    }
+  }
+
+  // ~text — contains
+  if (raw.startsWith("~")) {
+    return reported.includes(raw.slice(1).toLowerCase());
+  }
+
+  // glob when * or ?
+  if (raw.includes("*") || raw.includes("?")) {
+    const escaped = raw
+      .toLowerCase()
+      .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+      .replace(/\*/g, ".*")
+      .replace(/\?/g, ".");
+    try {
+      return new RegExp(`^${escaped}$`, "i").test(reported);
+    } catch {
+      return false;
+    }
+  }
+
+  // exact
+  return reported === raw.toLowerCase();
 }
 
 function overrideMatchesWindow(override: WindowOverride, metaWindow: Meta.Window): boolean {
