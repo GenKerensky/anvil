@@ -133,6 +133,11 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 14 — admit API + destroy pipeline (2026-07-11)
+
+- **`admitWindow`** single entry for window-created / map / workspace-added (B4-5).
+- **windowDestroy** ordered pipeline: borders → detach → focus → attachNode → one render (B4-7).
+
 ### Residual Stage 13 — reconcile exponential backoff (2026-07-11)
 
 - Replaced 120×16ms busy loop with backoff (16→256ms), stop after 2 stable ticks

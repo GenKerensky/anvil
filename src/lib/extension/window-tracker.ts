@@ -131,6 +131,21 @@ export class WindowTracker {
     }
   }
 
+  /**
+   * Single admit entry (B4-5): all Meta paths (window-created, map, workspace
+   * window-added) call this. Tracks when ready and schedules reconcile.
+   */
+  admitWindow(
+    display: Meta.Display,
+    metaWindow: Meta.Window,
+    options?: { afterTrack?: () => void; scheduleReconcile?: boolean }
+  ) {
+    this.trackWhenReady(display, metaWindow, options?.afterTrack);
+    if (options?.scheduleReconcile !== false) {
+      this.scheduleReconcile();
+    }
+  }
+
   trackWhenReady(display: Meta.Display, metaWindow: Meta.Window, afterTrack?: () => void) {
     const host = this._host;
     if (host.tree.findNode(metaWindow)) {
@@ -189,9 +204,10 @@ export class WindowTracker {
   ) {
     const metaWindow = actor?.meta_window ?? actor?.get_meta_window?.();
     if (metaWindow) {
-      this.trackWhenReady(global.display, metaWindow);
+      this.admitWindow(global.display, metaWindow);
+    } else {
+      this.scheduleReconcile();
     }
-    this.scheduleReconcile();
   }
 
   /**
@@ -464,60 +480,58 @@ export class WindowTracker {
     host.updateDecorationLayout();
   }
 
+  /**
+   * Destroy pipeline (B4-7), ordered:
+   *   1. strip border actors
+   *   2. detach node from tree + float override
+   *   3. restore focus if needed
+   *   4. update attachNode
+   *   5. single render (no dual quick + queued pass)
+   */
   windowDestroy(actor: AnvilWindowActor) {
     const host = this._host;
-    // Release any resources on the window
-    const border = actor.border;
-    if (border) {
-      if (global.window_group) {
-        global.window_group.remove_child(border);
-        border.hide();
-      }
-    }
 
+    // 1. Border actors
+    const border = actor.border;
+    if (border && global.window_group) {
+      global.window_group.remove_child(border);
+      border.hide();
+    }
     const splitBorder = actor.splitBorder;
-    if (splitBorder) {
-      if (global.window_group) {
-        global.window_group.remove_child(splitBorder);
-        splitBorder.hide();
-      }
+    if (splitBorder && global.window_group) {
+      global.window_group.remove_child(splitBorder);
+      splitBorder.hide();
     }
 
     const nodeWindow = host.tree.findNodeByActor(actor) as unknown as Node<any> | null;
-
-    // Bug #258 fix: Check if this window has focus before removing
-    // Ported from jcrussell/forge
     const metaWindow = nodeWindow?.nodeValue as Meta.Window | undefined;
     const hadFocus = !!metaWindow && host.focusMetaWindow === metaWindow;
 
+    let needRelayout = false;
     if (nodeWindow?.isWindow()) {
+      // 2. Detach
       const skipRelayout =
         nodeWindow.isFloat() || (!!metaWindow && Utils.isEphemeralHelperWindow(metaWindow));
       host.tree.removeNode(nodeWindow);
-      if (!skipRelayout) {
-        host.renderTree("window-destroy-quick", true);
-      }
+      needRelayout = !skipRelayout;
       host.removeFloatOverride(nodeWindow.nodeValue as Meta.Window, true);
 
-      // Bug #258 fix: Restore focus if this window had it and tiling is enabled
-      // Ported from jcrussell/forge
+      // 3. Focus restore (#258)
       if (hadFocus && host.settings.get_boolean("tiling-mode-enabled")) {
         this._restoreFocusAfterWindowClosed(nodeWindow);
       }
     }
 
-    // find the next attachNode here
+    // 4. attachNode for next create
     const focusNodeWindow = host.tree.findNode(host.focusMetaWindow);
     if (focusNodeWindow) {
-      host.tree.attachNode = focusNodeWindow!.parentNode!;
+      host.tree.attachNode = focusNodeWindow.parentNode!;
     }
 
-    host.queueEvent({
-      name: "window-destroy",
-      callback: () => {
-        host.renderTree("window-destroy", true);
-      },
-    });
+    // 5. One render pass
+    if (needRelayout) {
+      host.renderTree("window-destroy", true);
+    }
   }
 
   /**
@@ -566,16 +580,20 @@ export class WindowTracker {
    * Connect workspace window-added for admit (called from Tree/WM bindWorkspaceSignals).
    */
   onWorkspaceWindowAdded(metaWindow: Meta.Window) {
-    this.trackWhenReady(global.display, metaWindow, () => {
-      if (this.validWindow(metaWindow)) {
-        this._host.updateMetaWorkspaceMonitor("window-added", metaWindow.get_monitor(), metaWindow);
-      }
+    this.admitWindow(global.display, metaWindow, {
+      afterTrack: () => {
+        if (this.validWindow(metaWindow)) {
+          this._host.updateMetaWorkspaceMonitor(
+            "window-added",
+            metaWindow.get_monitor(),
+            metaWindow
+          );
+        }
+      },
     });
-    this.scheduleReconcile();
   }
 
   onWindowCreated(display: Meta.Display, metaWindow: Meta.Window) {
-    this.trackWhenReady(display, metaWindow);
-    this.scheduleReconcile();
+    this.admitWindow(display, metaWindow);
   }
 }
