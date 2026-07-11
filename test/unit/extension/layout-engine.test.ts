@@ -67,7 +67,7 @@ describe("LayoutEngine", () => {
       });
     });
 
-    it("divides space equally when percents are 0", () => {
+    it("divides space equally when percents are unset", () => {
       const container = new Node(NODE_TYPES.CON, new St.Bin());
       container.layout = LAYOUT_TYPES.HSPLIT;
       container.rect = { x: 0, y: 0, width: 1000, height: 500 };
@@ -135,8 +135,8 @@ describe("LayoutEngine", () => {
       parent.appendChild(a);
       parent.appendChild(b);
       engine.resetSiblingPercent(parent);
-      expect(a.percent).toBe(0);
-      expect(b.percent).toBe(0);
+      expect(a.percent).toBeUndefined();
+      expect(b.percent).toBeUndefined();
     });
 
     it("redistributeSiblingPercent scales remaining percents to 1", () => {

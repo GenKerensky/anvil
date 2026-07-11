@@ -86,6 +86,14 @@ export interface RectLike {
   height: number;
 }
 
+/** Criteria for Node._search / getNodeBy* (B5-5). */
+export type NodeSearchCriteria = "VALUE" | "TYPE" | "MODE" | "LAYOUT";
+
+/** True when sibling percent should fall back to equal share (B5-3). */
+export function isUnsetPercent(percent: number | undefined | null): boolean {
+  return percent === undefined || percent === null || percent <= 0;
+}
+
 /**
  * Type guard interface: when isWindow() returns true, the node can be
  * treated as having Meta.Window data for _data and nodeValue.
@@ -141,7 +149,11 @@ export class Node<T extends string> extends GObject.Object {
   _parent: Node<T> | null;
   _nodes: Node<T>[];
   mode: string = "";
-  percent: number = 0;
+  /**
+   * Sibling space share in parent. `undefined` = unset → equal share in computeSizes (B5-3).
+   * Do not use 0 for "unset"; explicit 0 is treated as unset only for legacy safety.
+   */
+  percent: number | undefined = undefined;
   _rect: RectLike | null = null;
   tab: St.BoxLayout | null = null;
   decoration: St.BoxLayout | null = null;
@@ -186,7 +198,7 @@ export class Node<T extends string> extends GObject.Object {
     this._parent = null;
     this._nodes = []; // Child elements of this node
     this.mode = WINDOW_MODES.DEFAULT as string;
-    this.percent = 0.0;
+    this.percent = undefined;
     this._rect = null;
     this.tab = null;
     this.decoration = null;
@@ -354,13 +366,11 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   getNodeByLayout(layout: string) {
-    const results = this._search(layout, "LAYOUT");
-    return results;
+    return this._search(layout, "LAYOUT");
   }
 
   getNodeByMode(mode: string) {
-    const results = this._search(mode, "MODE");
-    return results;
+    return this._search(mode, "MODE");
   }
 
   getNodeByValue(value: unknown) {
@@ -485,37 +495,24 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   /**
-   * Backend for getNodeBy[attribute]. It is similar to DOM.getElementBy functions
+   * Backend for getNodeBy[attribute] (B5-5: typed criteria, not free strings).
    */
-  _search(term: any, criteria: string) {
+  _search(term: unknown, criteria: NodeSearchCriteria) {
     const results: Node<any>[] = [];
     const searchFn = (candidate: Node<any>) => {
-      if (criteria) {
-        switch (criteria) {
-          case "VALUE":
-            if (candidate.nodeValue === term) {
-              results.push(candidate);
-            }
-            break;
-          case "TYPE":
-            if (candidate.nodeType === term) {
-              results.push(candidate);
-            }
-            break;
-          case "MODE":
-            if (candidate.mode === term) {
-              results.push(candidate);
-            }
-            break;
-          case "LAYOUT":
-            if (candidate.layout && candidate.layout === term) {
-              results.push(candidate);
-            }
-        }
-      } else {
-        if (candidate === term) {
-          results.push(candidate);
-        }
+      switch (criteria) {
+        case "VALUE":
+          if (candidate.nodeValue === term) results.push(candidate);
+          break;
+        case "TYPE":
+          if (candidate.nodeType === term) results.push(candidate);
+          break;
+        case "MODE":
+          if (candidate.mode === term) results.push(candidate);
+          break;
+        case "LAYOUT":
+          if (candidate.layout && candidate.layout === term) results.push(candidate);
+          break;
       }
     };
 
@@ -609,7 +606,7 @@ export class Node<T extends string> extends GObject.Object {
         const p = this.parentNode;
         if (p) {
           p.childNodes.forEach((c: any) => {
-            c.percent = 0;
+            c.percent = undefined;
           });
         }
       }
@@ -994,7 +991,7 @@ export class Tree extends Node<any> {
 
     const cleanUpParent = (existParent: Node<any>) => {
       if (this.getTiledChildren(existParent.childNodes).length === 0) {
-        existParent.percent = 0.0;
+        existParent.percent = undefined;
         // Bug #470 fix: Don't reset sibling percents across workspace/monitor boundaries
         // Ported from jcrussell/forge
         if (
@@ -1053,7 +1050,7 @@ export class Tree extends Node<any> {
   resetSiblingPercent(parentNode: Node<any> | null) {
     if (!parentNode) return;
     parentNode.childNodes.forEach((n: Node<any>) => {
-      n.percent = 0.0;
+      n.percent = undefined;
     });
   }
 
@@ -1066,6 +1063,7 @@ export class Tree extends Node<any> {
   }
 
   debugTree() {
+    if (!Logger.isDebugEnabled()) return;
     // this.debugChildNodes(this);
   }
 
@@ -1077,6 +1075,7 @@ export class Tree extends Node<any> {
   }
 
   debugChildNodes(node: Node<any>) {
+    if (!Logger.isDebugEnabled()) return;
     this.debugNode(this);
     node.childNodes.forEach((child: Node<any>) => {
       this.debugChildNodes(child);
@@ -1084,6 +1083,7 @@ export class Tree extends Node<any> {
   }
 
   debugParentNodes(node: Node<any>) {
+    if (!Logger.isDebugEnabled()) return;
     if (node) {
       if (node.parentNode) {
         this.debugParentNodes(node.parentNode);
@@ -1093,6 +1093,7 @@ export class Tree extends Node<any> {
   }
 
   debugNode(node: Node<any>) {
+    if (!Logger.isDebugEnabled()) return;
     let spacing = "";
     const dashes = "-->";
     const level = node.level;

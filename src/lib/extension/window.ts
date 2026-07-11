@@ -766,7 +766,7 @@ export class WindowManager extends GObject.Object {
     const existParent = focusNodeWindow!.parentNode!;
 
     if (this.tree.getTiledChildren(existParent.childNodes).length <= 1) {
-      existParent.percent = 0.0;
+      existParent.percent = undefined;
       this._layout.resetSiblingPercent(existParent.parentNode!);
     }
 

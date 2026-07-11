@@ -440,7 +440,7 @@ export class WindowTracker {
         if (nodeWindow?.parentNode) {
           const childNodes = host.tree.getTiledChildren(nodeWindow!.parentNode!.childNodes);
           childNodes.forEach((n) => {
-            n.percent = 0.0;
+            n.percent = undefined;
           });
         }
       }

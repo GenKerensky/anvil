@@ -23,6 +23,7 @@ import {
   Node,
   ORIENTATION_TYPES,
   POSITION,
+  isUnsetPercent,
   type RectLike,
   type Tree,
 } from "./tree.js";
@@ -88,83 +89,75 @@ export class LayoutEngine {
     const host = this._host;
     const tree = host.tree;
     if (!node) return null;
-    let next = tree.next(node, direction);
 
+    // Skip minimized windows with an explicit loop + visited set (B5-4).
+    const visited = new Set<Node<any>>();
+    let from: Node<any> | null = node;
+    while (from) {
+      const step = tree.next(from, direction);
+      if (!step) return null;
+      const candidate = this._resolveFocusTarget(step, direction);
+      if (!candidate) return null;
+      if (visited.has(candidate)) return null;
+      visited.add(candidate);
+
+      const metaWindow = candidate.nodeValue as Meta.Window;
+      if (!metaWindow) return null;
+      if (metaWindow.minimized) {
+        from = candidate;
+        continue;
+      }
+
+      safeRaise(metaWindow);
+      safeFocus(metaWindow, global.display.get_current_time());
+      safeActivate(metaWindow, global.display.get_current_time());
+      host.notifyFocusChanged(candidate, "keyboard");
+      tree.debugParentNodes(candidate);
+      return candidate;
+    }
+    return null;
+  }
+
+  /** Resolve CON/MONITOR focus targets to a window node (shared with focus loop). */
+  private _resolveFocusTarget(
+    next: Node<any> | null,
+    direction: Meta.MotionDirection
+  ): Node<any> | null {
     if (!next) return null;
-
-    const type = next.nodeType;
     const position = Utils.positionFromDirection(direction);
     const previous = position === POSITION.BEFORE;
+    const type = next.nodeType;
 
     switch (type) {
       case NODE_TYPES.WINDOW:
-        break;
+        return next;
       case NODE_TYPES.CON: {
         const tiledConWindows = next
           .getNodeByType(NODE_TYPES.WINDOW)
           .filter((w: Node<any>) => w.isTile());
         if (next.layout === LAYOUT_TYPES.STACKED) {
-          next = next.lastChild;
-        } else {
-          if (tiledConWindows.length > 1) {
-            if (previous) {
-              next = tiledConWindows[tiledConWindows.length - 1];
-            } else {
-              next = tiledConWindows[0];
-            }
-          } else {
-            next = tiledConWindows[0];
-          }
+          return next.lastChild;
         }
-        break;
+        if (tiledConWindows.length > 1) {
+          return previous ? tiledConWindows[tiledConWindows.length - 1] : tiledConWindows[0];
+        }
+        return tiledConWindows[0] ?? null;
       }
-      case NODE_TYPES.MONITOR:
+      case NODE_TYPES.MONITOR: {
+        let monNext: Node<any> | null;
         if (next.layout === LAYOUT_TYPES.STACKED) {
-          next = next.lastChild;
+          monNext = next.lastChild;
         } else {
-          if (previous) {
-            next = next.lastChild;
-          } else {
-            next = next.firstChild;
-          }
+          monNext = previous ? next.lastChild : next.firstChild;
         }
-
-        if (next && next.nodeType === NODE_TYPES.CON) {
-          const tiledConWindows = next
-            .getNodeByType(NODE_TYPES.WINDOW)
-            .filter((w: Node<any>) => w.isTile());
-          if (next.layout === LAYOUT_TYPES.STACKED) {
-            next = next.lastChild;
-          } else {
-            if (tiledConWindows.length > 1) {
-              if (previous) {
-                next = tiledConWindows[tiledConWindows.length - 1];
-              } else {
-                next = tiledConWindows[0];
-              }
-            } else {
-              next = tiledConWindows[0];
-            }
-          }
+        if (monNext && monNext.nodeType === NODE_TYPES.CON) {
+          return this._resolveFocusTarget(monNext, direction);
         }
-        break;
+        return monNext;
+      }
+      default:
+        return next;
     }
-
-    if (!next) return null;
-
-    const metaWindow = next.nodeValue as Meta.Window;
-    if (!metaWindow) return null;
-    if (metaWindow.minimized) {
-      next = this.focus(next, direction);
-    } else {
-      safeRaise(metaWindow);
-      safeFocus(metaWindow, global.display.get_current_time());
-      safeActivate(metaWindow, global.display.get_current_time());
-
-      host.notifyFocusChanged(next, "keyboard");
-      tree.debugParentNodes(next);
-    }
-    return next;
   }
 
   move(node: Node<any>, direction: Meta.MotionDirection) {
@@ -402,9 +395,10 @@ export class LayoutEngine {
     const totalSize = orientation === ORIENTATION_TYPES.HORIZONTAL ? rect.width : rect.height;
     const grabTiled = node.getNodeByMode(WINDOW_MODES.GRAB_TILE).length > 0;
     childItems.forEach((childNode: Node<any>, index: number) => {
+      // B5-3: undefined (or legacy 0) means equal share
       const percent =
-        childNode.percent && childNode.percent > 0.0 && !grabTiled
-          ? childNode.percent
+        !grabTiled && !isUnsetPercent(childNode.percent)
+          ? (childNode.percent as number)
           : 1.0 / childItems.length;
       sizes[index] = Math.floor(percent * totalSize);
     });
@@ -419,9 +413,8 @@ export class LayoutEngine {
 
   resetSiblingPercent(parentNode: Node<any> | null) {
     if (!parentNode) return;
-    const children = parentNode.childNodes;
-    children.forEach((n: Node<any>) => {
-      n.percent = 0.0;
+    parentNode.childNodes.forEach((n: Node<any>) => {
+      n.percent = undefined;
     });
   }
 
@@ -433,14 +426,14 @@ export class LayoutEngine {
     // Calculate sum of remaining children's percents
     let totalPercent = 0;
     children.forEach((n: Node<any>) => {
-      totalPercent += n.percent || 0;
+      if (!isUnsetPercent(n.percent)) totalPercent += n.percent as number;
     });
 
     if (totalPercent > 0) {
       // Scale remaining children proportionally to sum to 1.0
       const scale = 1.0 / totalPercent;
       children.forEach((n: Node<any>) => {
-        n.percent = (n.percent || 0) * scale;
+        n.percent = isUnsetPercent(n.percent) ? 0 : (n.percent as number) * scale;
       });
     } else {
       // Fallback: if no percents were set, use equal distribution

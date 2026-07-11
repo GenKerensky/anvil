@@ -583,7 +583,7 @@ Address remaining individual findings (including P2/P3) beyond the prioritized F
 | **12** | WindowResize direction enum + Snap cleanup                         | B3-4, B3-5                                                   | **done** (2026-07-11) |
 | **13** | Reconcile exponential backoff                                      | B4-2                                                         | **done** (2026-07-11) |
 | **14** | Single admit API + destroy pipeline                                | B4-5, B4-7                                                   | **done** (2026-07-11) |
-| **15** | Tree pure: percent unset, focus loop, typed search                 | B5-3, B5-4, B5-5, B5-6                                       | pending               |
+| **15** | Tree pure: percent unset, focus loop, typed search                 | B5-3, B5-4, B5-5, B5-6                                       | **done** (2026-07-11) |
 | **16** | setLayout, PointerPolicy always-on, FocusController                | B6-2, B6-3, B9-1, B9-2, B9-3                                 | pending               |
 | **17** | Float classification cache + BorderController                      | B7-1, B7-2                                                   | pending               |
 | **18** | Grab residual: size-changed drive, initRect off Node               | B8-5, B8-6                                                   | pending               |

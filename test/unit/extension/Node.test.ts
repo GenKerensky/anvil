@@ -40,7 +40,7 @@ describe("Node", () => {
     it("should initialize with zero percent", () => {
       const node = new Node(NODE_TYPES.ROOT, "root");
 
-      expect(node.percent).toBe(0.0);
+      expect(node.percent).toBeUndefined();
     });
   });
 

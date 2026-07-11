@@ -133,6 +133,12 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 15 — tree purity (2026-07-11)
+
+- Sibling **percent** uses `undefined` for unset (equal share); `isUnsetPercent` helper (B5-3).
+- **focus** uses loop + visited set for minimized skip (B5-4); `_resolveFocusTarget` extracted.
+- **NodeSearchCriteria** typed for `_search` (B5-5); debug\* gated by Logger.isDebugEnabled (B5-6).
+
 ### Residual Stage 14 — admit API + destroy pipeline (2026-07-11)
 
 - **`admitWindow`** single entry for window-created / map / workspace-added (B4-5).
