@@ -39,22 +39,34 @@ Source in `src/lib/extension/*.ts` → tests in `test/unit/extension/*.test.ts`.
 `WindowManager` (`window.ts`) is a **frozen facade** for new features — see
 `.agents/rules/architecture.md` (rules 1–4) and `codebase-review.md` F3–F5.
 
-| Seam (today)              | Notes                                                           |
-| ------------------------- | --------------------------------------------------------------- |
-| `window/actions.ts`       | `AnvilAction` union; all user commands are data                 |
-| `WindowManager.command()` | In-WM handler registry → private handlers                       |
-| `rules-engine.ts`         | Float/tile rules + override CRUD (`RulesEngine`)                |
-| `window-tracker.ts`       | Admit / destroy / pending track / lifecycle signals             |
-| `layout-engine.ts`        | Focus/move/swap/split + percent math + auto-split               |
-| `grab-resize-session.ts`  | Grab begin/end, live resize, keyboard resize, exemption map     |
-| `tab-decoration.ts`       | Tab strip + tabbed container St UI (not in tree.ts)             |
-| `keybinding-table.ts`     | Schema key → AnvilAction table                                  |
-| `settings-bridge.ts`      | GSettings changed → host handler map                            |
-| `TilingRender`            | Sole geometry owner (gaps, constraints, frames); no WM wrappers |
-| `Tree`                    | Structure only; **TreeHost** (no WindowManager import)          |
-| `PointerPolicy`           | Hover / warp                                                    |
+| Seam (today)             | Notes                                                           |
+| ------------------------ | --------------------------------------------------------------- |
+| `window/actions.ts`      | `AnvilAction` union; all user commands are data                 |
+| `command-bus.ts`         | Named handler table; `WindowManager.command()` delegates        |
+| `rules-engine.ts`        | Float/tile rules + override CRUD + classification cache         |
+| `window-tracker.ts`      | `admitWindow` / destroy pipeline / reconcile backoff            |
+| `layout-engine.ts`       | Focus/move/swap/split + percent math + `setLayout`              |
+| `focus-controller.ts`    | Directional focus + stacked/tabbed focus helpers                |
+| `grab-resize-session.ts` | Grab begin/end, Wayland live poll, keyboard resize, exemptions  |
+| `border-controller.ts`   | Focus / split border actors                                     |
+| `tab-decoration.ts`      | Tab strip + tabbed container St UI (not in tree.ts)             |
+| `keybinding-table.ts`    | Schema key → AnvilAction table                                  |
+| `settings-bridge.ts`     | GSettings changed → host handler map (prefs→shell bus)          |
+| `TilingRender`           | Sole geometry owner (gaps, constraints, frames); no WM wrappers |
+| `Tree`                   | Structure only; **TreeHost** (no WindowManager import)          |
+| `PointerPolicy`          | Always constructed; hover/warp enable via settings              |
+| `utils/*`                | geometry / window-filters / decorations / version               |
 
 New behavior goes in new modules and is wired from the facade — do not grow `window.ts`.
+
+## Tree / render invariants (B5)
+
+1. **Every WINDOW has a MONITOR ancestor** (workspace → monitor → … → window).
+2. **After `redistributeSiblingPercent`, tiled sibling percents sum to ~1.**
+   Unset percent is `undefined` (equal share in `computeSizes`); do not use `0` for unset.
+3. **FLOAT windows may exist in the tree but skip size compute** (`processFloats` / mode).
+4. **Frame geometry is written only by TilingRender** (constraints clamp applied rects, not percents).
+5. **User actions are `AnvilAction` data** handled by CommandBus — no open-coded switches.
 
 ## Test layout (summary)
 

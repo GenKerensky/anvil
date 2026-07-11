@@ -136,6 +136,26 @@ python3 test/e2e/run.py --tag resize
 python3 test/e2e/run.py --no-build --tag focus
 ```
 
+### PR vs nightly (D2-2)
+
+| Gate                  | Command                                             | When                                    |
+| --------------------- | --------------------------------------------------- | --------------------------------------- |
+| **PR / CI**           | `npm test` (typecheck + lint + unit)                | Every commit / PR                       |
+| **Local PR smoke**    | `python3 test/e2e/run.py --tag focus` (or `resize`) | Before merge when touching focus/layout |
+| **Nightly / release** | `make test-e2e` (full suite)                        | Pre-release, local                      |
+
+`--tag` filters by suite/spec name substring — use it to keep PR loops short.
+
+### Geometry assertions (D2-1)
+
+Wayland clients may not accept exact pixel rects. Prefer:
+
+1. **Tree percent** checks via `getNodePercents()` / `Tree.serializeForTest()`
+2. Relative geometry (fill work area, no overlap, order)
+3. Pixel equality only with loose tolerances when unavoidable
+
+Avoid brittle exact frame rect asserts in new E2E specs.
+
 ### GSettings in E2E
 
 Writes touch the session dconf used by the headless shell. Prefer restore in `afterEach`.

@@ -274,9 +274,7 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
     const featureToggle = new FeatureMenuToggle(this);
     this.indicator.quickSettingsItems.push(featureToggle);
     Main.panel.statusArea.quickSettings.addExternalIndicator(
-      this.indicator as unknown as Parameters<
-        typeof Main.panel.statusArea.quickSettings.addExternalIndicator
-      >[0]
+      this.indicator as unknown as QuickSettingsExternalIndicator
     );
   }
 

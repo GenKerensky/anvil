@@ -32,10 +32,13 @@ npm test             # typecheck → lint → unit
 ### Host E2E tests
 
 ```bash
-make test-e2e                              # Full suite (host GNOME Shell)
-python3 test/e2e/run.py --tag resize       # Filter by suite/spec name substring
+make test-e2e                              # Full suite (nightly / pre-release)
+python3 test/e2e/run.py --tag resize       # PR smoke: filter by suite/spec substring
+python3 test/e2e/run.py --tag focus        # PR smoke: focus suite
 python3 test/e2e/run.py --no-build         # Skip make dist
 ```
+
+CI runs unit only. Prefer `--tag` for PR-local E2E; full suite before release (D2-2).
 
 `test/e2e/runner.js` is loaded by `--automation-script`. Exports `async function run()`
 (called by gnome-shell). Sets `test-mode=true`, waits for ACTIVE extension with

@@ -27,3 +27,13 @@ _Avoid_: workspace switch handler, ws change event
 **Grab-Resize**:
 A user drag-resize of a tiled window that redistributes space between adjacent windows in the tree.
 _Avoid_: window resize, mutter grab
+
+## Tree / render invariants
+
+1. Every **WINDOW** node has a **MONITOR** ancestor.
+2. After redistribute, tiled sibling **percents** sum to ~1. Unset = `undefined` (equal share).
+3. **FLOAT** windows may sit in the tree but skip size compute.
+4. **Tiling Render** is the only path that writes frame geometry (constraints clamp applied rects).
+5. User actions are **AnvilAction** values handled by **CommandBus**.
+
+See `.agents/context/architecture.md` and `codebase-review.md` for module seams.

@@ -133,6 +133,12 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 21 — invariants + E2E docs (2026-07-11)
+
+- Tree/render invariants in CONTEXT.md + architecture.md (B5).
+- E2E: prefer percent/relative asserts (D2-1); PR `--tag` vs nightly full suite (D2-2).
+- **Residual findings roadmap (stages 9–21) complete.**
+
 ### Residual Stage 20 — CommandBus + schema (2026-07-11)
 
 - **CommandBus** owns AnvilAction handler table; WM.command delegates; injectable
