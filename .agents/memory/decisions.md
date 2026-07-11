@@ -133,6 +133,13 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 16 — layout/focus/pointer (2026-07-11)
+
+- **LayoutEngine.setLayout** for stacked/tabbed toggles (B6-2); determineSplitLayout already
+  unit-tested (B6-3).
+- **FocusController** owns directional focus + stacked/tabbed helpers (B9-1, B9-3).
+- **PointerPolicy** always constructed; prefs only enable/disable behavior (B9-2).
+
 ### Residual Stage 15 — tree purity (2026-07-11)
 
 - Sibling **percent** uses `undefined` for unset (equal share); `isUnsetPercent` helper (B5-3).

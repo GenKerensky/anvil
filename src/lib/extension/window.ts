@@ -53,6 +53,7 @@ import { WindowTracker } from "./window-tracker.js";
 import { LayoutEngine } from "./layout-engine.js";
 import { GrabResizeSession } from "./grab-resize-session.js";
 import { SettingsBridge } from "./settings-bridge.js";
+import { FocusController } from "./focus-controller.js";
 import { computeSnapLayout } from "./snap-layout.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type {
@@ -145,6 +146,7 @@ export class WindowManager extends GObject.Object {
   declare _layout: LayoutEngine;
   declare _grab: GrabResizeSession;
   declare _settingsBridge: SettingsBridge;
+  declare _focus: FocusController;
   declare nodeWinAtPointer: Node<any> | null;
   declare sortedWindows: Meta.Window[];
 
@@ -213,10 +215,8 @@ export class WindowManager extends GObject.Object {
     });
     this.eventQueue = new Queue();
     this.theme = this.ext.theme;
-    this._pointerPolicy = null;
-    if (this._pointerPolicyNeeded()) {
-      this._ensurePointerPolicy();
-    }
+    // Always construct PointerPolicy; enable/disable behavior via settings (B9-2).
+    this._ensurePointerPolicy();
     this._tilingRender = new TilingRender({
       settings: this.ext.settings,
       getTree: () => this.tree,
@@ -330,6 +330,14 @@ export class WindowManager extends GObject.Object {
       restoreAlwaysFloat: () => self.restoreAlwaysFloat(),
       clearResizedWindows: () => self._grab.clearResizedWindows(),
     });
+    this._focus = new FocusController({
+      get layoutEngine() {
+        return self._layout;
+      },
+      isRenderFrozen: () => self._freezeRender,
+      queueEvent: (ev, interval) => self.queueEvent(ev, interval),
+      renderTree: (from, force) => self.renderTree(from, force),
+    });
     this._initCommandHandlers();
 
     Logger.info("anvil initialized");
@@ -369,17 +377,8 @@ export class WindowManager extends GObject.Object {
   }
 
   set shouldFocusOnHover(enabled: boolean) {
-    if (!enabled) {
-      if (this._pointerPolicy) {
-        this._pointerPolicy.setHoverFocusEnabled(false);
-      }
-      if (!this._pointerPolicyNeeded()) {
-        this._teardownPointerPolicy();
-      }
-      return;
-    }
     this._ensurePointerPolicy();
-    this._pointerPolicy!.setHoverFocusEnabled(true);
+    this._pointerPolicy!.setHoverFocusEnabled(enabled);
   }
 
   private _pointerPolicyNeeded(): boolean {
@@ -403,7 +402,17 @@ export class WindowManager extends GObject.Object {
     );
   }
 
+  /**
+   * Disable pointer features without destroying the instance (B9-2 always-on).
+   * Full dispose only on extension disable via disposePointerPolicy().
+   */
   private _teardownPointerPolicy(): void {
+    if (!this._pointerPolicy) return;
+    this._pointerPolicy.setHoverFocusEnabled(false);
+    this._pointerPolicy.disable();
+  }
+
+  private _disposePointerPolicy(): void {
     if (!this._pointerPolicy) return;
     this._pointerPolicy.disable();
     this._pointerPolicy = null;
@@ -820,7 +829,7 @@ export class WindowManager extends GObject.Object {
   private _handleFocus(action: DirectionAction) {
     let focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
     const focusDirection = Utils.resolveDirection(action.direction)!;
-    focusNodeWindow = this._layout.focus(focusNodeWindow, focusDirection);
+    focusNodeWindow = this._focus.focusDirection(focusNodeWindow, focusDirection);
     if (!focusNodeWindow) {
       focusNodeWindow = this.findNodeWindow(this.focusMetaWindow);
     }
@@ -951,23 +960,18 @@ export class WindowManager extends GObject.Object {
       this._layout.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
     }
 
-    const currentLayout = focusNodeWindow!.parentNode!.layout;
-
-    if (currentLayout === LAYOUT_TYPES.STACKED) {
-      focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
-      this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
+    const parent = focusNodeWindow!.parentNode!;
+    if (parent.layout === LAYOUT_TYPES.STACKED) {
+      this._layout.setLayout(parent, this.determineSplitLayout());
     } else {
-      if (currentLayout === LAYOUT_TYPES.TABBED) {
-        focusNodeWindow!.parentNode!.lastTabFocus = null;
-      }
-      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.STACKED;
-      const lastChild = focusNodeWindow!.parentNode!.lastChild;
+      this._layout.setLayout(parent, LAYOUT_TYPES.STACKED);
+      const lastChild = parent.lastChild;
       if (lastChild && lastChild.nodeType === NODE_TYPES.WINDOW) {
         (lastChild.nodeValue as Meta.Window).activate(global.display.get_current_time());
       }
     }
     this.unfreezeRender();
-    this.tree.attachNode = focusNodeWindow!.parentNode!;
+    this.tree.attachNode = parent;
     this.renderTree("layout-stacked-toggle");
   }
 
@@ -980,18 +984,15 @@ export class WindowManager extends GObject.Object {
       this._layout.split(focusNodeWindow, ORIENTATION_TYPES.HORIZONTAL, true);
     }
 
-    const currentLayout = focusNodeWindow!.parentNode!.layout;
-
-    if (currentLayout === LAYOUT_TYPES.TABBED) {
-      focusNodeWindow!.parentNode!.layout = this.determineSplitLayout();
-      this._layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
-      focusNodeWindow!.parentNode!.lastTabFocus = null;
+    const parent = focusNodeWindow!.parentNode!;
+    if (parent.layout === LAYOUT_TYPES.TABBED) {
+      this._layout.setLayout(parent, this.determineSplitLayout());
     } else {
-      focusNodeWindow!.parentNode!.layout = LAYOUT_TYPES.TABBED;
-      focusNodeWindow!.parentNode!.lastTabFocus = focusNodeWindow.nodeValue;
+      this._layout.setLayout(parent, LAYOUT_TYPES.TABBED);
+      parent.lastTabFocus = focusNodeWindow.nodeValue;
     }
     this.unfreezeRender();
-    this.tree.attachNode = focusNodeWindow!.parentNode!;
+    this.tree.attachNode = parent;
     this.renderTree("layout-tabbed-toggle");
   }
 
@@ -1515,7 +1516,7 @@ export class WindowManager extends GObject.Object {
       this._queueSourceId = 0;
     }
 
-    this._teardownPointerPolicy();
+    this._disposePointerPolicy();
 
     if (this._prefsOpenSrcId) {
       GLib.Source.remove(this._prefsOpenSrcId);
@@ -1814,27 +1815,11 @@ export class WindowManager extends GObject.Object {
   }
 
   updateStackedFocus(focusNodeWindow: Node<any> | undefined | null) {
-    if (!focusNodeWindow) return;
-    const parentNode = focusNodeWindow!.parentNode!;
-    if (parentNode.layout === LAYOUT_TYPES.STACKED && !this._freezeRender) {
-      parentNode.appendChild(focusNodeWindow);
-      parentNode.childNodes
-        .filter((child: Node<any>) => child.isWindow())
-        .forEach((child: Node<any>) => safeRaise(child.nodeValue as Meta.Window));
-      this.queueEvent({
-        name: "render-focus-stack",
-        callback: () => {
-          this.renderTree("focus-stacked");
-        },
-      });
-    }
+    this._focus.updateStackedFocus(focusNodeWindow);
   }
 
   updateTabbedFocus(focusNodeWindow: Node<any> | null | undefined) {
-    if (!focusNodeWindow) return;
-    if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.TABBED && !this._freezeRender) {
-      safeRaise(focusNodeWindow.nodeValue as Meta.Window);
-    }
+    this._focus.updateTabbedFocus(focusNodeWindow);
   }
 
   /**

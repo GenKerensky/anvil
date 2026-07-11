@@ -25,30 +25,34 @@ describe("PointerPolicy", () => {
   const wm = () => ctx.windowManager;
   const pointerPolicy = () => wm().pointerPolicy!;
 
-  describe("lazy initialization", () => {
-    it("should not construct PointerPolicy when both pointer prefs are disabled", () => {
+  describe("always-on construction (B9-2)", () => {
+    it("constructs PointerPolicy even when pointer prefs are disabled", () => {
       ctx = createWindowManagerFixture();
-      expect(wm().pointerPolicy).toBeNull();
+      expect(wm().pointerPolicy).not.toBeNull();
+      expect(wm().shouldFocusOnHover).toBe(false);
     });
 
-    it("should construct PointerPolicy when focus-on-hover is enabled", () => {
+    it("enables hover focus via shouldFocusOnHover without recreating", () => {
       ctx = createWindowManagerFixture();
-      expect(wm().pointerPolicy).toBeNull();
+      const policy = wm().pointerPolicy;
+      expect(policy).not.toBeNull();
 
       wm().shouldFocusOnHover = true;
 
-      expect(wm().pointerPolicy).not.toBeNull();
+      expect(wm().pointerPolicy).toBe(policy);
       expect(wm().shouldFocusOnHover).toBe(true);
     });
 
-    it("should tear down PointerPolicy when both pointer prefs are disabled", () => {
+    it("disables hover focus without destroying PointerPolicy", () => {
       ctx = createWindowManagerFixture({ settings: { "focus-on-hover-enabled": true } });
       expect(wm().pointerPolicy).not.toBeNull();
+      const policy = wm().pointerPolicy;
 
       ctx.settings.set_boolean("focus-on-hover-enabled", false);
       wm().shouldFocusOnHover = false;
 
-      expect(wm().pointerPolicy).toBeNull();
+      expect(wm().pointerPolicy).toBe(policy);
+      expect(wm().shouldFocusOnHover).toBe(false);
     });
   });
 

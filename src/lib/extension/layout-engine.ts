@@ -64,6 +64,25 @@ export class LayoutEngine {
   }
 
   /**
+   * Set container layout mode (B6-2). Resets sibling percents when leaving STACKED/TABBED
+   * back to a split layout. Caller handles raise/activate and render.
+   */
+  setLayout(node: Node<any> | null, layout: string): void {
+    if (!node) return;
+    const prev = node.layout;
+    node.layout = layout;
+    if (
+      (prev === LAYOUT_TYPES.STACKED || prev === LAYOUT_TYPES.TABBED) &&
+      (layout === LAYOUT_TYPES.HSPLIT || layout === LAYOUT_TYPES.VSPLIT)
+    ) {
+      this.resetSiblingPercent(node);
+    }
+    if (layout !== LAYOUT_TYPES.TABBED) {
+      node.lastTabFocus = null;
+    }
+  }
+
+  /**
    * Auto-split the focused window's container before admitting a new tiled window.
    * Returns true if a split was performed.
    */
