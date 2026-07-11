@@ -95,6 +95,33 @@ interface WindowNode extends Node<any> {
   nodeValue: Meta.Window;
 }
 
+/** Shape returned by Tree.serializeForTest (B1-3). */
+export type TreeTestNode = {
+  type: string;
+  layout: string | null;
+  mode: string | null;
+  childCount: number;
+  children: TreeTestNode[];
+  wmClass?: string | null;
+};
+
+function serializeNodeForTest(node: Node<any>): TreeTestNode {
+  const children = node.childNodes.map((c) => serializeNodeForTest(c));
+  const data: TreeTestNode = {
+    type: node.nodeType,
+    layout: node.layout ?? null,
+    mode: node.mode || null,
+    childCount: children.length,
+    children,
+  };
+  if (node.isWindow()) {
+    const meta = node.nodeValue as Meta.Window | null;
+    data.wmClass =
+      meta?.get_wm_class?.() ?? (meta as { wm_class?: string | null } | null)?.wm_class ?? null;
+  }
+  return data;
+}
+
 /**
  * The Node data representation of the following elements in the user's display:
  *
@@ -1040,6 +1067,13 @@ export class Tree extends Node<any> {
 
   debugTree() {
     // this.debugChildNodes(this);
+  }
+
+  /**
+   * Official test serialization (B1-3) — use instead of walking private `_nodes`.
+   */
+  serializeForTest(): TreeTestNode {
+    return serializeNodeForTest(this);
   }
 
   debugChildNodes(node: Node<any>) {

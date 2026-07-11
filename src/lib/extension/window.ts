@@ -2506,6 +2506,20 @@ export class WindowManager extends GObject.Object {
     this.windowProps = this._rules.windowProps;
   }
 
+  /**
+   * Official test probe payload (B1-3). Used by AnvilExtension.getTestState().
+   * Does not expose private fields to callers.
+   */
+  getTestStateJson(): string {
+    return JSON.stringify({
+      treeExists: !!this._tree,
+      tilingEnabled: this.ext.settings.get_boolean("tiling-mode-enabled"),
+      stackedEnabled: this.ext.settings.get_boolean("stacked-tiling-mode-enabled"),
+      tabbedEnabled: this.ext.settings.get_boolean("tabbed-tiling-mode-enabled"),
+      tree: this._tree ? this._tree.serializeForTest() : null,
+    });
+  }
+
   floatAllWindows() {
     this.tree.getNodeByType(NODE_TYPES.WINDOW).forEach((w) => {
       if (w.isFloat()) {

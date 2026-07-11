@@ -70,21 +70,61 @@ const SETTINGS_OVERRIDES: {
   },
 ];
 
-export default class AnvilExtension extends Extension {
-  settings!: Gio.Settings;
-  kbdSettings!: Gio.Settings;
-  configMgr!: ConfigManager;
-  theme!: ExtensionThemeManager;
-  extWm!: WindowManager;
-  keybindings!: Keybindings;
+/**
+ * Official test probe for E2E / automation (B1-3).
+ * Prefer this over walking private `_tree` / `_nodes` fields.
+ */
+export interface AnvilTestProbe {
+  getTestState(): string | null;
+}
+
+export default class AnvilExtension extends Extension implements AnvilTestProbe {
+  /** Present only while enabled; null after disable (B1-2). */
+  private _settings: Gio.Settings | null = null;
+  private _kbdSettings: Gio.Settings | null = null;
+  private _configMgr: ConfigManager | null = null;
+  private _theme: ExtensionThemeManager | null = null;
+  private _extWm: WindowManager | null = null;
+  private _keybindings: Keybindings | null = null;
   indicator: FeatureIndicator | null = null;
   private _sessionId: number | null = null;
   private _savedSettings: SavedSetting[] | null = null;
   private _gnomeSettings: Map<string, Gio.Settings> | null = null;
 
+  /** GSettings for the extension — throws if used outside enable/disable cycle. */
+  get settings(): Gio.Settings {
+    if (!this._settings) throw new Error("AnvilExtension.settings used while disabled");
+    return this._settings;
+  }
+
+  get kbdSettings(): Gio.Settings {
+    if (!this._kbdSettings) throw new Error("AnvilExtension.kbdSettings used while disabled");
+    return this._kbdSettings;
+  }
+
+  get configMgr(): ConfigManager {
+    if (!this._configMgr) throw new Error("AnvilExtension.configMgr used while disabled");
+    return this._configMgr;
+  }
+
+  get theme(): ExtensionThemeManager {
+    if (!this._theme) throw new Error("AnvilExtension.theme used while disabled");
+    return this._theme;
+  }
+
+  get extWm(): WindowManager {
+    if (!this._extWm) throw new Error("AnvilExtension.extWm used while disabled");
+    return this._extWm;
+  }
+
+  get keybindings(): Keybindings {
+    if (!this._keybindings) throw new Error("AnvilExtension.keybindings used while disabled");
+    return this._keybindings;
+  }
+
   enable() {
-    this.settings = this.getSettings();
-    this.kbdSettings = this.getSettings("org.gnome.shell.extensions.anvil.keybindings");
+    this._settings = this.getSettings();
+    this._kbdSettings = this.getSettings("org.gnome.shell.extensions.anvil.keybindings");
     Logger.init(this.settings);
     Logger.info("enable");
 
@@ -141,24 +181,24 @@ export default class AnvilExtension extends Extension {
       Logger.warn(`Failed to disable GNOME conflicting features: ${e}`);
     }
 
-    this.configMgr = new ConfigManager(this as { dir: Gio.File });
-    this.theme = new ExtensionThemeManager(this);
+    this._configMgr = new ConfigManager(this as { dir: Gio.File });
+    this._theme = new ExtensionThemeManager(this);
     // Construct WM first (Keybindings needs ext.extWm), then wire keybindings
     // explicitly so getters never lazy-create subsystems (B2-2, B4-9).
-    this.extWm = new WindowManager(this);
+    this._extWm = new WindowManager(this);
     {
       const g = global as unknown as { __anvil_extWm?: WindowManager | null };
-      g.__anvil_extWm = this.extWm;
+      g.__anvil_extWm = this._extWm;
     }
-    this.keybindings = new Keybindings(this);
-    this.extWm.wireKeybindings(this.keybindings);
+    this._keybindings = new Keybindings(this);
+    this._extWm.wireKeybindings(this._keybindings);
 
     this._onSessionModeChanged(Main.sessionMode);
     this._sessionId = Main.sessionMode.connect("updated", this._onSessionModeChanged.bind(this));
 
-    this.theme.patchCss();
-    this.theme.reloadStylesheet();
-    this.extWm.enable();
+    this._theme.patchCss();
+    this._theme.reloadStylesheet();
+    this._extWm.enable();
     Logger.info("enable: finalized vars");
   }
 
@@ -202,24 +242,25 @@ export default class AnvilExtension extends Extension {
     }
 
     this._removeIndicator();
-    this.extWm?.disable();
-    this.keybindings?.disable();
-    this.keybindings = null as unknown as Keybindings;
-    this.extWm = null as unknown as WindowManager;
-    this.theme = null as unknown as ExtensionThemeManager;
-    this.configMgr = null as unknown as ConfigManager;
-    this.settings = null as unknown as Gio.Settings;
-    this.kbdSettings = null as unknown as Gio.Settings;
+    this._extWm?.disable();
+    this._keybindings?.disable();
+    // Honest nulls — no `null as unknown as T` (B1-2).
+    this._keybindings = null;
+    this._extWm = null;
+    this._theme = null;
+    this._configMgr = null;
+    this._settings = null;
+    this._kbdSettings = null;
   }
 
   _onSessionModeChanged(session: { currentMode: string; parentMode: string }) {
     if (session.currentMode === "user" || session.parentMode === "user") {
       Logger.info("user on session change");
       this._addIndicator();
-      this.keybindings?.enable();
+      this._keybindings?.enable();
     } else if (session.currentMode === "unlock-dialog") {
       this._removeIndicator();
-      this.keybindings?.disable();
+      this._keybindings?.disable();
     }
   }
 
@@ -258,48 +299,15 @@ export default class AnvilExtension extends Extension {
     );
   }
 
+  /**
+   * AnvilTestProbe — JSON snapshot for E2E (B1-3).
+   * Delegates tree serialization to WindowManager; does not walk private fields.
+   */
   getTestState(): string | null {
-    if (!this.settings?.get_boolean("test-mode")) return null;
-    const wm = this.extWm as { _tree?: unknown } | null;
-    if (!wm) return JSON.stringify({ error: "WindowManager not initialized" });
-
-    interface SerializedNode {
-      type: string;
-      layout: string | null;
-      mode: string | null;
-      childCount: number;
-      children: (SerializedNode | null)[];
-      wmClass?: string | null;
+    if (!this._settings?.get_boolean("test-mode")) return null;
+    if (!this._extWm) {
+      return JSON.stringify({ error: "WindowManager not initialized" });
     }
-
-    const serializeNode = (node: unknown): SerializedNode | null => {
-      if (!node) return null;
-      const n = node as {
-        _type: string;
-        layout?: string;
-        mode?: string;
-        _nodes?: unknown[];
-        nodeValue?: { wm_class?: string | null };
-      };
-      const data: SerializedNode = {
-        type: n._type,
-        layout: n.layout ?? null,
-        mode: n.mode ?? null,
-        childCount: n._nodes?.length ?? 0,
-        children: (n._nodes ?? []).map(serializeNode),
-      };
-      if (n._type === "WINDOW" && n.nodeValue) {
-        data.wmClass = n.nodeValue.wm_class ?? null;
-      }
-      return data;
-    };
-
-    return JSON.stringify({
-      treeExists: !!wm._tree,
-      tilingEnabled: this.settings.get_boolean("tiling-mode-enabled"),
-      stackedEnabled: this.settings.get_boolean("stacked-tiling-mode-enabled"),
-      tabbedEnabled: this.settings.get_boolean("tabbed-tiling-mode-enabled"),
-      tree: serializeNode(wm._tree),
-    });
+    return this._extWm.getTestStateJson();
   }
 }

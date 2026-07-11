@@ -133,6 +133,13 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+### Residual Stage 10 — extension lifecycle types (2026-07-11)
+
+- Subsystem fields on `AnvilExtension` are private `_x: T | null` with throwing getters
+  while enabled — no `null as unknown as T` on disable (B1-2).
+- **`AnvilTestProbe`** + `WindowManager.getTestStateJson()` + `Tree.serializeForTest()` —
+  official test API; extension no longer walks private `_tree`/`_nodes` (B1-3).
+
 ### Residual Stage 9 — hygiene (2026-07-11)
 
 - Documented **test-mode / unsafe_mode** danger (B1-1); never for end users.
