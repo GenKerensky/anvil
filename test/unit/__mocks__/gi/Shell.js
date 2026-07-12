@@ -1,5 +1,22 @@
 import { vi } from "vitest";
 
+export class GLSLEffect {
+  constructor() {
+    this.actor = null;
+    this.enabled = true;
+  }
+
+  add_glsl_snippet() {}
+
+  get_uniform_location(name) {
+    return name;
+  }
+
+  set_uniform_float() {}
+
+  queue_repaint() {}
+}
+
 const WindowTracker = {
   get_default: vi.fn(() => ({
     get_window_app: vi.fn(() => ({
@@ -28,4 +45,5 @@ const ActionMode = {
 export default {
   WindowTracker,
   ActionMode,
+  GLSLEffect,
 };

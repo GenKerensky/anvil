@@ -471,3 +471,17 @@ A second audit of the refactor found remaining work; all resolved.
   `TAG_EXPANSIONS` map; `resize` selects both `resize.js` and `constraints.js` (the basename
   substring filter silently dropped `constraints.js` because "constraints" does not contain
   "resize"). Other tags still use basename substring; extension.js stays last.
+
+### Window hint corner masks (2026-07-12)
+
+- **Configured-radius mask, not outline inference**: while either focus or split hints are enabled,
+  every Anvil-tracked normal window is continuously cropped to the hint border's effective inner
+  radius. Anvil does not inspect client pixels or attempt to infer each application's decorations.
+- **BorderController owns policy and lifecycle**: it attaches, refreshes, and removes the named
+  mask effect alongside border actors. A dedicated `WindowCornerMaskEffect` owns only the
+  compositor-native GLSL crop; `WindowTracker` delegates visual teardown to the controller.
+- **State exceptions**: maximized and fullscreen windows have neither masks nor hint borders.
+  There is no monitor-edge or zero-gap corner detection and no custom transition animation.
+- **Failure policy**: effect setup fails open, retaining the existing unmasked rounded border and
+  logging once. No CPU texture readback or supported-Shell-version reduction is acceptable for
+  this cosmetic feature.

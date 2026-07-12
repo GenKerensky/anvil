@@ -15,6 +15,8 @@ export type AnvilMetaWindow = Meta.Window & {
   get_maximized(): number;
 };
 export type AnvilWindowActor = Clutter.Actor & {
+  readonly meta_window?: Meta.Window | null;
+  get_meta_window?(): Meta.Window | null;
   actorSignals?: number[];
   border?: St.Bin;
   splitBorder?: St.Bin;

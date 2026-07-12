@@ -4,6 +4,8 @@
  * Verifies FocusBorderToggle and GapSize commands.
  */
 
+import Meta from "gi://Meta";
+
 import {
   getSettings,
   launchApp,
@@ -14,17 +16,39 @@ import {
   waitForWindowCount,
 } from "../../lib/shared-commands.js";
 
+/** @param {any} window */
+function maximizeWindow(window) {
+  try {
+    window.set_maximize_flags(Meta.MaximizeFlags.BOTH);
+    window.maximize();
+  } catch {
+    window.maximize(Meta.MaximizeFlags.BOTH);
+  }
+}
+
+/** @param {any} window */
+function unmaximizeWindow(window) {
+  try {
+    window.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
+    window.unmaximize();
+  } catch {
+    window.unmaximize(Meta.MaximizeFlags.BOTH);
+  }
+}
+
 describe("Borders and Gaps", function () {
   beforeEach(async function () {
     await closeAllWindows();
     await sleep(200);
     // Reset to known defaults
     getSettings().set_boolean("focus-border-toggle", false);
+    getSettings().set_boolean("split-border-toggle", false);
     getSettings().set_uint("window-gap-size-increment", 0);
   });
 
   afterEach(async function () {
     getSettings().set_boolean("focus-border-toggle", false);
+    getSettings().set_boolean("split-border-toggle", false);
     getSettings().set_uint("window-gap-size-increment", 0);
     await closeAllWindows();
   });
@@ -44,6 +68,43 @@ describe("Borders and Gaps", function () {
 
     const restored = getSettings().get_boolean("focus-border-toggle");
     expect(restored).toBe(false);
+  });
+
+  it("attaches and restores corner masks across window states", async function () {
+    getSettings().set_boolean("focus-border-toggle", true);
+    await launchApp("org.gnome.Nautilus.desktop");
+    await waitForWindowCount(1, 5000);
+
+    const window = global.display.get_focus_window();
+    expect(window).not.toBeNull();
+    const actor = /** @type {any} */ (window.get_compositor_private());
+    const surface = /** @type {any} */ (actor.get_first_child());
+    const mask = () => surface.get_effect("anvil-window-corner-mask");
+
+    expect(mask()).not.toBeNull();
+
+    maximizeWindow(window);
+    await sleep(400);
+    expect(mask()).toBeNull();
+    expect(actor.border.visible).toBe(false);
+
+    unmaximizeWindow(window);
+    await sleep(400);
+    expect(mask()).not.toBeNull();
+    expect(actor.border.visible).toBe(true);
+
+    window.make_fullscreen();
+    await sleep(400);
+    expect(mask()).toBeNull();
+    expect(actor.border.visible).toBe(false);
+
+    window.unmake_fullscreen();
+    await sleep(400);
+    expect(mask()).not.toBeNull();
+
+    getSettings().set_boolean("focus-border-toggle", false);
+    await sleep(200);
+    expect(mask()).toBeNull();
   });
 
   it("GapSize increase changes window spacing", async function () {

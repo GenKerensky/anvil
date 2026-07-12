@@ -11,6 +11,8 @@ export class Actor extends withSignals() {
     this.height = params.height || 0;
     this.visible = params.visible !== false;
     this.reactive = params.reactive !== false;
+    this._effects = new Map();
+    this._children = [];
   }
 
   get_width() {
@@ -45,6 +47,29 @@ export class Actor extends withSignals() {
 
   hide() {
     this.visible = false;
+  }
+
+  add_effect_with_name(name, effect) {
+    this._effects.set(name, effect);
+    effect.actor = this;
+  }
+
+  get_effect(name) {
+    return this._effects.get(name) ?? null;
+  }
+
+  remove_effect_by_name(name) {
+    this._effects.delete(name);
+  }
+
+  queue_repaint() {}
+
+  add_child(child) {
+    this._children.push(child);
+  }
+
+  get_first_child() {
+    return this._children[0] ?? null;
   }
 
   destroy() {}

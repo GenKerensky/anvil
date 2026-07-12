@@ -78,4 +78,10 @@ describe("SettingsBridge", () => {
     bridge.handleChanged("focus-border-toggle");
     expect(host.destroyAllBorderActors).toHaveBeenCalled();
   });
+
+  it("refreshes border geometry after a stylesheet update", () => {
+    bridge.handleChanged("css-updated");
+    expect(host.reloadStylesheet).toHaveBeenCalled();
+    expect(host.updateBorderLayout).toHaveBeenCalled();
+  });
 });

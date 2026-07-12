@@ -49,6 +49,7 @@ export interface WindowTrackerHost {
   readonly scheduler: EventSchedulerPort;
   unfreezeRender(): void;
   ensureBorderActors(actor: AnvilWindowActor): void;
+  destroyWindowActors(actor: AnvilWindowActor): void;
   hideActorBorder(actor: AnvilWindowActor | null): void;
   updateBorderLayout(): void;
   updateDecorationLayout(): void;
@@ -519,16 +520,7 @@ export class WindowTracker {
     const host = this._host;
 
     // 1. Border actors
-    const border = actor.border;
-    if (border && global.window_group) {
-      global.window_group.remove_child(border);
-      border.hide();
-    }
-    const splitBorder = actor.splitBorder;
-    if (splitBorder && global.window_group) {
-      global.window_group.remove_child(splitBorder);
-      splitBorder.hide();
-    }
+    host.destroyWindowActors(actor);
 
     const nodeWindow = host.tree.findNodeByActor(actor) as unknown as Node<any> | null;
     const metaWindow = nodeWindow?.nodeValue as Meta.Window | undefined;

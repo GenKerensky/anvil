@@ -120,7 +120,10 @@ const SETTINGS_HANDLERS: Record<string, SettingHandler> = {
   "workspace-skip-tile": (h, k) => h.renderTree(k, true),
   "stacked-tiling-mode-enabled": handleStackedTilingMode,
   "tabbed-tiling-mode-enabled": handleTabbedTilingMode,
-  "css-updated": (h) => h.reloadStylesheet(),
+  "css-updated": (h) => {
+    h.reloadStylesheet();
+    h.updateBorderLayout();
+  },
   "float-always-on-top-enabled": (h, k) => {
     if (!h.settings.get_boolean(k)) {
       h.cleanupAlwaysFloat();

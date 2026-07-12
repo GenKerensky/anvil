@@ -14,6 +14,7 @@ export default defineConfig({
       "gi://Meta": resolve(__dirname, "./test/unit/__mocks__/gi/Meta.js"),
       "gi://St": resolve(__dirname, "./test/unit/__mocks__/gi/St.js"),
       "gi://Clutter": resolve(__dirname, "./test/unit/__mocks__/gi/Clutter.js"),
+      "gi://Cogl": resolve(__dirname, "./test/unit/__mocks__/gi/Cogl.js"),
       "gi://Shell": resolve(__dirname, "./test/unit/__mocks__/gi/Shell.js"),
       "gi://Adw": resolve(__dirname, "./test/unit/__mocks__/gi/Adw.js"),
       "gi://Gtk": resolve(__dirname, "./test/unit/__mocks__/gi/Gtk.js"),

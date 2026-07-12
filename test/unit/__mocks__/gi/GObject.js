@@ -19,8 +19,8 @@ class GObjectBase extends withSignals() {
 
 export { GObjectBase as Object };
 
-export function registerClass(klass) {
-  return klass;
+export function registerClass(...args) {
+  return args.at(-1);
 }
 
 export default {

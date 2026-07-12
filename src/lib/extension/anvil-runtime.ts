@@ -294,6 +294,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       },
       unfreezeRender: () => self.unfreezeRender(),
       ensureBorderActors: (a) => self.ensureBorderActors(a),
+      destroyWindowActors: (a) => self.destroyWindowActors(a),
       hideActorBorder: (a) => self.hideActorBorder(a),
       updateBorderLayout: () => self.updateBorderLayout(),
       updateDecorationLayout: () => self.updateDecorationLayout(),
@@ -352,7 +353,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       get focusMetaWindow() {
         return self.focusMetaWindow;
       },
-      calculateGaps: (n) => self._tilingRender!.calculateGaps(n),
       findNodeWindow: (w) => self.findNodeWindow(w),
     });
     this._dragDrop = new DragDropTile({
@@ -807,6 +807,10 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private ensureAllBorderActors() {
     this._borders!.ensureAllBorderActors();
+  }
+
+  private destroyWindowActors(actor: AnvilWindowActor) {
+    this._borders!.destroyWindowActors(actor);
   }
 
   private destroyAllBorderActors() {

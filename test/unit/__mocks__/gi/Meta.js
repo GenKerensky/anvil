@@ -1,5 +1,6 @@
 import { vi } from "vitest";
 import { withSignals } from "../../mocks/helpers/signalMixin.js";
+import { Actor } from "./Clutter.js";
 
 export class Rectangle {
   constructor(params = {}) {
@@ -214,14 +215,17 @@ export class Window extends withSignals() {
 
   get_compositor_private() {
     if (!this._actor) {
-      this._actor = {
-        border: null,
-        splitBorder: null,
-        actorSignals: null,
-        remove_all_transitions: vi.fn(),
-        connect: vi.fn(() => Math.random()),
-        disconnect: vi.fn(),
-      };
+      this._actor = new Actor({ width: this._rect.width, height: this._rect.height });
+      this._actor.meta_window = this;
+      this._actor.metaWindow = this;
+      this._actor.border = null;
+      this._actor.splitBorder = null;
+      this._actor.actorSignals = null;
+      this._actor.remove_all_transitions = vi.fn();
+      this._actor.get_meta_window = () => this;
+      this._actor._texture = new Actor({ width: this._rect.width, height: this._rect.height });
+      this._actor.add_child(this._actor._texture);
+      this._actor.get_texture = () => this._actor._texture;
     }
     return this._actor;
   }

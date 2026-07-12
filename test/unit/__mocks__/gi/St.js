@@ -1,5 +1,12 @@
 import { withSignals } from "../../mocks/helpers/signalMixin.js";
 
+export const Corner = {
+  TOPLEFT: 0,
+  TOPRIGHT: 1,
+  BOTTOMRIGHT: 2,
+  BOTTOMLEFT: 3,
+};
+
 export class Widget extends withSignals() {
   constructor(params = {}) {
     super();
@@ -51,6 +58,13 @@ export class Widget extends withSignals() {
 
   get_parent() {
     return this._parent || null;
+  }
+
+  get_theme_node() {
+    return {
+      get_border_radius: () => 18,
+      get_border_width: () => 3,
+    };
   }
 }
 
@@ -184,4 +198,5 @@ export default {
   Button,
   ThemeContext,
   Icon,
+  Corner,
 };
