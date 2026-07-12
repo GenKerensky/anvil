@@ -6,9 +6,11 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import St from "gi://St";
 import Meta from "gi://Meta";
 import { DragDropTile } from "../../../src/lib/extension/drag-drop-tile.js";
-import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
   createWindowManagerFixture,
@@ -114,42 +116,151 @@ describe("DragDropTile", () => {
     });
   });
 
-  // S7: exercise the placement/mutation path through the owner interfaces
-  // (LayoutEngine.swapPairs), not underscore helpers.
-  describe("moveWindowToPointer placement (center SWAP)", () => {
-    it("swaps the focus window with the target via LayoutEngine.swapPairs", () => {
-      const wm = ctx.windowManager;
+  // S7: exercise the placement/mutation path through the module interface
+  // (the `dragDrop` test subject + `mockHost`), NOT the private `wm._dragDrop`
+  // composition seam. The structural transaction is delegated to LayoutEngine
+  // (S1), so these cases verify owner behavior via `mockHost.layoutEngine`.
+  describe("moveWindowToPointer placement (via module interface, S7)", () => {
+    function makeWindow(
+      id: number,
+      title: string,
+      rect: { x: number; y: number; width: number; height: number }
+    ) {
+      const w = createMockWindow({
+        id,
+        wm_class: title,
+        title,
+        rect,
+      });
+      w.get_frame_rect = () => ({ ...rect });
+      return w;
+    }
+
+    function grabWindow(node: any) {
+      node.mode = WINDOW_MODES.GRAB_TILE;
+      return node;
+    }
+
+    it("center SWAP swaps the focus window with the target via LayoutEngine.swapPairs", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
-      const target = createMockWindow({
-        id: 1,
-        wm_class: "Target",
-        title: "Target",
-        rect: { x: 0, y: 0, width: 200, height: 200 },
-      });
-      const focus = createMockWindow({
-        id: 2,
-        wm_class: "Focus",
-        title: "Focus",
-        rect: { x: 0, y: 0, width: 200, height: 200 },
-      });
+      const target = makeWindow(1, "Target", { x: 0, y: 0, width: 200, height: 200 });
+      const focus = makeWindow(2, "Focus", { x: 0, y: 0, width: 200, height: 200 });
       const targetNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, target);
-      const focusNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, focus);
-      focusNode.mode = "GRAB_TILE";
+      const focusNode = grabWindow(
+        ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, focus)
+      );
 
-      // Center of the 200x200 target → SWAP path (dnd-center-layout is SWAP).
-      (global as any).get_pointer = vi.fn(() => [100, 100, 0]);
-      // Pointer-over hit test uses sortedWindows + metaWindowAtPoint:
-      wm.sortedWindows = [target, focus];
-      wm.nodeWinAtPointer = targetNode;
-      target.get_frame_rect = () => ({ x: 0, y: 0, width: 200, height: 200 });
+      (global as any).get_pointer = vi.fn(() => [100, 100, 0]); // center
+      mockHost.sortedWindows = [target, focus];
+      mockHost.nodeWinAtPointer = targetNode;
 
-      const swapSpy = vi.spyOn(wm._layout, "swapPairs");
-      const renderSpy = vi.spyOn(wm, "renderTree").mockImplementation(() => {});
+      const swapSpy = vi.spyOn(mockHost.layoutEngine, "swapPairs");
 
-      wm._dragDrop.moveWindowToPointer(focusNode, false);
+      dragDrop.moveWindowToPointer(focusNode, false);
 
       expect(swapSpy).toHaveBeenCalledWith(targetNode, focusNode);
-      expect(renderSpy).toHaveBeenCalledWith("drag-swap", undefined);
+      // Only the swap branch renders inline.
+      expect(mockHost.renderTree).toHaveBeenCalledWith("drag-swap");
+    });
+
+    it("createCon drop-left creates a new container holding the target + focus, owned by LayoutEngine", () => {
+      // Target sits under a VSPLIT MONITOR (non-horizontal) so a left drop on
+      // a single target window routes through the createCon branch — and the
+      // count special-case does NOT reuse the parent (numWin != 2), so a fresh
+      // CON is created. Focus lives under a different monitor sibling so it is
+      // not counted in the target's parent.
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      monitor.layout = LAYOUT_TYPES.VSPLIT; // non-horizontal → createCon
+
+      const target = makeWindow(1, "Target", { x: 0, y: 0, width: 200, height: 200 });
+      const targetNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, target);
+
+      // Focus window under a sibling monitor on another workspace so it is not
+      // counted in the target parent's child counts.
+      const focus = makeWindow(2, "Focus", { x: 0, y: 0, width: 200, height: 200 });
+      const focusNode = grabWindow(new Node(NODE_TYPES.WINDOW, focus));
+      focusNode.mode = WINDOW_MODES.GRAB_TILE;
+      // Give focus a throwaway parent so `previousParent` is defined.
+      const dummyCon = new Node(NODE_TYPES.CON, new St.Bin());
+      dummyCon.appendChild(focusNode);
+
+      (global as any).get_pointer = vi.fn(() => [50, 100, 0]); // left region
+      mockHost.sortedWindows = [target, focus];
+      mockHost.nodeWinAtPointer = targetNode;
+
+      const setLayoutSpy = vi.spyOn(mockHost.layoutEngine, "setLayout");
+
+      dragDrop.moveWindowToPointer(focusNode, false);
+
+      // A new CON now contains both target and focus (target moved in, focus
+      // inserted before it because left drop).
+      const newCon = targetNode.parentNode;
+      expect(newCon?.nodeType).toBe(NODE_TYPES.CON);
+      expect(newCon?.childNodes).toContain(targetNode);
+      expect(newCon?.childNodes).toContain(focusNode);
+      // Left drop → HSPLIT on the new con.
+      expect(setLayoutSpy).toHaveBeenCalledWith(newCon, LAYOUT_TYPES.HSPLIT);
+    });
+
+    it("detachWindow drop-left on a tabbed container calls LayoutEngine.split", () => {
+      // Target's parent is a TABBED CON (stackedOrTabbed, non-monitor): left drop
+      // sets the detachWindow plan and splits the focus window.
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const tabbedCon = new Node(NODE_TYPES.CON, new St.Bin());
+      tabbedCon.layout = LAYOUT_TYPES.TABBED;
+      tabbedCon.settings = ctx.windowManager.ext.settings;
+      monitor.childNodes[0] = tabbedCon;
+      tabbedCon.parentNode = monitor;
+
+      const target = makeWindow(1, "Target", { x: 0, y: 0, width: 200, height: 200 });
+      const targetNode = ctx.tree.createNode(tabbedCon.nodeValue, NODE_TYPES.WINDOW, target);
+
+      const focus = makeWindow(2, "Focus", { x: 0, y: 0, width: 200, height: 200 });
+      const focusNode = grabWindow(new Node(NODE_TYPES.WINDOW, focus));
+      const dummyCon = new Node(NODE_TYPES.CON, new St.Bin());
+      dummyCon.appendChild(focusNode);
+
+      (global as any).get_pointer = vi.fn(() => [50, 100, 0]); // left region
+      mockHost.sortedWindows = [target, focus];
+      mockHost.nodeWinAtPointer = targetNode;
+
+      const splitSpy = vi.spyOn(mockHost.layoutEngine, "split");
+
+      dragDrop.moveWindowToPointer(focusNode, false);
+
+      expect(splitSpy).toHaveBeenCalled();
+    });
+
+    it("simpleInsert drop-center (non-SWAP layout) appends the focus window to the container", () => {
+      // dnd-center-layout is SWAP by default; switch it to HSPLIT so a center
+      // drop on a non-stacked/tabbed container routes to simpleInsert.
+      mockHost.settings.get_string.mockReturnValue("HSPLIT");
+
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const con = new Node(NODE_TYPES.CON, new St.Bin());
+      con.layout = LAYOUT_TYPES.HSPLIT;
+      con.settings = ctx.windowManager.ext.settings;
+      monitor.childNodes[0] = con;
+      con.parentNode = monitor;
+
+      const target = makeWindow(1, "Target", { x: 0, y: 0, width: 200, height: 200 });
+      const targetNode = ctx.tree.createNode(con.nodeValue, NODE_TYPES.WINDOW, target);
+
+      const focus = makeWindow(2, "Focus", { x: 0, y: 0, width: 200, height: 200 });
+      const focusNode = grabWindow(new Node(NODE_TYPES.WINDOW, focus));
+      const dummyCon = new Node(NODE_TYPES.CON, new St.Bin());
+      dummyCon.appendChild(focusNode);
+
+      (global as any).get_pointer = vi.fn(() => [100, 100, 0]); // center
+      mockHost.sortedWindows = [target, focus];
+      mockHost.nodeWinAtPointer = targetNode;
+      mockHost.processGap = vi.fn(() => ({ x: 0, y: 0, width: 200, height: 200 }));
+
+      dragDrop.moveWindowToPointer(focusNode, false);
+
+      // simpleInsert: focus appended into the container (its parent is now `con`).
+      expect(focusNode.parentNode).toBe(con);
+      expect(con.childNodes).toContain(focusNode);
     });
   });
 });

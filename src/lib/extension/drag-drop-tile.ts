@@ -4,16 +4,13 @@
  * Moved from WindowManager.moveWindowToPointer / findNodeWindowAtPointer /
  * _findNodeWindowAtPointer / _getDragDropCenterPreviewStyle.
  *
- * Reads tree state, calls LayoutEngine.split/swapPairs + renderTree,
- * all via host callbacks. No new host interface needed beyond reusing
- * existing shapes.
- *
- * Ownership rules: `.agents/rules/architecture.md` (§2 tree structure +
- * LayoutEngine as the owner of percent/layout writes). Extraction rationale:
- * `.agents/memory/decisions.md`.
+ * This module computes the drop **plan** (region hit-test + resolved container,
+ * reference, layouts) and renders the preview hint. It does NOT mutate tree
+ * structure, sibling percents, or layouts — the whole placement transaction is
+ * delegated to `LayoutEngine.applyDragDrop(plan)`, the sole owner of those
+ * writes (architecture rule §2). Extraction rationale: `.agents/memory/decisions.md`.
  */
 
-import St from "gi://St";
 import Meta from "gi://Meta";
 import Gio from "gi://Gio";
 
@@ -28,7 +25,7 @@ import {
   type RectLike,
 } from "./tree.js";
 import * as Utils from "./utils.js";
-import type { LayoutEngine } from "./layout-engine.js";
+import type { LayoutEngine, DragDropPlan } from "./layout-engine.js";
 import { WINDOW_MODES } from "./window/constants.js";
 
 /** Host surface for DragDropTile — narrow, read-only where possible. */
@@ -45,13 +42,21 @@ export interface DragDropTileHost {
   processGap(node: Node<NodeType>): RectLike;
 }
 
+type RegionRect = { x: number; y: number; width: number; height: number };
+type PreviewParams = { className: string; targetRect: RegionRect | null };
+
 export class DragDropTile {
   constructor(private host: DragDropTileHost) {}
 
   /**
    * Handle previewing and applying where a drag-drop window is going to be tiled.
+   *
+   * The plan phase (region hit-test) is pure — it computes a `DragDropPlan`
+   * without mutating the tree. The apply phase delegates the whole structural
+   * transaction to `LayoutEngine.applyDragDrop`, so this module never writes
+   * tree structure, percents, or layouts directly (architecture rule §2).
    */
-  moveWindowToPointer(focusNodeWindow: Node<any>, preview: boolean = false) {
+  moveWindowToPointer(focusNodeWindow: Node<NodeType>, preview: boolean = false) {
     if (this.host.cancelGrab) {
       return;
     }
@@ -70,11 +75,9 @@ export class DragDropTile {
       const stacked = parentNodeTarget!.isStacked();
       const tabbed = parentNodeTarget!.isTabbed();
       const stackedOrTabbed = stacked || tabbed;
-      const updatePreview = (
-        focusNodeWindow: Node<any>,
-        previewParams: { className: string; targetRect: any }
-      ) => {
-        const previewHint = focusNodeWindow.previewHint;
+
+      const updatePreview = (previewTarget: Node<NodeType>, previewParams: PreviewParams) => {
+        const previewHint = previewTarget.previewHint;
         const previewHintEnabled = this.host.settings.get_boolean("preview-hint-enabled");
         const previewRect = previewParams.targetRect;
         if (previewHint && previewHintEnabled) {
@@ -88,43 +91,41 @@ export class DragDropTile {
           previewHint.show();
         }
       };
-      const regions = (
-        targetRect: { x: number; y: number; width: number; height: number },
-        regionWidth: number
-      ) => {
+
+      const regions = (rect: RegionRect, regionWidth: number) => {
         leftRegion = {
-          x: targetRect.x,
-          y: targetRect.y,
-          width: targetRect.width * regionWidth,
-          height: targetRect.height,
+          x: rect.x,
+          y: rect.y,
+          width: rect.width * regionWidth,
+          height: rect.height,
         };
 
         rightRegion = {
-          x: targetRect.x + targetRect.width * (1 - regionWidth),
-          y: targetRect.y,
-          width: targetRect.width * regionWidth,
-          height: targetRect.height,
+          x: rect.x + rect.width * (1 - regionWidth),
+          y: rect.y,
+          width: rect.width * regionWidth,
+          height: rect.height,
         };
 
         topRegion = {
-          x: targetRect.x,
-          y: targetRect.y,
-          width: targetRect.width,
-          height: targetRect.height * regionWidth,
+          x: rect.x,
+          y: rect.y,
+          width: rect.width,
+          height: rect.height * regionWidth,
         };
 
         bottomRegion = {
-          x: targetRect.x,
-          y: targetRect.y + targetRect.height * (1 - regionWidth),
-          width: targetRect.width,
-          height: targetRect.height * regionWidth,
+          x: rect.x,
+          y: rect.y + rect.height * (1 - regionWidth),
+          width: rect.width,
+          height: rect.height * regionWidth,
         };
 
         centerRegion = {
-          x: targetRect.x + targetRect.width * regionWidth,
-          y: targetRect.y + targetRect.height * regionWidth,
-          width: targetRect.width - targetRect.width * regionWidth * 2,
-          height: targetRect.height - targetRect.height * regionWidth * 2,
+          x: rect.x + rect.width * regionWidth,
+          y: rect.y + rect.height * regionWidth,
+          width: rect.width - rect.width * regionWidth * 2,
+          height: rect.height - rect.height * regionWidth * 2,
         };
 
         return {
@@ -135,18 +136,19 @@ export class DragDropTile {
           center: centerRegion,
         };
       };
-      let referenceNode: Node<any> | null = null;
-      let containerNode: Node<any> | null = null;
-      let childNode = focusNodeWindow;
-      let previewParams: { className: string; targetRect: any } = {
-        className: "",
-        targetRect: null,
-      };
-      let leftRegion;
-      let rightRegion;
-      let topRegion;
-      let bottomRegion;
-      let centerRegion;
+
+      let referenceNode: Node<NodeType> | null = null;
+      let containerNode: Node<NodeType> | null = null;
+      // Plan flags (pure — no node mutation). The apply transaction read these
+      // off `childNode` historically; they now live on the plan.
+      let createCon = false;
+      let detachWindow = false;
+      let previewParams: PreviewParams = { className: "", targetRect: null };
+      let leftRegion: RegionRect;
+      let rightRegion: RegionRect;
+      let topRegion: RegionRect;
+      let bottomRegion: RegionRect;
+      let centerRegion: RegionRect;
       const previewWidth = 0.5;
       const hoverWidth = 0.3;
 
@@ -186,7 +188,7 @@ export class DragDropTile {
             };
           } else {
             if (isMonParent) {
-              childNode.createCon = true;
+              createCon = true;
               containerNode = parentNodeTarget;
               referenceNode = nodeWinAtPointer;
               previewParams = {
@@ -199,7 +201,7 @@ export class DragDropTile {
               const parentTargetRect = this.host.processGap(parentNodeTarget!);
               previewParams = {
                 className: "",
-                targetRect: parentTargetRect,
+                targetRect: parentTargetRect as RegionRect,
               };
             }
           }
@@ -211,7 +213,7 @@ export class DragDropTile {
         };
 
         if (stackedOrTabbed) {
-          childNode.detachWindow = true;
+          detachWindow = true;
           if (!isMonParent) {
             referenceNode = parentNodeTarget;
             containerNode = parentNodeTarget!.parentNode;
@@ -221,7 +223,7 @@ export class DragDropTile {
             containerNode = parentNodeTarget;
             referenceNode = nodeWinAtPointer;
           } else {
-            childNode.createCon = true;
+            createCon = true;
             containerNode = parentNodeTarget;
             referenceNode = nodeWinAtPointer;
           }
@@ -232,7 +234,7 @@ export class DragDropTile {
           targetRect: previewRegions.right,
         };
         if (stackedOrTabbed) {
-          childNode.detachWindow = true;
+          detachWindow = true;
           if (!isMonParent) {
             referenceNode = parentNodeTarget!.nextSibling;
             containerNode = parentNodeTarget!.parentNode;
@@ -242,7 +244,7 @@ export class DragDropTile {
             containerNode = parentNodeTarget;
             referenceNode = nodeWinAtPointer.nextSibling;
           } else {
-            childNode.createCon = true;
+            createCon = true;
             containerNode = parentNodeTarget;
             referenceNode = nodeWinAtPointer.nextSibling;
           }
@@ -263,7 +265,7 @@ export class DragDropTile {
           }
         } else {
           if (horizontal) {
-            childNode.createCon = true;
+            createCon = true;
             containerNode = parentNodeTarget;
             referenceNode = nodeWinAtPointer;
           } else {
@@ -287,12 +289,10 @@ export class DragDropTile {
           }
         } else {
           if (horizontal) {
-            childNode = focusNodeWindow;
-            childNode.createCon = true;
+            createCon = true;
             containerNode = parentNodeTarget;
             referenceNode = nodeWinAtPointer.nextSibling;
           } else {
-            childNode = focusNodeWindow;
             containerNode = parentNodeTarget;
             referenceNode = nodeWinAtPointer.nextSibling;
           }
@@ -316,83 +316,99 @@ export class DragDropTile {
       }
 
       if (!preview) {
+        // Resolve the plan (pure), then delegate the single structural
+        // transaction to LayoutEngine (architecture rule §2). St actor UI
+        // (tab cleanup) is owned here; tree structure/percents/layouts are not.
         const previousParent = focusNodeWindow!.parentNode!;
-        this.host.layoutEngine.resetSiblingPercent(containerNode);
-        this.host.layoutEngine.resetSiblingPercent(previousParent);
 
         if (focusNodeWindow.tab) {
           const decoParent = focusNodeWindow.tab.get_parent();
           if (decoParent) decoParent.remove_child(focusNodeWindow.tab);
         }
 
-        if (childNode.createCon) {
+        const centerSwap = isCenter && centerLayout == "SWAP";
+        const kind = createCon
+          ? "createCon"
+          : detachWindow
+          ? "detachWindow"
+          : centerSwap
+          ? "centerSwap"
+          : "simpleInsert";
+
+        // createCon only: reuse the existing parent as the con when it already
+        // holds exactly the single-tile / two-tile special-case shape.
+        let reuseExistingAsCon = false;
+        if (createCon) {
           const numWin = parentNodeTarget!.childNodes.filter(
             (c) => c.nodeType === NODE_TYPES.WINDOW
           ).length;
           const numChild = parentNodeTarget!.childNodes.length;
           const sameNumChild = numWin === numChild;
-          if (
+          reuseExistingAsCon =
             !isCenter &&
             ((isConParent && numWin === 1 && sameNumChild) ||
-              (isMonParent && numWin == 2 && sameNumChild))
-          ) {
-            childNode = parentNodeTarget!;
-          } else {
-            childNode = new Node(NODE_TYPES.CON, new St.Bin());
-            containerNode!.insertBefore(childNode!, referenceNode);
-            childNode.appendChild(nodeWinAtPointer);
-          }
-
-          if (isLeft || isTop) {
-            childNode.insertBefore(focusNodeWindow, nodeWinAtPointer);
-          } else if (isRight || isBottom || isCenter) {
-            childNode.insertBefore(focusNodeWindow, null);
-          }
-
-          if (isLeft || isRight) {
-            this.host.layoutEngine.setLayout(childNode, LAYOUT_TYPES.HSPLIT);
-          } else if (isTop || isBottom) {
-            this.host.layoutEngine.setLayout(childNode, LAYOUT_TYPES.VSPLIT);
-          } else if (isCenter) {
-            this.host.layoutEngine.setLayout(
-              childNode,
-              (LAYOUT_TYPES as Record<string, string>)[centerLayout]
-            );
-          }
-        } else if (childNode.detachWindow) {
-          const orientation =
-            isLeft || isRight ? ORIENTATION_TYPES.HORIZONTAL : ORIENTATION_TYPES.VERTICAL;
-          this.host.layoutEngine.split(childNode as Node<any>, orientation);
-          containerNode!.insertBefore(childNode!.parentNode!, referenceNode);
-        } else if (isCenter && centerLayout == "SWAP") {
-          this.host.layoutEngine.swapPairs(referenceNode!, focusNodeWindow);
-          this.host.renderTree("drag-swap");
-        } else {
-          containerNode!.insertBefore(childNode, referenceNode);
-          if (isLeft || isRight) {
-            this.host.layoutEngine.setLayout(containerNode!, LAYOUT_TYPES.HSPLIT);
-          } else if (isTop || isBottom) {
-            if (!stackedOrTabbed)
-              this.host.layoutEngine.setLayout(containerNode!, LAYOUT_TYPES.VSPLIT);
-          } else if (isCenter) {
-            if (containerNode!.isHSplit() || containerNode!.isVSplit()) {
-              this.host.layoutEngine.setLayout(
-                containerNode!,
-                (LAYOUT_TYPES as Record<string, string>)[centerLayout]
-              );
-            }
-          }
+              (isMonParent && numWin == 2 && sameNumChild));
         }
-        previousParent.resetLayoutSingleChild();
+
+        const childLayout: string | null = !createCon
+          ? null
+          : isLeft || isRight
+          ? LAYOUT_TYPES.HSPLIT
+          : isTop || isBottom
+          ? LAYOUT_TYPES.VSPLIT
+          : (LAYOUT_TYPES as Record<string, string>)[centerLayout] ?? null;
+
+        const containerLayout: string | null =
+          kind !== "simpleInsert"
+            ? null
+            : isLeft || isRight
+            ? LAYOUT_TYPES.HSPLIT
+            : isTop || isBottom
+            ? stackedOrTabbed
+              ? null
+              : LAYOUT_TYPES.VSPLIT
+            : isCenter
+            ? containerNode && (containerNode.isHSplit() || containerNode.isVSplit())
+              ? (LAYOUT_TYPES as Record<string, string>)[centerLayout] ?? null
+              : null
+            : null;
+
+        const detachOrientation =
+          isLeft || isRight ? ORIENTATION_TYPES.HORIZONTAL : ORIENTATION_TYPES.VERTICAL;
+
+        const plan: DragDropPlan = {
+          focusNodeWindow,
+          nodeWinAtPointer,
+          parentNodeTarget: parentNodeTarget!,
+          containerNode,
+          referenceNode,
+          previousParent,
+          kind,
+          isLeft,
+          isRight,
+          isTop,
+          isBottom,
+          isCenter,
+          reuseExistingAsCon,
+          childLayout,
+          containerLayout,
+          detachOrientation,
+        };
+
+        this.host.layoutEngine.applyDragDrop(plan);
+
+        // Only the swap branch renders inline (parity with prior behavior);
+        // the other placements rely on the grab-op-end render.
+        if (kind === "centerSwap") {
+          this.host.renderTree("drag-swap");
+        }
       } else {
         updatePreview(focusNodeWindow, previewParams);
       }
-      childNode.createCon = false;
-      childNode.detachWindow = false;
     }
   }
 
-  findNodeWindowAtPointer(focusNodeWindow: Node<any>) {
+  findNodeWindowAtPointer(focusNodeWindow: Node<NodeType>) {
     const pointerCoord = global.get_pointer() as unknown as [number, number];
 
     const nodeWinAtPointer = this._findNodeWindowAtPointer(

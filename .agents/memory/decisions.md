@@ -428,3 +428,28 @@ Follow-up to the unstaged code review (`window-ts-refactor-code-review.md`). All
 - **Spec-P1 (E2E resize cleanup)**: `test/lib/shared-commands.js` `clearResizedWindows` updated to
   call `wm._grab.clearResizedWindows()` (the owner) instead of clearing the removed `wm._resizedWindows`
   map (which silently no-op'd and let resize counts bleed between specs).
+
+### Follow-up audit fixes (2026-07-11, commit `418ebd4`)
+
+A second audit of the refactor found remaining work; all resolved.
+
+- **S1 / Spec-P1 (drag-drop placement ownership)**: `DragDropTile.moveWindowToPointer` no longer
+  rewrites the Tiling Tree directly. It now computes a pure `DragDropPlan` (region hit-test +
+  resolved container/reference/layouts as data) and delegates the **entire** structural
+  transaction to one new `LayoutEngine.applyDragDrop(plan)` method, which is the sole place that
+  `insertBefore` / `appendChild` / `new Node(CON)` / `resetSiblingPercent` /
+  `setLayout` / `resetLayoutSingleChild` run for a drop. St actor UI (preview hint, tab cleanup)
+  stays in `DragDropTile`; tree structure / percents / layouts do not. A new
+  `LayoutEngine._createConNode` / `resetLayoutSingleChild` owns those primitives.
+- **R1 (no new public `any`)**: the new `LayoutEngine` methods (`toggleSplitLayout`,
+  `setAttachNode`, `resetPercentForFloatToggle`, `raiseInStacked`, `reparentToNode`,
+  `applyDragDrop` + the `DragDropPlan` interface) and `DragDropTile.moveWindowToPointer` /
+  `findNodeWindowAtPointer` now use `Node<NodeType>` instead of `Node<any>`.
+- **S7 (drag-drop test surface)**: the placement test no longer reaches through the private
+  `wm._dragDrop` composition seam — it drives the existing `dragDrop` test subject via `mockHost`
+  and asserts owner behavior. Added create-con, detach-window (split), simple-insert, and
+  center-SWAP cases.
+- **R2 (`--tag resize` smoke contract)**: the import-level tag filter now has an explicit
+  `TAG_EXPANSIONS` map; `resize` selects both `resize.js` and `constraints.js` (the basename
+  substring filter silently dropped `constraints.js` because "constraints" does not contain
+  "resize"). Other tags still use basename substring; extension.js stays last.

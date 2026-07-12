@@ -10,6 +10,7 @@ import {
   getWindowGeometries,
   getMonitorWorkArea,
   getSettings,
+  getAnvilWM,
   sendAnvilCommand,
   sendAnvilCommandAndSettle,
   closeAllWindows,
@@ -82,6 +83,11 @@ describe("Floating and Snap Layout", function () {
     const before = getWindowGeometries();
     expect(before.length).toBeGreaterThanOrEqual(2);
 
+    // Before the toggle, Nautilus is not float-exempt (override cleared in beforeEach).
+    const wm = getAnvilWM();
+    const focusBefore = /** @type {any} */ (global).display.get_focus_window();
+    if (focusBefore) expect(wm.isFloatingExempt(focusBefore)).toBe(false);
+
     sendAnvilCommand({
       name: "FloatClassToggle",
       mode: "float",
@@ -92,19 +98,16 @@ describe("Floating and Snap Layout", function () {
     });
     await waitForWindowCount(2, 5000);
 
-    const after = getWindowGeometries();
-    expect(after.length).toBeGreaterThanOrEqual(2);
-
-    // Windows should no longer be fully tiling (one or more floated)
-    const area = getMonitorWorkArea();
-    const totalAfter = after.reduce(function (sum, w) {
-      return sum + w.width * w.height;
-    }, 0);
-    const workArea = area.width * area.height;
-    const ratioAfter = Math.abs(totalAfter - workArea) / workArea;
-    // After float class toggle, some windows should be floated
-    // so total area might not match work area exactly
-    expect(ratioAfter).toBeGreaterThan(0.01);
+    // Assert the class-level float override was applied through the owner
+    // (RulesEngine classification + tree node mode), not brittle geometry. The
+    // prior ratio-after assertion depended on the floated window repositioning,
+    // which Anvil does not force for FLOAT windows — so it only passed when
+    // Nautilus was already warm (full-suite order) and failed in isolation.
+    const focus = /** @type {any} */ (global).display.get_focus_window();
+    expect(focus).toBeTruthy();
+    expect(wm.isFloatingExempt(focus)).toBe(true);
+    const focusNode = wm.tree ? wm.tree.findNode(focus) : null;
+    expect(focusNode?.mode).toBe("FLOAT"); // WINDOW_MODES.FLOAT
   });
 
   it("SnapLayoutMove Left 1/3 snaps window to left third", async function () {

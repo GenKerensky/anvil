@@ -24,6 +24,7 @@ import {
   ORIENTATION_TYPES,
   POSITION,
   isUnsetPercent,
+  type NodeType,
   type RectLike,
   type Tree,
 } from "./tree.js";
@@ -41,6 +42,36 @@ export interface LayoutHost {
   rectForMonitor(node: Node<any>, monitorIndex: number): RectLike | null;
   sameParentMonitor(a: Node<any>, b: Node<any>): boolean;
   floatingWindow(node: Node<any>): boolean;
+}
+
+/**
+ * Pure drop plan produced by `DragDropTile` and executed by `LayoutEngine`.
+ * `DragDropTile` computes the plan (which nodes, drop region, resolved layouts)
+ * without mutating the tree; `LayoutEngine.applyDragDrop` performs the single
+ * structural transaction (architecture rule §2 — one owner for tree-structure
+ * and layout writes).
+ */
+export interface DragDropPlan {
+  focusNodeWindow: Node<NodeType>;
+  nodeWinAtPointer: Node<NodeType>;
+  parentNodeTarget: Node<NodeType>;
+  containerNode: Node<NodeType> | null;
+  referenceNode: Node<NodeType> | null;
+  previousParent: Node<NodeType>;
+  kind: "createCon" | "detachWindow" | "centerSwap" | "simpleInsert";
+  isLeft: boolean;
+  isRight: boolean;
+  isTop: boolean;
+  isBottom: boolean;
+  isCenter: boolean;
+  /** createCon only: reuse `parentNodeTarget` as the con instead of creating one. */
+  reuseExistingAsCon: boolean;
+  /** createCon only: layout to set on the new/reused con. */
+  childLayout: string | null;
+  /** simpleInsert only: layout to set on `containerNode`. */
+  containerLayout: string | null;
+  /** detachWindow only: split orientation. */
+  detachOrientation: string;
 }
 
 export class LayoutEngine {
@@ -87,7 +118,7 @@ export class LayoutEngine {
    * LayoutEngine is the sole owner of layout writes). Sets `tree.attachNode` to
    * the toggled parent so the next render attaches there. Caller renders.
    */
-  toggleSplitLayout(parentNode: Node<any>): void {
+  toggleSplitLayout(parentNode: Node<NodeType>): void {
     const currentLayout = parentNode.layout;
     if (currentLayout === LAYOUT_TYPES.HSPLIT) {
       parentNode.layout = LAYOUT_TYPES.VSPLIT;
@@ -101,7 +132,7 @@ export class LayoutEngine {
    * Set the tree's attach node (architecture rule §2: commands express intent
    * through LayoutEngine rather than mutating tree structure directly).
    */
-  setAttachNode(node: Node<any>): void {
+  setAttachNode(node: Node<NodeType>): void {
     this._host.tree.attachNode = node;
   }
 
@@ -111,7 +142,7 @@ export class LayoutEngine {
    * If the parent now has at most one tiled child, clear its percent and reset
    * the grandparent's siblings, then reset the parent's siblings.
    */
-  resetPercentForFloatToggle(parentNode: Node<any>, tree: Tree): void {
+  resetPercentForFloatToggle(parentNode: Node<NodeType>, tree: Tree): void {
     if (tree.getTiledChildren(parentNode.childNodes).length <= 1) {
       parentNode.percent = undefined;
       this.resetSiblingPercent(parentNode.parentNode!);
@@ -125,7 +156,7 @@ export class LayoutEngine {
    * Used by the move command's stacked-queue follow-up to bring the moved window
    * to the top of the stack. Caller renders.
    */
-  raiseInStacked(node: Node<any>): void {
+  raiseInStacked(node: Node<NodeType>): void {
     const parent = node.parentNode;
     if (!parent) return;
     parent.appendChild(node);
@@ -137,12 +168,76 @@ export class LayoutEngine {
    * §2: LayoutEngine owns sibling percents and tree-structure mutations for
    * tiling ops). Used when a window crosses monitor/workspace nodes.
    */
-  reparentToNode(node: Node<any>, newParent: Node<any>): void {
+  reparentToNode(node: Node<NodeType>, newParent: Node<NodeType>): void {
     const oldParent = node.parentNode;
     newParent.appendChild(node);
     if (oldParent) {
       this.redistributeSiblingPercent(oldParent);
     }
+  }
+
+  /**
+   * Drop plan computed by `DragDropTile` (pure data — no tree mutation). This
+   * method is the **sole** place the drag-drop placement transaction rewrites
+   * tree structure, sibling percents, and container/child layouts, so
+   * `DragDropTile` never manipulates nodes directly (architecture rule §2 —
+   * one owner for tree-structure/layout writes).
+   */
+  applyDragDrop(plan: DragDropPlan): void {
+    this.resetSiblingPercent(plan.containerNode);
+    this.resetSiblingPercent(plan.previousParent);
+
+    switch (plan.kind) {
+      case "createCon": {
+        let childNode: Node<NodeType>;
+        if (plan.reuseExistingAsCon) {
+          childNode = plan.parentNodeTarget;
+        } else {
+          childNode = this._createConNode();
+          plan.containerNode!.insertBefore(childNode, plan.referenceNode);
+          childNode.appendChild(plan.nodeWinAtPointer);
+        }
+        if (plan.isLeft || plan.isTop) {
+          childNode.insertBefore(plan.focusNodeWindow, plan.nodeWinAtPointer);
+        } else {
+          childNode.insertBefore(plan.focusNodeWindow, null);
+        }
+        if (plan.childLayout) this.setLayout(childNode, plan.childLayout);
+        break;
+      }
+      case "detachWindow": {
+        this.split(plan.focusNodeWindow, plan.detachOrientation);
+        plan.containerNode!.insertBefore(plan.focusNodeWindow.parentNode!, plan.referenceNode);
+        break;
+      }
+      case "centerSwap": {
+        this.swapPairs(plan.referenceNode!, plan.focusNodeWindow);
+        break;
+      }
+      case "simpleInsert": {
+        plan.containerNode!.insertBefore(plan.focusNodeWindow, plan.referenceNode);
+        if (plan.containerLayout) this.setLayout(plan.containerNode!, plan.containerLayout);
+        break;
+      }
+    }
+
+    this.resetLayoutSingleChild(plan.previousParent);
+  }
+
+  /** Create a fresh CON node (settings wired from the host). */
+  private _createConNode(): Node<NodeType> {
+    const con = new Node(NODE_TYPES.CON, new St.Bin());
+    con.settings = this._host.settings;
+    return con;
+  }
+
+  /**
+   * Reset a container's layout when it has a single/no child (architecture rule
+   * §2: LayoutEngine owns layout writes — the `Node.resetLayoutSingleChild`
+   * primitive is invoked only through this owner entry point).
+   */
+  resetLayoutSingleChild(node: Node<NodeType>): void {
+    node.resetLayoutSingleChild();
   }
 
   /**

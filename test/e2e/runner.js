@@ -288,17 +288,13 @@ export async function run() {
 
   runner.env.addReporter(makeJsonReporter(RESULTS_PATH));
 
-  if (filterTag) {
-    const tag = filterTag.toLowerCase();
-    // NOTE: do not read `runner.env.specFilter` — getter is deprecated in this
-    // jasmine-gjs and returns/throws, which made the filter no-op (all specs ran).
-    runner.env.configure({
-      /** @param {jasmine.Spec} spec */
-      specFilter: function (spec) {
-        return spec.getFullName().toLowerCase().includes(tag);
-      },
-    });
-  }
+  // NOTE: tag filtering is done ONLY at the import level (below). The legacy
+  // `runner.env.specFilter` configure is intentionally NOT set: in this
+  // jasmine-gjs build it cannot be relied on, and a substring specFilter would
+  // wrongly exclude specs within a selected suite whose name does not contain
+  // the tag (e.g. `--tag resize` loading constraints.js then excluding every
+  // constraints spec — they showed as status "excluded"). Import-level selection
+  // guarantees every imported spec runs.
 
   // extension.js is last: disable/re-enable can leave the WM half-initialized and
   // would poison later suites if run first.
@@ -323,12 +319,26 @@ export async function run() {
   // the env specFilter configure is not honored in this version, which made
   // `--tag` run all 125 specs). Only importing matching suites guarantees only
   // their describes register. Match by basename substring, e.g. "focus" →
-  // focus.js, "resize" → resize.js + constraints.js, "extension" → extension.js.
+  // focus.js, "extension" → extension.js. Some tags select more than one suite —
+  // `resize` must also pull in `constraints.js` (monitor-constraint clamp/exempt
+  // behavior) per the smoke-test contract; map those explicitly (R2: the plain
+  // basename-substring filter silently dropped constraints.js because
+  // "constraints" does not contain "resize").
+  /** @type {Record<string, string[]>} */
+  const TAG_EXPANSIONS = {
+    resize: ["resize.js", "constraints.js"],
+  };
+
   /** @type {string[]} */
   let suites = allSuites;
   if (filterTag) {
     const tag = filterTag.toLowerCase();
-    suites = allSuites.filter((p) => (p.split("/").pop() ?? "").toLowerCase().includes(tag));
+    const expanded = TAG_EXPANSIONS[tag];
+    if (expanded) {
+      suites = allSuites.filter((p) => expanded.includes(p.split("/").pop() ?? ""));
+    } else {
+      suites = allSuites.filter((p) => (p.split("/").pop() ?? "").toLowerCase().includes(tag));
+    }
     // Always keep extension.js last when it is in the filtered set so its
     // disable/re-enable cannot poison other suites.
     suites = suites.filter((p) => p !== "./suites/extension.js");
