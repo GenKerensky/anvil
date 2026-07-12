@@ -168,36 +168,35 @@ launch_terminal() {
   fi
 
   echo "==> Launching terminal inside nested session"
+  local -a nested_env=(env "WAYLAND_DISPLAY=${NESTED_WAYLAND_DISPLAY}")
+  if [[ -n "${NESTED_X11_DISPLAY:-}" ]]; then
+    nested_env+=("DISPLAY=${NESTED_X11_DISPLAY}")
+  fi
+  if [[ -n "${NESTED_XAUTHORITY:-}" ]]; then
+    nested_env+=("XAUTHORITY=${NESTED_XAUTHORITY}")
+  fi
+
   if [[ -n "${TERMINAL_CMD}" ]]; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      bash -lc "${TERMINAL_CMD}" >/dev/null 2>&1 &
+    "${nested_env[@]}" bash -lc "${TERMINAL_CMD}" >/dev/null 2>&1 &
     return 0
   fi
 
   if command -v ptyxis >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      ptyxis --new-window >/dev/null 2>&1 &
+    "${nested_env[@]}" ptyxis --new-window >/dev/null 2>&1 &
   elif command -v kgx >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      kgx >/dev/null 2>&1 &
+    "${nested_env[@]}" kgx >/dev/null 2>&1 &
   elif command -v gnome-terminal >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      gnome-terminal >/dev/null 2>&1 &
+    "${nested_env[@]}" gnome-terminal >/dev/null 2>&1 &
   elif command -v alacritty >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      alacritty >/dev/null 2>&1 &
+    "${nested_env[@]}" alacritty >/dev/null 2>&1 &
   elif command -v kitty >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      kitty >/dev/null 2>&1 &
+    "${nested_env[@]}" kitty >/dev/null 2>&1 &
   elif command -v foot >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      foot >/dev/null 2>&1 &
+    "${nested_env[@]}" foot >/dev/null 2>&1 &
   elif command -v wezterm >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      wezterm start >/dev/null 2>&1 &
+    "${nested_env[@]}" wezterm start >/dev/null 2>&1 &
   elif command -v xterm >/dev/null 2>&1; then
-    env WAYLAND_DISPLAY="${NESTED_WAYLAND_DISPLAY}" DISPLAY="${NESTED_X11_DISPLAY:-}" \
-      xterm >/dev/null 2>&1 &
+    "${nested_env[@]}" xterm >/dev/null 2>&1 &
   else
     echo "warning: no known terminal found on host; open one manually with:"
     echo "  WAYLAND_DISPLAY=${NESTED_WAYLAND_DISPLAY} DBUS_SESSION_BUS_ADDRESS=${DBUS_SESSION_BUS_ADDRESS} ptyxis"
@@ -244,10 +243,32 @@ wait_for_extension_active() {
 wait_for_nested_display() {
   NESTED_WAYLAND_DISPLAY=""
   NESTED_X11_DISPLAY=""
+  NESTED_XAUTHORITY=""
   for _ in $(seq 1 150); do
     NESTED_WAYLAND_DISPLAY="$(grep -oE "Using Wayland display name 'wayland-[0-9]+'" "${LOG_FILE}" | tail -1 | grep -oE 'wayland-[0-9]+' || true)"
     NESTED_X11_DISPLAY="$(grep -oE 'Using public X11 display :[0-9]+' "${LOG_FILE}" | awk '{print $5}' | tail -1 || true)"
     if [[ -n "${NESTED_WAYLAND_DISPLAY}" ]]; then
+      if [[ -n "${NESTED_X11_DISPLAY}" ]]; then
+        local xwayland_pid arg_index
+        # Mutter starts Xwayland lazily. Trigger it before launching an X11
+        # client, then pass its newly-created authority file to that client.
+        DISPLAY="${NESTED_X11_DISPLAY}" xprop -root >/dev/null 2>&1 || true
+        for _ in $(seq 1 25); do
+          xwayland_pid="$(pgrep -P "${SHELL_PID}" -x Xwayland 2>/dev/null | tail -n 1 || true)"
+          if [[ -n "${xwayland_pid}" && -r "/proc/${xwayland_pid}/cmdline" ]]; then
+            local -a xwayland_args=()
+            readarray -d '' -t xwayland_args < "/proc/${xwayland_pid}/cmdline"
+            for arg_index in "${!xwayland_args[@]}"; do
+              if [[ "${xwayland_args[$arg_index]}" == "-auth" ]]; then
+                NESTED_XAUTHORITY="${xwayland_args[$((arg_index + 1))]:-}"
+                break
+              fi
+            done
+            [[ -n "${NESTED_XAUTHORITY}" ]] && break
+          fi
+          sleep 0.1
+        done
+      fi
       export NESTED_WAYLAND_DISPLAY NESTED_X11_DISPLAY
       return 0
     fi

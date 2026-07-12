@@ -3,10 +3,11 @@
  * Ported from jcrussell/forge
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
 import St from "gi://St";
+import { createMockWindow } from "../mocks/helpers/index.js";
 
 describe("Node", () => {
   describe("Constructor and Basic Properties", () => {
@@ -117,6 +118,21 @@ describe("Node", () => {
 
       expect(node.isMode(WINDOW_MODES.TILE)).toBe(true);
       expect(node.isMode(WINDOW_MODES.FLOAT)).toBe(false);
+    });
+  });
+
+  describe("window actor lifecycle", () => {
+    it("refreshes a compositor actor that was unavailable when the window node was created", () => {
+      const metaWindow = createMockWindow();
+      let actor: { get_name: ReturnType<typeof vi.fn> } | null = null;
+      metaWindow.get_compositor_private = vi.fn(() => actor);
+
+      const node = new Node(NODE_TYPES.WINDOW, metaWindow);
+      expect(node.isNodeValid()).toBe(false);
+
+      actor = { get_name: vi.fn(() => "late-mapped-window") };
+      expect(node.isNodeValid()).toBe(true);
+      expect(node.windowActor).toBe(actor);
     });
   });
 

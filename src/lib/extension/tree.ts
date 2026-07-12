@@ -219,7 +219,18 @@ export class Node<T extends string> extends GObject.Object {
     }
   }
 
-  get windowActor() {
+  get windowActor(): Clutter.Actor | null {
+    // A Meta.Window can be admitted before Mutter creates its compositor actor
+    // (notably Xwayland/Electron startup windows). Refresh lazily so the node
+    // becomes renderable once the actor maps instead of remaining invalid.
+    if (!this._actor && this.isWindow()) {
+      try {
+        this._actor = (this._data as Meta.Window).get_compositor_private();
+      } catch {
+        // Meta.Window may already be finalized during teardown.
+        this._actor = null;
+      }
+    }
     return this._actor;
   }
 
@@ -228,7 +239,7 @@ export class Node<T extends string> extends GObject.Object {
       case NODE_TYPES.WINDOW:
         // A Meta.Window was assigned during creation
         // But obtain the Clutter.Actor
-        return this._actor;
+        return this.windowActor;
       case NODE_TYPES.CON:
       case NODE_TYPES.ROOT:
         // A St.Bin was assigned during creation
@@ -569,7 +580,7 @@ export class Node<T extends string> extends GObject.Object {
   isNodeValid() {
     if (!this.isWindow()) return true;
     try {
-      const actor = this._actor;
+      const actor = this.windowActor;
       if (!actor) return false;
       actor.get_name();
       return true;
