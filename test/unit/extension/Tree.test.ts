@@ -17,7 +17,7 @@ afterAll(() => {
 
 describe("Tree", () => {
   let tree: Tree;
-  let mockWindowManager: Record<string, any>;
+  let mockAnvilRuntime: Record<string, any>;
   let mockWorkspaceManager: Record<string, any>;
 
   beforeEach(() => {
@@ -45,7 +45,7 @@ describe("Tree", () => {
       get_boolean: vi.fn(() => true),
       get_uint: vi.fn(() => 0),
     };
-    mockWindowManager = {
+    mockAnvilRuntime = {
       ext: {
         settings: mockSettings,
       },
@@ -58,7 +58,9 @@ describe("Tree", () => {
       bindWorkspaceSignals: vi.fn(),
     };
 
-    tree = new Tree(mockWindowManager as any);
+    tree = new Tree(mockAnvilRuntime as any);
+    tree.initialize();
+    tree._initWorkspaces();
   });
 
   describe("Constructor", () => {
@@ -74,14 +76,32 @@ describe("Tree", () => {
       expect(tree.defaultStackHeight).toBe(35);
     });
 
-    it("should have TreeHost (not concrete WindowManager)", () => {
-      expect(tree.host).toBe(mockWindowManager);
+    it("should have TreeHost (not concrete AnvilRuntime)", () => {
+      expect(tree.host).toBe(mockAnvilRuntime);
       expect(tree.host.determineSplitLayout).toBeDefined();
     });
 
-    it("should initialize workspaces", () => {
+    it("should initialize workspaces during explicit activation", () => {
       const workspaces = tree.nodeWorkpaces;
       expect(workspaces.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("explicit lifecycle", () => {
+    it("keeps a newly constructed tree inert until initialize", () => {
+      const before = (global as any).window_group.add_child.mock.calls.length;
+      const inertTree = new Tree(mockAnvilRuntime as any);
+
+      expect(inertTree.nodeWorkpaces).toHaveLength(0);
+      expect((global as any).window_group.add_child).toHaveBeenCalledTimes(before);
+    });
+
+    it("removes owned actors and state on dispose", () => {
+      tree.dispose();
+
+      expect(tree.childNodes).toHaveLength(0);
+      expect(tree.attachNode).toBeNull();
+      expect(tree.nodeValue).toBeNull();
     });
   });
 

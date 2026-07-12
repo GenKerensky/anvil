@@ -12,12 +12,13 @@ import {
   launchApp,
   getWindowGeometries,
   getNodePercents,
+  getRuntimeWindowState,
   sendAnvilCommand,
   closeAllWindows,
   clearMonitorConstraints,
   clearResizedWindows,
   setMonitorConstraint,
-  getAnvilWM,
+  getAnvilRuntime,
   getMonitorWorkArea,
 } from "../../lib/shared-commands.js";
 
@@ -46,7 +47,7 @@ function getFocusedRect() {
 function getMonitorConnector() {
   const w = global.display.get_focus_window();
   if (!w) return null;
-  return getAnvilWM().tilingRender.getMonitorConnector(w.get_monitor());
+  return getAnvilRuntime().getMonitorConnector(w.get_monitor());
 }
 
 /**
@@ -181,15 +182,11 @@ async function testDirection(layout, constraint, dir) {
     if (geo.length < 2) return false;
 
     try {
-      const wm = getAnvilWM();
       const focusedWin = global.display.get_focus_window();
-      if (focusedWin && wm.tree) {
-        const node = wm.tree.findNode(focusedWin);
-        if (node && node.parentNode) {
-          const parent = node.parentNode;
-          if (parent.isHSplit && parent.isHSplit() && !isHorizDir) return true;
-          if (parent.isVSplit && parent.isVSplit() && isHorizDir) return true;
-        }
+      if (focusedWin) {
+        const node = getRuntimeWindowState(focusedWin);
+        if (node?.parentLayout === "HSPLIT" && !isHorizDir) return true;
+        if (node?.parentLayout === "VSPLIT" && isHorizDir) return true;
       }
     } catch {
       // Fallback to geometry heuristic if tree access fails

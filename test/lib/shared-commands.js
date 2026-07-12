@@ -109,9 +109,9 @@ export async function launchApp(desktopFile, timeoutMs = 10000) {
       }
       // Force a render pass — first-frame tracking can lag behind map.
       try {
-        getAnvilWM().renderTree("e2e-launch", true);
+        getAnvilRuntime().forceRender("e2e-launch");
       } catch {
-        /* extWm may not be ready for the first window yet */
+        /* runtime may not be ready for the first window yet */
       }
       await waitForGeometryStable(1800);
       return;
@@ -132,7 +132,7 @@ export async function waitForGeometryStable(timeoutMs = 2000) {
   let prev = "";
   let stableCount = 0;
   try {
-    getAnvilWM().renderTree("e2e-settle", true);
+    getAnvilRuntime().forceRender("e2e-settle");
   } catch {
     /* ignore */
   }
@@ -406,7 +406,7 @@ export function sendKeyCombo(combo) {
  * @param {{ name: string, [key: string]: any }} action
  */
 export function sendAnvilCommand(action) {
-  const wm = getAnvilWM();
+  const wm = getAnvilRuntime();
   wm.command(action);
 }
 
@@ -426,14 +426,14 @@ export async function sendAnvilCommandAndSettle(action, timeoutMs = 3000) {
 // ---------------------------------------------------------------------------
 
 /** @returns {any} */
-export function getAnvilWM() {
+export function getAnvilRuntime() {
   const g = /** @type {any} */ (global);
-  if (g.__anvil_extWm) return g.__anvil_extWm;
+  if (g.__anvil_runtime) return g.__anvil_runtime;
 
   const state = g.__anvil_test_state;
-  if (state && state.extWm) return state.extWm;
+  if (state && state.runtime) return state.runtime;
 
-  throw new Error("Anvil extWm not available");
+  throw new Error("Anvil runtime not available");
 }
 
 /** @returns {any} */
@@ -452,20 +452,36 @@ export function getAnvilSettings() {
  * @returns {Array<{title: string | null, percent: number, rect: {x: number, y: number, width: number, height: number} | null, parentLayout: any}>}
  */
 export function getNodePercents() {
-  const wm = getAnvilWM();
-  const tree = wm.tree;
-  if (!tree) throw new Error("Anvil tree not available");
-  const windows = /** @type {any[]} */ (tree.getNodeByType("WINDOW"));
-  return windows.map(function (node) {
-    const metaWin = node.nodeValue;
-    const rect = metaWin ? metaWin.get_frame_rect() : null;
+  return getRuntimeWindowStates().map(function (node) {
     return {
-      title: metaWin ? metaWin.get_title() : "(no meta)",
+      title: node.title,
       percent: node.percent,
-      rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
-      parentLayout: node.parentNode ? node.parentNode.nodeValue : "(no parent)",
+      rect: node.rect,
+      parentLayout: node.parentLayout,
     };
   });
+}
+
+/** @returns {any[]} */
+export function getRuntimeWindowStates() {
+  const state = JSON.parse(getAnvilRuntime().getStateJson());
+  /** @type {any[]} */
+  const windows = [];
+  /** @param {any} node */
+  function visit(node) {
+    if (!node) return;
+    if (node.type === "WINDOW") windows.push(node);
+    for (const child of node.children || []) visit(child);
+  }
+  visit(state.tree);
+  return windows;
+}
+
+/** @param {any} metaWindow @returns {any | undefined} */
+export function getRuntimeWindowState(metaWindow) {
+  if (!metaWindow) return undefined;
+  const id = metaWindow.get_id();
+  return getRuntimeWindowStates().find((candidate) => candidate.windowId === id);
 }
 
 /**
@@ -478,27 +494,7 @@ export function getNodePercents() {
  */
 export function clearFloatOverridesForClass(wmClass) {
   try {
-    const wm = getAnvilWM();
-    const rules = wm._rules;
-    const configMgr = wm.ext && wm.ext.configMgr;
-    const props = (rules && rules.windowProps) || (configMgr && configMgr.windowProps);
-    if (!props || !Array.isArray(props.overrides)) return;
-    const before = props.overrides.length;
-    props.overrides = props.overrides.filter(
-      /** @param {{ wmClass?: string, wmTitle?: string, mode?: string }} o */ function (o) {
-        return !(o.wmClass === wmClass && !o.wmTitle && o.mode === "float");
-      }
-    );
-    if (props.overrides.length === before) return; // nothing to remove
-    // Persist the removal: the configMgr.windowProps setter writes windows.json
-    // back to disk so the removed override does not bleed into later runs.
-    if (configMgr) configMgr.windowProps = props;
-    if (rules) {
-      rules.windowProps = props;
-      if (typeof rules.invalidateClassificationCache === "function") {
-        rules.invalidateClassificationCache();
-      }
-    }
+    getAnvilRuntime().clearRuntimeFloatOverridesForClass(wmClass);
   } catch (e) {
     log(
       "[SharedCommands] clearFloatOverridesForClass: " +
@@ -513,12 +509,7 @@ export function clearFloatOverridesForClass(wmClass) {
 
 export function clearResizedWindows() {
   try {
-    const wm = getAnvilWM();
-    // Resize counts are owned by GrabResizeSession (architecture rule §2).
-    // Clear through the owner interface, not the removed WM._resizedWindows map.
-    if (wm && wm._grab && typeof wm._grab.clearResizedWindows === "function") {
-      wm._grab.clearResizedWindows();
-    }
+    getAnvilRuntime().clearResizeHistory();
   } catch (e) {
     log("[SharedCommands] clearResizedWindows: " + (e instanceof Error ? e.message : String(e)));
   }

@@ -1,5 +1,5 @@
 /*
- * WindowManager batch float/unfloat tests
+ * AnvilRuntime batch float/unfloat tests
  *
  * Tests for floatAllWindows, unfloatAllWindows, and TilingModeToggle.
  * Ported from jcrussell/forge
@@ -8,21 +8,21 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Batch Float", () => {
+describe("AnvilRuntime - Batch Float", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   function createTiledWindow() {
     const metaWindow = createMockWindow({
@@ -146,7 +146,7 @@ describe("WindowManager - Batch Float", () => {
   describe("TilingModeToggle command", () => {
     it("should call floatAllWindows when tiling mode is on", () => {
       ctx.settings.set_boolean("tiling-mode-enabled", true);
-      const spy = vi.spyOn(ctx.windowManager, "floatAllWindows");
+      const spy = vi.spyOn(ctx.anvilRuntime, "floatAllWindows");
 
       wm().command({ name: "TilingModeToggle" });
 
@@ -155,7 +155,7 @@ describe("WindowManager - Batch Float", () => {
 
     it("should call unfloatAllWindows when tiling mode is off", () => {
       ctx.settings.set_boolean("tiling-mode-enabled", false);
-      const spy = vi.spyOn(ctx.windowManager, "unfloatAllWindows");
+      const spy = vi.spyOn(ctx.anvilRuntime, "unfloatAllWindows");
 
       wm().command({ name: "TilingModeToggle" });
 
@@ -325,7 +325,7 @@ describe("WindowManager - Batch Float", () => {
 
     it("should handle mix of skip-tile and tiled workspaces", () => {
       // Re-create fixture with 2 workspaces for this test
-      ctx = createWindowManagerFixture({
+      ctx = createAnvilRuntimeFixture({
         globals: { workspaceManager: { workspaceCount: 2 } },
       });
       ctx.settings.set_string("workspace-skip-tile", "0");

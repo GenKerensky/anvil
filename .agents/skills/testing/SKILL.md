@@ -43,7 +43,7 @@ npm run test:unit:watch # Watch mode
 
 ### Writing a unit test
 
-Import vitest globals explicitly. Use `createWindowManagerFixture()` from
+Import vitest globals explicitly. Use `createAnvilRuntimeFixture()` from
 `test/unit/mocks/helpers/testFixtures.js`. Always call `ctx.wm.destroy()` in `afterEach`.
 
 When source imports a new `gi://` or `resource://` path: add a mock under `__mocks__/` and an alias
@@ -65,7 +65,7 @@ make test-e2e
     → gnome-shell --wayland --headless --virtual-monitor 1920x1080
          --automation-script test/e2e/runner.js
       → export async function run()
-        → test-mode=true, wait ACTIVE + __anvil_test_state.extWm
+        → test-mode=true, wait ACTIVE + __anvil_test_state.runtime
         → boot Jasmine, import suites/*.js, execute
         → write /tmp/anvil-e2e-results.json
     ← poll results, print summary
@@ -165,7 +165,7 @@ Do not add bulk “toggle every key” smoke tests (unit + schema compile cover 
 
 In GNOME 50, `Main.extensionManager.lookup(UUID)` returns a proxy. Use:
 
-- `global.__anvil_extWm` / `getAnvilWM()`
+- `global.__anvil_runtime` / `getAnvilRuntime()`
 - `global.__anvil_settings` / `getAnvilSettings()` / `getSettings()`
 - `global.__anvil_test_state` when `test-mode=true`
 
@@ -187,7 +187,7 @@ In GNOME 50, `Main.extensionManager.lookup(UUID)` returns a proxy. Use:
 | `waitForWindowCount` / `waitForGeometry`                                   | Async waits                   |
 | `sendKeyCombo` / `sendAnvilCommand`                                        | Shortcuts / WM commands       |
 | `closeAllWindows`                                                          | Cleanup                       |
-| `getAnvilWM` / `getAnvilSettings` / `getNodePercents`                      | Extension state               |
+| `getAnvilRuntime` / `getAnvilSettings` / `getNodePercents`                 | Extension state               |
 | `clearResizedWindows` / `clearMonitorConstraints` / `setMonitorConstraint` | State isolation               |
 | `windowsOverlap` / `windowsFillWorkArea`                                   | Geometry assertions           |
 

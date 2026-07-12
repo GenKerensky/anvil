@@ -1,5 +1,5 @@
 /**
- * Transient session flags for WindowManager (B2-3).
+ * Transient session flags for AnvilRuntime (B2-3).
  *
  * Groups overview / workspace / freeze lifecycle booleans so they are not a
  * loose bag of fields on the god object. Grab-specific state lives on

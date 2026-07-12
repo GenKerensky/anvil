@@ -37,7 +37,7 @@ const monitor = metaWindow.get_monitor(); // number — monitor index
 Use `move_resize_frame` for a single atomic operation (preferred over `move_frame` + separate resize):
 
 ```ts
-// Move AND resize — outer frame bounds (src/lib/extension/window.ts:1041)
+// Move AND resize — outer frame bounds (src/lib/extension/anvil-runtime.ts:1041)
 metaWindow.move_resize_frame(true, x, y, width, height);
 
 // Move only — useful for window repositioning without size change
@@ -71,7 +71,7 @@ import Meta from "gi://Meta";
 // Check state
 const isMaximized = metaWindow.is_maximized();
 
-// Partially unmaximize before tiling (src/lib/extension/window.ts:848-850)
+// Partially unmaximize before tiling (src/lib/extension/anvil-runtime.ts:848-850)
 metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
 metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
 ```
@@ -79,7 +79,7 @@ metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
 ### Stacking and floating
 
 ```ts
-// Always-on-top (src/lib/extension/window.ts:594, src/lib/extension/tree.ts:594)
+// Always-on-top (src/lib/extension/anvil-runtime.ts:594, src/lib/extension/tree.ts:594)
 metaWindow.make_above();
 metaWindow.unmake_above();
 const isAbove = metaWindow.is_above();
@@ -121,7 +121,7 @@ metaWindow.can_maximize(); // Can it be maximized?
 
 ### Window type filtering for tiling
 
-Anvil only tiles normal application windows (src/lib/extension/window.ts:1712-1720):
+Anvil only tiles normal application windows (src/lib/extension/anvil-runtime.ts:1712-1720):
 
 ```ts
 import Meta from "gi://Meta";
@@ -224,7 +224,7 @@ const display = global.display as Meta.Display;
 ### Monitor geometry
 
 ```ts
-// Get monitor rect (src/lib/extension/window.ts:955)
+// Get monitor rect (src/lib/extension/anvil-runtime.ts:955)
 const monitorRect = display.get_monitor_geometry(monitorIndex);
 
 // Neighbor monitor (src/lib/extension/utils.ts:1080)
@@ -242,7 +242,7 @@ const primaryMonitor = display.get_primary_monitor();
 // Currently focused window
 const focusWindow = display.get_focus_window();
 
-// All windows in tab-switching order (src/lib/extension/window.ts:934-937)
+// All windows in tab-switching order (src/lib/extension/anvil-runtime.ts:934-937)
 const windowsAll = display.get_tab_list(Meta.TabList.NORMAL_ALL, workspace);
 
 // Stacking order
@@ -320,7 +320,7 @@ Used for partial maximize/unmaximize:
 | `BOTH`       | Fully maximized (HORIZONTAL \| VERTICAL) |
 
 ```ts
-// Unmaximize before tiling (src/lib/extension/window.ts:848-850)
+// Unmaximize before tiling (src/lib/extension/anvil-runtime.ts:848-850)
 metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
 metaWindow.unmaximize(Meta.MaximizeFlags.BOTH);
 
@@ -332,13 +332,13 @@ metaWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
 
 Controls which windows appear in the tab-switching list:
 
-| Value            | Windows included                                                     |
-| ---------------- | -------------------------------------------------------------------- |
-| `NORMAL`         | Normal windows                                                       |
-| `DOCKS`          | Dock windows                                                         |
-| `GROUP`          | Window groups                                                        |
-| `NORMAL_ALL`     | All normal windows — used by anvil (src/lib/extension/window.ts:934) |
-| `NORMAL_ALL_MRU` | All normal windows in MRU order                                      |
+| Value            | Windows included                                                            |
+| ---------------- | --------------------------------------------------------------------------- |
+| `NORMAL`         | Normal windows                                                              |
+| `DOCKS`          | Dock windows                                                                |
+| `GROUP`          | Window groups                                                               |
+| `NORMAL_ALL`     | All normal windows — used by anvil (src/lib/extension/anvil-runtime.ts:934) |
+| `NORMAL_ALL_MRU` | All normal windows in MRU order                                             |
 
 ```ts
 const windows = display.get_tab_list(Meta.TabList.NORMAL_ALL, workspace);
@@ -381,7 +381,7 @@ const union = rect.union(otherRect);
 ### Global object access with TypeScript
 
 ```ts
-// Display singleton (src/lib/extension/window.ts)
+// Display singleton (src/lib/extension/anvil-runtime.ts)
 const display = global.display as Meta.Display;
 
 // Workspace manager
@@ -393,12 +393,12 @@ const wsm = global.workspace_manager as Meta.WorkspaceManager;
 Meta objects are GObjects — connect and disconnect follow standard GObject patterns:
 
 ```ts
-// Connect (src/lib/extension/window.ts:1521)
+// Connect (src/lib/extension/anvil-runtime.ts:1521)
 const windowSignals = [];
 windowSignals.push(metaWindow.connect("size-changed", () => { ... }));
 windowSignals.push(metaWindow.connect("position-changed", () => { ... }));
 
-// Disconnect (src/lib/extension/window.ts:1567)
+// Disconnect (src/lib/extension/anvil-runtime.ts:1567)
 for (const signal of windowSignals) {
   metaWindow.disconnect(signal);
 }
@@ -424,7 +424,7 @@ for (const actor of actors) {
 // From Clutter.Actor to Meta.Window directly
 const metaWindow = (actor as Meta.WindowActor).get_meta_window();
 
-// From node tree to window to actor back (src/lib/extension/window.ts:1722)
+// From node tree to window to actor back (src/lib/extension/anvil-runtime.ts:1722)
 const windowActor = (actor as Meta.WindowActor).get_meta_window();
 ```
 
@@ -441,7 +441,7 @@ const actor = global.get_window_actors().find(a => ...);
 
 ## Putting It Together
 
-A complete window tiling flow from anvil's codebase (src/lib/extension/window.ts:1286-1365):
+A complete window tiling flow from anvil's codebase (src/lib/extension/anvil-runtime.ts:1286-1365):
 
 ```ts
 import Meta from "gi://Meta";

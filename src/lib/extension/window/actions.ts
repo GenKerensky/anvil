@@ -1,8 +1,8 @@
 /**
- * Typed user actions for WindowManager.command().
+ * Typed user actions for AnvilRuntime.command().
  *
  * All keybindings, tests, and internal command re-entry must build AnvilAction
- * values. Dispatch is via the in-WM handler registry — do not add a mega-switch.
+ * values. Dispatch is via CommandBus — do not add a mega-switch.
  *
  * @see .agents/rules/architecture.md (rule 3: commands are data)
  */
@@ -66,7 +66,7 @@ export type NamelessAction = {
 };
 
 /**
- * Discriminated union of all commands accepted by WindowManager.command().
+ * Discriminated union of all commands accepted by AnvilRuntime.command().
  * Extend this union when adding a handler — do not pass untyped objects.
  */
 export type AnvilAction =

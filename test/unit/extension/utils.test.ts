@@ -24,7 +24,7 @@ import {
 import Meta from "gi://Meta";
 import { createMockWindow } from "../mocks/helpers/index.js";
 
-// Replicate the string enums from tree.js / window.js for use in assertions.
+// Replicate the string enums from tree.js / anvil-runtime.js for use in assertions.
 // These are created via createEnum() in the source, so values are the key names.
 const ORIENTATION_TYPES = Object.freeze({
   NONE: "NONE",

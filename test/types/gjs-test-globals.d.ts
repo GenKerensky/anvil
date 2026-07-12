@@ -16,11 +16,11 @@ export {};
 
 declare module "@girs/shell-18" {
   interface Global {
-    __anvil_extWm: object;
+    __anvil_runtime: object;
     __anvil_settings: object;
     __anvil_test_state:
       | {
-          extWm: object;
+          runtime: object;
           getTestState(): string;
         }
       | undefined;

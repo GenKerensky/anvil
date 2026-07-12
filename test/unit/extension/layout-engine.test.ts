@@ -166,8 +166,8 @@ describe("LayoutEngine", () => {
       const win = createMockWindow();
       win.get_frame_rect = () => ({ x: 0, y: 0, width: 800, height: 400 });
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win);
-      ctx.extWm.focusMetaWindow = win;
-      ctx.extWm.currentMonWsNode = monitor;
+      ctx.runtime.focusMetaWindow = win;
+      ctx.runtime.currentMonWsNode = monitor;
 
       const ran = ctx.layoutEngine.autoSplitFromFocus();
       expect(ran).toBe(true);

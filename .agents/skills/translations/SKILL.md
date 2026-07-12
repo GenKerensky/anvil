@@ -34,7 +34,7 @@ Files using this import:
 
 - `src/extension.ts`
 - `src/lib/extension/indicator.ts`
-- `src/lib/extension/window.ts`
+- `src/lib/extension/anvil-runtime.ts`
 
 ### Preferences side (GTK4/Adwaita process)
 

@@ -9,9 +9,9 @@
  *   - window-created / map reconcile loop source
  *
  * Geometry apply stays on TilingRender; float rules on RulesEngine.
- * UI / render / position-size handlers are host callbacks (no concrete WM import).
+ * UI / render / position-size handlers are host callbacks (no concrete runtime import).
  *
- * Residual Meta connects still on WindowManager (not Stage 4): grab-op, settings,
+ * Residual Meta connects still on AnvilRuntime (not Stage 4): grab-op, settings,
  * overview, workspace manager, minimize/unminimize.
  *
  * @see codebase-review.md F5 Stage 4, architecture rule 2
@@ -28,6 +28,7 @@ import { safeRaise, safeFocus, safeActivate } from "./mutter-safe.js";
 import { WINDOW_MODES, INVALID_WINDOW_TYPES } from "./window/constants.js";
 import type { AnvilMetaWindow, AnvilWindowActor } from "./window/types.js";
 import type { PointerFocusSource } from "./pointer-policy.js";
+import type { EventSchedulerPort } from "./event-scheduler.js";
 
 export interface WindowTrackerHost {
   readonly tree: Tree;
@@ -45,7 +46,7 @@ export interface WindowTrackerHost {
   updateMetaPositionSize(metaWindow: Meta.Window, from: string): void;
 
   renderTree(from: string, force?: boolean): void;
-  queueEvent(eventObj: { name: string; callback: () => void }, interval?: number): void;
+  readonly scheduler: EventSchedulerPort;
   unfreezeRender(): void;
   ensureBorderActors(actor: AnvilWindowActor): void;
   hideActorBorder(actor: AnvilWindowActor | null): void;
@@ -405,7 +406,7 @@ export class WindowTracker {
               if (Utils.isEphemeralHelperWindow(_metaWindowFocus)) {
                 return;
               }
-              host.queueEvent({
+              host.scheduler.enqueue({
                 name: "focus-update",
                 callback: () => {
                   host.unfreezeRender();
@@ -422,7 +423,7 @@ export class WindowTracker {
                 // handle the attach node
                 host.tree.attachNode = focusNodeWindow._parent;
                 if (host.floatingWindow(focusNodeWindow)) {
-                  host.queueEvent({
+                  host.scheduler.enqueue({
                     name: "raise-float",
                     callback: () => {
                       host.renderTree("raise-float-queue");
@@ -603,7 +604,7 @@ export class WindowTracker {
   }
 
   /**
-   * Connect workspace window-added for admit (called from Tree/WM bindWorkspaceSignals).
+   * Connect workspace window-added for admit through TreeHost.
    */
   onWorkspaceWindowAdded(metaWindow: Meta.Window) {
     this.admitWindow(global.display, metaWindow, {

@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import St from "gi://St";
 import Meta from "gi://Meta";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import { LAYOUT_TYPES, NODE_TYPES, ORIENTATION_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
@@ -27,7 +27,7 @@ describe("Tree Operations", () => {
 
   beforeEach(() => {
     ctx = createTreeFixture({ fullExtWm: true });
-    ctx.extWm.currentMonWsNode = ctx.tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
+    ctx.runtime.currentMonWsNode = ctx.tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
   });
 
   describe("next", () => {
@@ -286,7 +286,7 @@ describe("Tree Operations", () => {
       expect(node2.percent).toBe(0.7);
     });
 
-    it("should call WindowManager.move for both windows", () => {
+    it("should call AnvilRuntime.move for both windows", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
 
       const window1 = createMockWindow();
@@ -296,7 +296,7 @@ describe("Tree Operations", () => {
 
       ctx.layoutEngine.swapPairs(node1, node2, false);
 
-      expect(ctx.extWm.move).toHaveBeenCalledTimes(2);
+      expect(ctx.runtime.move).toHaveBeenCalledTimes(2);
     });
 
     it("should focus first window if focus=true", () => {
@@ -441,7 +441,7 @@ describe("Tree Operations", () => {
       node2.mode = WINDOW_MODES.TILE;
 
       // Mock sameParentMonitor to return false
-      ctx.extWm.sameParentMonitor.mockReturnValue(false);
+      ctx.runtime.sameParentMonitor.mockReturnValue(false);
 
       const result = ctx.layoutEngine.swap(node1, Meta.MotionDirection.RIGHT);
 
@@ -570,7 +570,7 @@ describe("Tree Operations", () => {
       // Mock next to return null
       vi.spyOn(ctx.tree, "next").mockReturnValue(null);
 
-      ctx.extWm.currentMonWsNode = monitor;
+      ctx.runtime.currentMonWsNode = monitor;
 
       // Should append/prepend to currentMonWsNode instead of returning false
       const result = ctx.layoutEngine.move(node, Meta.MotionDirection.RIGHT);

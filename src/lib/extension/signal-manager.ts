@@ -1,12 +1,12 @@
 /**
  * SignalManager — global signal bind/unbind + workspace timeout (Stage 1).
  *
- * Moved from WindowManager._bindSignals / signal ID arrays /
+ * Moved from AnvilRuntime._bindSignals / signal ID arrays /
  * _workspaceChangingTimeoutId.  Owns connect/disconnect only; the
- * _removeSignals teardown pipeline stays on WM until Stage 3.
+ * AnvilRuntime coordinates the teardown pipeline.
  *
  * This host is intentionally wide because signal binding fans out to every
- * subsystem.  It is a structural interface; consumers never import WindowManager.
+ * subsystem.  It is a structural interface; consumers never import AnvilRuntime.
  *
  * Ownership/lifecycle rules: `.agents/rules/architecture.md` (§1 lifecycle
  * purity, §2 one owner per state). Extraction rationale: `.agents/memory/decisions.md`.
@@ -23,6 +23,7 @@ import type { LayoutEngine } from "./layout-engine.js";
 import type { SettingsBridge } from "./settings-bridge.js";
 import type { PointerFocusSource } from "./pointer-policy.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
+import type { EventSchedulerPort } from "./event-scheduler.js";
 type SignalId = number;
 
 /** Host surface for SignalManager — intentionally wide (C1 accepted seam). */
@@ -40,7 +41,7 @@ export interface SignalManagerHost {
   notifyWorkspaceSettled(): void;
   notifyFocusChanged(node: Node<NodeType> | null, source: PointerFocusSource): void;
 
-  // Freeze: storage owned by SessionFlags/WM; SignalManager is a caller (C2)
+  // Freeze: storage owned by the runtime SessionFlags; SignalManager is a caller (C2)
   isRenderFrozen(): boolean;
   freezeRender(): void;
   unfreezeRender(): void;
@@ -55,8 +56,7 @@ export interface SignalManagerHost {
   handleGrabOpBegin(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp): void;
   handleGrabOpEnd(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp): void;
 
-  // Shared event queue (stays on WM as facade)
-  queueEvent(eventObj: { name: string; callback: () => void }, interval?: number): void;
+  readonly scheduler: EventSchedulerPort;
 }
 
 export class SignalManager {
@@ -64,13 +64,13 @@ export class SignalManager {
   private _signalsBound = false;
   private _workspaceChangingTimeoutId = 0;
 
-  // Signal ID arrays (moved from WM)
+  // Signal ID arrays owned by this module.
   private _displaySignals: number[] | undefined;
   private _windowManagerSignals: number[] | undefined;
   private _workspaceManagerSignals: number[] | undefined;
   private _overviewSignals: SignalId[] | null = null;
 
-  // Workspace flags (moved from WM — zero external readers, private to this module)
+  // Workspace flags have zero external readers and remain private to this module.
   private _workspaceAdded = false;
   private _workspaceRemoved = false;
 
@@ -82,7 +82,7 @@ export class SignalManager {
     return this._signalsBound;
   }
 
-  /** Bind all global non-window signals.  Called from WM.enable(). */
+  /** Bind all global non-window signals. Called from AnvilRuntime.enable(). */
   bindAll(): void {
     if (this._signalsBound) return;
 
@@ -210,8 +210,7 @@ export class SignalManager {
 
     // Mark signals bound BEFORE the workspace loop so bindWorkspaceSignals()
     // (lifecycle-gated per S2) performs the real connect for each existing
-    // workspace. The construction-time call from Tree._initWorkspaces still
-    // early-returns because the flag is false until this point.
+    // workspace. Pre-bind Tree activation calls still return early.
     this._signalsBound = true;
 
     const numberOfWorkspaces = extWsm.get_n_workspaces();
@@ -237,7 +236,7 @@ export class SignalManager {
             host.notifyFocusChanged(focusNodeWindow, "overview");
           },
         };
-        host.queueEvent(eventObj);
+        host.scheduler.enqueue(eventObj);
       }),
       Main.overview.connect("showing", () => {
         // TODO(overview-thrash): toOverview was dead state — re-implement
@@ -246,10 +245,8 @@ export class SignalManager {
     ];
   }
 
-  /** Disconnect all signals.  Called from WM.disable() (Stage 3). */
+  /** Disconnect all signals. Called from AnvilRuntime.disable(). */
   unbindAll(): void {
-    if (!this._signalsBound) return;
-
     if (this._displaySignals) {
       for (const displaySignal of this._displaySignals) {
         global.display.disconnect(displaySignal);
@@ -314,9 +311,9 @@ export class SignalManager {
    *
    * S2: defers the actual `Meta.Workspace.connect()` until signals are bound
    * (i.e. until `bindAll()` runs from `enable()`). `Tree._initWorkspaces` calls
-   * this during construction; without this guard it would connect signals
-   * outside `enable()`, violating architecture rule §1 (lifecycle purity). The
-   * construction-time call is a no-op; `bindAll()` loops the existing
+   * this during runtime activation; without this guard it would connect signals
+   * before `enable()`, violating architecture rule §1 (lifecycle purity). The
+   * pre-bind call is a no-op; `bindAll()` loops the existing
    * workspaces and does the real binding, and the runtime `workspace-added`
    * handler binds new workspaces (with `_signalsBound` true by then).
    */

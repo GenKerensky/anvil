@@ -185,7 +185,7 @@ unzip -l anvil@GenKerensky.github.com.zip
 Check `src/extension.ts` constructor vs `enable()` vs `disable()`:
 
 - Constructor: only `super(metadata)` and static data setup.
-- `enable()`: creates `Keybindings`, `WindowManager`, `FeatureIndicator`, `FeatureMenuToggle`, `ExtensionThemeManager`, connects signals, registers with `Main.panel`.
+- `enable()`: creates `Keybindings`, `AnvilRuntime`, `FeatureIndicator`, `FeatureMenuToggle`, `ExtensionThemeManager`, connects signals, registers with `Main.panel`.
 - `disable()`: destroys all objects, disconnects all signals, removes main loop sources.
 
 Run this check manually by reading `dist/extension.js` (the built output) and verifying the pattern holds.

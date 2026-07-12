@@ -1,5 +1,5 @@
 /*
- * WindowManager gap calculation tests
+ * AnvilRuntime gap calculation tests
  *
  * Tests for calculateGaps and window-gap-size behavior.
  * Ported from jcrussell/forge
@@ -7,21 +7,21 @@
 
 import { describe, it, expect, beforeEach } from "vitest";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Gaps", () => {
+describe("AnvilRuntime - Gaps", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   describe("calculateGaps", () => {
     it("should return 0 for null node", () => {

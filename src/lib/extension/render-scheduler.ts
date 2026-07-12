@@ -1,9 +1,9 @@
 /**
  * RenderScheduler — idle-coalesced render/reload scheduling + freeze protocol.
  *
- * Extracted from WindowManager.renderTree / reloadTree. Owns the
+ * Extracted from AnvilRuntime.renderTree / reloadTree. Owns the
  * _renderTreeSrcId / _reloadTreeSrcId GLib sources. Freeze state remains
- * on SessionFlags (WM); this module is a caller via host.
+ * on the runtime SessionFlags; this module is a caller via host.
  *
  * Lifecycle rules: `.agents/rules/architecture.md` (§1 every enable has a
  * disable inverse — see RenderScheduler.dispose). Extraction rationale:

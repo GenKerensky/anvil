@@ -2,7 +2,7 @@
  * BorderController — focus / split border actors (B7-2).
  *
  * Owns create/hide/show/update of tiled focus borders and split hints.
- * WindowManager remains a thin facade for host wiring and SettingsBridge.
+ * AnvilRuntime wires this owner behind its private composition seam.
  */
 
 import Gio from "gi://Gio";

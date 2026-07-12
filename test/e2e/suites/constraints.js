@@ -14,7 +14,7 @@ import {
   clearMonitorConstraints,
   clearResizedWindows,
   setMonitorConstraint,
-  getAnvilWM,
+  getAnvilRuntime,
   waitForWindowCount,
   waitForGeometryStable,
 } from "../../lib/shared-commands.js";
@@ -51,8 +51,8 @@ describe("Monitor Constraints", function () {
     const area = getMonitorWorkArea();
     const maxW = Math.floor(area.width * 0.35);
 
-    const wm = getAnvilWM();
-    const connector = wm.tilingRender.getMonitorConnector(0);
+    const wm = getAnvilRuntime();
+    const connector = wm.getMonitorConnector(0);
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, false);
     await sleep(300);
 
@@ -79,8 +79,8 @@ describe("Monitor Constraints", function () {
     const area = getMonitorWorkArea();
     const maxW = Math.floor(area.width * 0.35);
 
-    const wm = getAnvilWM();
-    const connector = wm.tilingRender.getMonitorConnector(0);
+    const wm = getAnvilRuntime();
+    const connector = wm.getMonitorConnector(0);
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, true);
     await sleep(300);
 
@@ -107,8 +107,8 @@ describe("Monitor Constraints", function () {
     const area = getMonitorWorkArea();
     const maxW = Math.floor(area.width * 0.35);
 
-    const wm = getAnvilWM();
-    const connector = wm.tilingRender.getMonitorConnector(0);
+    const wm = getAnvilRuntime();
+    const connector = wm.getMonitorConnector(0);
 
     setMonitorConstraint(connector, maxW, Math.floor(area.height * 0.35), true, false);
     await sleep(300);
@@ -134,8 +134,8 @@ describe("Monitor Constraints", function () {
     await launchApp("org.gnome.Nautilus.desktop");
     await waitForWindowCount(2, 5000);
 
-    const wm = getAnvilWM();
-    const connector = wm.tilingRender.getMonitorConnector(0);
+    const wm = getAnvilRuntime();
+    const connector = wm.getMonitorConnector(0);
 
     setMonitorConstraint(connector, 0, 0, true, false);
     await sleep(300);

@@ -1,5 +1,5 @@
 /*
- * WindowManager per-monitor window size constraint tests
+ * AnvilRuntime per-monitor window size constraint tests
  *
  * Covers tilingRender getMonitorConnector, getMonitorConstraints, enforceUltrawideSize,
  * grab-op-end resize exemption tracking, and settings-changed handler.
@@ -8,11 +8,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import GLib from "gi://GLib";
-import { GRAB_TYPES } from "../../../src/lib/extension/window.js";
+import { GRAB_TYPES } from "../../../src/lib/extension/window/constants.js";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
@@ -20,7 +20,7 @@ function getMonitorManager(): any {
   return (Meta.MonitorManager as any).get();
 }
 
-describe("WindowManager - Per-Monitor Constraints", () => {
+describe("AnvilRuntime - Per-Monitor Constraints", () => {
   let ctx: any;
 
   beforeEach(() => {
@@ -28,10 +28,10 @@ describe("WindowManager - Per-Monitor Constraints", () => {
       get_monitor_manager: () => getMonitorManager(),
     };
     MonitorManagerReset();
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   function MonitorManagerReset() {
     const mgr = getMonitorManager();

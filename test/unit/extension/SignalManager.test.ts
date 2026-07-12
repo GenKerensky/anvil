@@ -10,13 +10,13 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { SignalManager } from "../../../src/lib/extension/signal-manager.js";
-import { createWindowManagerFixture } from "../mocks/helpers/index.js";
+import { createAnvilRuntimeFixture } from "../mocks/helpers/index.js";
 
 describe("SignalManager - workspace transition lifecycle (S4)", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
   it("resets workspaceChanging and clears the timer id when unbindAll cancels the transition timer", () => {
@@ -38,16 +38,15 @@ describe("SignalManager - workspace transition lifecycle (S4)", () => {
     expect(sm.isBound).toBe(false);
   });
 
-  it("does not reset workspaceChanging when unbindAll is a no-op (never bound)", () => {
+  it("resets workspaceChanging even when activation failed before fully bound", () => {
     const host: any = { workspaceChanging: true };
     const sm = new SignalManager(host);
 
-    // Never bound → unbindAll returns immediately without touching the flag.
+    // Partial bind failures still use unbindAll for atomic lifecycle rollback.
     sm.unbindAll();
 
     expect((sm as any)._signalsBound).toBe(false);
-    // Flag is left as-is when there was no timer to cancel and nothing bound.
-    expect(host.workspaceChanging).toBe(true);
+    expect(host.workspaceChanging).toBe(false);
   });
 
   it("bindWorkspaceSignals is a no-op until signals are bound (S2 lifecycle purity)", () => {

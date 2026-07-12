@@ -1,5 +1,5 @@
 /*
- * WindowManager floating mode tests
+ * AnvilRuntime floating mode tests
  *
  * Tests for isFloatingExempt and toggleFloatingMode
  * Ported from jcrussell/forge
@@ -7,23 +7,23 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Floating Mode", () => {
+describe("AnvilRuntime - Floating Mode", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
   // Convenience accessors
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
   const configMgr = () => ctx.configMgr;
 
   describe("isFloatingExempt - Type-based", () => {
@@ -818,7 +818,7 @@ describe("WindowManager - Floating Mode", () => {
         expect(overrides.length).toBe(2);
       });
 
-      it("should update windowProps on WindowManager instance", () => {
+      it("should update windowProps on AnvilRuntime instance", () => {
         const metaWindow = createMockWindow({ wm_class: "TestApp", id: 123 });
 
         wm().addFloatOverride(metaWindow, false);
@@ -920,7 +920,7 @@ describe("WindowManager - Floating Mode", () => {
         expect(overrides.some((o: any) => o.wmId === "123")).toBe(false);
       });
 
-      it("should update windowProps on WindowManager instance", () => {
+      it("should update windowProps on AnvilRuntime instance", () => {
         configMgr().windowProps.overrides = [{ wmClass: "TestApp", mode: "float" }];
 
         const metaWindow = createMockWindow({ wm_class: "TestApp", id: 123 });

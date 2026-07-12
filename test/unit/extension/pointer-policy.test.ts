@@ -10,7 +10,7 @@ import Clutter from "gi://Clutter";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
@@ -19,21 +19,21 @@ describe("PointerPolicy", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture({ settings: { "focus-on-hover-enabled": true } });
+    ctx = createAnvilRuntimeFixture({ settings: { "focus-on-hover-enabled": true } });
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
   const pointerPolicy = () => wm().pointerPolicy!;
 
   describe("always-on construction (B9-2)", () => {
     it("constructs PointerPolicy even when pointer prefs are disabled", () => {
-      ctx = createWindowManagerFixture();
+      ctx = createAnvilRuntimeFixture();
       expect(wm().pointerPolicy).not.toBeNull();
       expect(wm().shouldFocusOnHover).toBe(false);
     });
 
     it("enables hover focus via shouldFocusOnHover without recreating", () => {
-      ctx = createWindowManagerFixture();
+      ctx = createAnvilRuntimeFixture();
       const policy = wm().pointerPolicy;
       expect(policy).not.toBeNull();
 
@@ -44,7 +44,7 @@ describe("PointerPolicy", () => {
     });
 
     it("disables hover focus without destroying PointerPolicy", () => {
-      ctx = createWindowManagerFixture({ settings: { "focus-on-hover-enabled": true } });
+      ctx = createAnvilRuntimeFixture({ settings: { "focus-on-hover-enabled": true } });
       expect(wm().pointerPolicy).not.toBeNull();
       const policy = wm().pointerPolicy;
 

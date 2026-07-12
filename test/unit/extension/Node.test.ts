@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import St from "gi://St";
 import { createMockWindow } from "../mocks/helpers/index.js";
 

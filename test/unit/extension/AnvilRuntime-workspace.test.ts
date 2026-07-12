@@ -1,5 +1,5 @@
 /*
- * WindowManager workspace management tests
+ * AnvilRuntime workspace management tests
  *
  * Tests for workspace-related operations, workspace-skip-tile,
  * and per-workspace float/tile state.
@@ -11,20 +11,20 @@ import Meta from "gi://Meta";
 import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Workspace", () => {
+describe("AnvilRuntime - Workspace", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture({
+    ctx = createAnvilRuntimeFixture({
       globals: { workspaceManager: { workspaceCount: 3, activeWorkspaceIndex: 0 } },
     });
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   describe("getWindowsOnWorkspace", () => {
     it("should return empty array for non-existent workspace", () => {

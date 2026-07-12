@@ -40,6 +40,7 @@ import type {
   WindowResizeAction,
 } from "./window/actions.js";
 import type { CommandBusHost } from "./command-bus.js";
+import type { EventSchedulerPort } from "./event-scheduler.js";
 
 /** Host surface consumed by the command-handlers factory (C1 accepted wide seam). */
 export interface CommandHandlerHost {
@@ -51,14 +52,13 @@ export interface CommandHandlerHost {
   readonly focusController: FocusController;
   readonly tilingRender: TilingRender;
   readonly rulesEngine: RulesEngine;
-  readonly eventQueueLength: number;
+  readonly scheduler: EventSchedulerPort;
   readonly prefsTitle: string;
 
   findNodeWindow(w: Meta.Window): Node<NodeType> | null;
   move(w: Meta.Window, rect: RectLike): void;
   moveCenter(w: Meta.Window): void;
   renderTree(from: string, force?: boolean): void;
-  queueEvent(ev: { name: string; callback: () => void }, interval?: number): void;
   notifyFocusChanged(node: Node<NodeType> | null, source: PointerFocusSource): void;
   updateStackedFocus(n: Node<NodeType> | null | undefined): void;
   updateTabbedFocus(n: Node<NodeType> | null | undefined): void;
@@ -89,7 +89,7 @@ function handleFloat(host: CommandHandlerHost, action: FloatAction) {
   const focusWindow = host.focusMetaWindow;
   const focusNodeWindow = host.findNodeWindow(focusWindow!);
 
-  // Call same-module helper directly; do not round-trip through WM (S6).
+  // Call same-module helper directly; do not round-trip through the runtime (S6).
   toggleFloatingMode(host, action, focusWindow!);
 
   const rectRequest = {
@@ -127,10 +127,10 @@ function handleMove(host: CommandHandlerHost, action: DirectionAction) {
   if (!focusNodeWindow) {
     focusNodeWindow = host.findNodeWindow(host.focusMetaWindow!);
   }
-  host.queueEvent({
+  host.scheduler.enqueue({
     name: "move",
     callback: () => {
-      if (host.eventQueueLength <= 0) {
+      if (host.scheduler.pendingCount <= 0) {
         host.unfreezeRender();
         if (focusNodeWindow!.parentNode!.layout === LAYOUT_TYPES.STACKED) {
           // LayoutEngine owns the stacked reparent-to-raise (review S1).
@@ -388,7 +388,7 @@ function handleSnapLayoutMove(host: CommandHandlerHost, action: SnapLayoutMoveAc
     host.addFloatOverride(metaWindow, false);
   }
   host.move(metaWindow, focusNodeWindow.rect!);
-  host.queueEvent({
+  host.scheduler.enqueue({
     name: "snap-layout-move",
     callback: () => {
       host.renderTree("snap-layout-move");
@@ -418,7 +418,7 @@ function handleWindowResize(host: CommandHandlerHost, action: WindowResizeAction
   };
   const grabOp = grabByDir[action.direction];
   if (grabOp !== undefined) {
-    // Call same-module helper directly; do not round-trip through WM (S6).
+    // Call same-module helper directly; do not round-trip through the runtime (S6).
     resize(host, grabOp, action.amount);
   }
 }
@@ -430,7 +430,7 @@ function handleWindowClose(host: CommandHandlerHost) {
   }
 }
 
-// --- Shared module-level functions (WM facades keep these for the test surface)
+// --- Shared module-level command functions
 
 export function toggleFloatingMode(
   host: CommandHandlerHost,
@@ -503,11 +503,11 @@ export function resize(host: CommandHandlerHost, grabOp: Meta.GrabOp, amount: nu
     }
   }
   host.move(metaWindow, rect);
-  host.queueEvent(
+  host.scheduler.enqueue(
     {
       name: "manual-resize",
       callback: () => {
-        if (host.eventQueueLength === 0) {
+        if (host.scheduler.pendingCount === 0) {
           host.endGrab(metaWindow, grabOp);
         }
       },
@@ -519,7 +519,7 @@ export function resize(host: CommandHandlerHost, grabOp: Meta.GrabOp, amount: nu
 // --- Factory
 
 /**
- * Build the CommandBusHost handler table (WM wraps it in a CommandBus). No GLib
+ * Build the CommandBusHost handler table (AnvilRuntime wires it to CommandBus). No GLib
  * sources are owned here: handlePrefsOpen calls host.ext.openPreferences(); the
  * original _prefsOpenSrcId was vestigial dead state (declared, never assigned)
  * and was removed rather than carried forward (correction to plan C8).

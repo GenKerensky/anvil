@@ -8,10 +8,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import { NODE_TYPES } from "../../src/lib/extension/tree.js";
-import { WINDOW_MODES } from "../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../src/lib/extension/window/constants.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "./mocks/helpers/index.js";
 
@@ -19,12 +19,12 @@ describe("Integration - Window Operations", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture({
+    ctx = createAnvilRuntimeFixture({
       settings: { "auto-split-enabled": true },
     });
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   function createWindow(overrides = {}) {
     const metaWindow = createMockWindow({
@@ -190,7 +190,7 @@ describe("Integration - Window Operations", () => {
   describe("multiple workspaces", () => {
     it("should handle windows on different workspaces", () => {
       // Re-create fixture with 2 workspaces
-      ctx = createWindowManagerFixture({
+      ctx = createAnvilRuntimeFixture({
         globals: { workspaceManager: { workspaceCount: 2 } },
         settings: { "auto-split-enabled": true },
       });

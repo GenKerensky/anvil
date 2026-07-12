@@ -1,5 +1,5 @@
 /*
- * WindowManager border actor tests
+ * AnvilRuntime border actor tests
  *
  * Tests for lazy border actor creation, settings toggles, and split-border visibility.
  */
@@ -8,26 +8,26 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { LAYOUT_TYPES, NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Borders", () => {
+describe("AnvilRuntime - Borders", () => {
   const trackTestWindow = (ctx: any) => {
     const window = createMockWindow({
       wm_class: "TestApp",
       title: "Test Window",
       workspace: ctx.workspaces[0],
     });
-    vi.spyOn(ctx.windowManager._tracker, "postProcessWindow").mockImplementation(() => {});
-    vi.spyOn(ctx.windowManager, "queueEvent").mockImplementation(() => {});
-    ctx.windowManager._tracker.trackWindow(ctx.display, window);
+    vi.spyOn(ctx.anvilRuntime._tracker, "postProcessWindow").mockImplementation(() => {});
+    vi.spyOn(ctx.anvilRuntime._eventScheduler, "enqueue").mockImplementation(() => {});
+    ctx.anvilRuntime._tracker.trackWindow(ctx.display, window);
     return window;
   };
 
   describe("trackWindow border actors", () => {
     it("should not create a border actor when both border prefs are false", () => {
-      const ctx = createWindowManagerFixture({
+      const ctx = createAnvilRuntimeFixture({
         settings: {
           "focus-border-toggle": false,
           "split-border-toggle": false,
@@ -41,7 +41,7 @@ describe("WindowManager - Borders", () => {
     });
 
     it("should create a border actor when focus-border-toggle is true", () => {
-      const ctx = createWindowManagerFixture({
+      const ctx = createAnvilRuntimeFixture({
         settings: {
           "focus-border-toggle": true,
           "split-border-toggle": false,
@@ -58,7 +58,7 @@ describe("WindowManager - Borders", () => {
 
   describe("settings toggles", () => {
     it("should destroy border actors when toggled off at runtime", () => {
-      const ctx = createWindowManagerFixture({
+      const ctx = createAnvilRuntimeFixture({
         settings: {
           "focus-border-toggle": true,
           "split-border-toggle": false,
@@ -70,8 +70,8 @@ describe("WindowManager - Borders", () => {
       expect(actor.border).not.toBeNull();
 
       ctx.settings.set_boolean("focus-border-toggle", false);
-      expect(ctx.windowManager._bordersEnabled()).toBe(false);
-      ctx.windowManager.destroyAllBorderActors();
+      expect(ctx.anvilRuntime._bordersEnabled()).toBe(false);
+      ctx.anvilRuntime.destroyAllBorderActors();
 
       expect(actor.border).toBeUndefined();
       expect(ctx.windowGroup._children).not.toContain(actor.border);
@@ -80,7 +80,7 @@ describe("WindowManager - Borders", () => {
 
   describe("showWindowBorders split border", () => {
     it("should show splitBorder for V-split when split-border is enabled and window is not maximized", () => {
-      const ctx = createWindowManagerFixture({
+      const ctx = createAnvilRuntimeFixture({
         settings: {
           "focus-border-toggle": true,
           "split-border-toggle": true,
@@ -102,7 +102,7 @@ describe("WindowManager - Borders", () => {
 
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      ctx.windowManager._borders.showWindowBorders();
+      ctx.anvilRuntime._borders.showWindowBorders();
 
       const actor = metaWindow.get_compositor_private();
       expect(actor.splitBorder).toBeTruthy();

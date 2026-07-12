@@ -38,14 +38,14 @@ Source in `src/lib/extension/*.ts` → tests in `test/unit/extension/*.test.ts`.
 
 Enforceable rules: **`.agents/rules/architecture.md`**. Read that before tiling-core work.
 
-`window.ts` / `WindowManager` is the shell-facing entry today. **Big-bang refactors of it are
+`anvil-runtime.ts` / `AnvilRuntime` is the shell-facing entry today. **Big-bang refactors of it are
 allowed** (split, rewrite, rename) as long as ownership (§2) and behavior/tests hold.
 
 | Seam (today)             | Notes                                                          |
 | ------------------------ | -------------------------------------------------------------- |
-| `window.ts`              | Shell facade; free to refactor; prefer logic in owner modules  |
+| `anvil-runtime.ts`       | Shell facade; free to refactor; prefer logic in owner modules  |
 | `window/actions.ts`      | `AnvilAction` union; all user commands are data                |
-| `command-bus.ts`         | Named handler table; `WindowManager.command()` delegates       |
+| `command-bus.ts`         | Named handler table; `AnvilRuntime.command()` delegates        |
 | `command-handlers.ts`    | Handler implementations + `createCommandHandlers()` factory    |
 | `drag-drop-tile.ts`      | Drag-drop tiling preview and placement logic                   |
 | `signal-manager.ts`      | Global signal bind/unbind + workspace timeout                  |
@@ -62,7 +62,7 @@ allowed** (split, rewrite, rename) as long as ownership (§2) and behavior/tests
 | `keybinding-table.ts`    | Schema key → AnvilAction table                                 |
 | `settings-bridge.ts`     | GSettings changed → host handler map (prefs→shell bus)         |
 | `TilingRender`           | Sole geometry owner (gaps, constraints, frames)                |
-| `Tree`                   | Structure only; **TreeHost** (no WindowManager import)         |
+| `Tree`                   | Structure only; **TreeHost** (no AnvilRuntime import)          |
 | `PointerPolicy`          | Always constructed; hover/warp enable via settings             |
 | `utils/*`                | geometry / window-filters / decorations / version              |
 

@@ -1,7 +1,7 @@
 /**
  * DecorationLayout — tab/con show/hide per workspace.
  *
- * Extracted from WindowManager.updateDecorationLayout.
+ * Extracted from AnvilRuntime.updateDecorationLayout.
  * Reads tree, focusMetaWindow, settings via host. Calls into
  * tab-decoration.ts functions for actor show/hide as needed.
  *

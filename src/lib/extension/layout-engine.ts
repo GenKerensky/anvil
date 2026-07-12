@@ -5,7 +5,7 @@
  * reset/redistribute, determineSplitLayout, autoSplitFromFocus.
  *
  * Tree retains structure (Node, createNode, removeNode, next, …) and thin
- * delegates to WindowManager.layoutEngine for the ops above (Stage 5 bridge).
+ * delegates to AnvilRuntime.layoutEngine for the ops above (Stage 5 bridge).
  * Frame apply and focus activation go through LayoutHost (not TilingRender).
  *
  * @see codebase-review.md F5 Stage 5, architecture rule 2

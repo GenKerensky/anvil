@@ -17,14 +17,14 @@ JSDoc, `@deprecated`, TODO notes) unless factually wrong or superseded.
 
 ## Test gates by change type
 
-| Change type                          | Must pass                                        |
-| ------------------------------------ | ------------------------------------------------ |
-| Source `.ts` or `.js`                | `typecheck`, `lint`; should also run `test:unit` |
-| Unit test `.test.ts`                 | `test:unit`, `typecheck`                         |
-| E2E suite `.js`                      | `make test-e2e`, `typecheck:e2e`                 |
-| E2E lib / runner `.js`               | `typecheck:e2e`; should also run `make test-e2e` |
-| GSettings schema                     | `make test-e2e` (host shell)                     |
-| `window.ts` structural refactor only | `test:unit` (+ typecheck/lint); E2E optional     |
-| `window.ts` behavior change          | Unit; E2E recommended for Meta lifecycle paths   |
+| Change type                                 | Must pass                                        |
+| ------------------------------------------- | ------------------------------------------------ |
+| Source `.ts` or `.js`                       | `typecheck`, `lint`; should also run `test:unit` |
+| Unit test `.test.ts`                        | `test:unit`, `typecheck`                         |
+| E2E suite `.js`                             | `make test-e2e`, `typecheck:e2e`                 |
+| E2E lib / runner `.js`                      | `typecheck:e2e`; should also run `make test-e2e` |
+| GSettings schema                            | `make test-e2e` (host shell)                     |
+| `anvil-runtime.ts` structural refactor only | `test:unit` (+ typecheck/lint); E2E optional     |
+| `anvil-runtime.ts` behavior change          | Unit; E2E recommended for Meta lifecycle paths   |
 
 Full test layer documentation: `.agents/skills/testing/SKILL.md`.

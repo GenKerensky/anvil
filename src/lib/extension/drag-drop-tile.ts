@@ -1,7 +1,7 @@
 /**
  * DragDropTile — drag-drop tiling preview and placement logic (Stage 0).
  *
- * Moved from WindowManager.moveWindowToPointer / findNodeWindowAtPointer /
+ * Moved from AnvilRuntime.moveWindowToPointer / findNodeWindowAtPointer /
  * _findNodeWindowAtPointer / _getDragDropCenterPreviewStyle.
  *
  * This module computes the drop **plan** (region hit-test + resolved container,
@@ -33,9 +33,9 @@ export interface DragDropTileHost {
   readonly tree: Tree;
   readonly settings: Gio.Settings;
   readonly layoutEngine: LayoutEngine;
-  /** Shared with GrabResizeSession; storage owned by WM. Read-only here. */
+  /** Shared with GrabResizeSession; storage owned by AnvilRuntime. Read-only here. */
   readonly nodeWinAtPointer: Node<NodeType> | null;
-  /** Read-only view of grab cancel flag (owned by GrabResizeSession). Routed via WM. */
+  /** Read-only view of grab cancel flag owned by GrabResizeSession. */
   readonly cancelGrab: boolean;
   sortedWindows: Meta.Window[];
   renderTree(from: string, force?: boolean): void;

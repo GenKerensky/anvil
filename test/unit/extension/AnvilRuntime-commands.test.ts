@@ -1,5 +1,5 @@
 /*
- * WindowManager command dispatcher tests
+ * AnvilRuntime command dispatcher tests
  *
  * Tests for the command() method covering all keybinding actions.
  * Ported from jcrussell/forge
@@ -7,22 +7,22 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import { NODE_TYPES, LAYOUT_TYPES, ORIENTATION_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Commands", () => {
+describe("AnvilRuntime - Commands", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
   const configMgr = () => ctx.configMgr;
 
   describe("FloatToggle", () => {
@@ -94,7 +94,7 @@ describe("WindowManager - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const queueSpy = vi.spyOn(wm(), "queueEvent");
+      const queueSpy = vi.spyOn(wm()._eventScheduler, "enqueue");
 
       wm().command({ name: "Move", direction: "LEFT" });
 

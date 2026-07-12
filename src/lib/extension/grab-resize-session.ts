@@ -31,6 +31,7 @@ import {
 } from "./tree.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type { AnvilMetaWindow } from "./window/types.js";
+import type { EventSchedulerPort } from "./event-scheduler.js";
 
 export type MonitorConstraints = {
   maxWidth: number;
@@ -51,9 +52,7 @@ export interface GrabResizeHost {
   freezeRender(): void;
   unfreezeRender(): void;
   renderTree(from: string, force?: boolean): void;
-  queueEvent(ev: { name: string; callback: () => void }, interval?: number): void;
-  /** Length of WM event queue (keyboard resize end waits until empty). */
-  readonly eventQueueLength: number;
+  readonly scheduler: EventSchedulerPort;
   move(metaWindow: Meta.Window, rect: RectLike): void;
   calculateGaps(node: Node<any>): number;
   processNode(node: Node<any>): void;
@@ -206,11 +205,11 @@ export class GrabResizeSession {
         break;
     }
     host.move(metaWindow, rect);
-    host.queueEvent(
+    host.scheduler.enqueue(
       {
         name: "manual-resize",
         callback: () => {
-          if (host.eventQueueLength === 0) {
+          if (host.scheduler.pendingCount === 0) {
             this.end(display, metaWindow, grabOp);
           }
         },

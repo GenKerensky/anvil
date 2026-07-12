@@ -21,7 +21,7 @@ SIGNATURE_RULES: list[tuple[str, str]] = [
     ("extension-crash", r"Extension error.*anvil"),
     ("resize-clamp", r"\[Anvil\].*resize|_resizedWindows"),
     ("wl-clipboard", r"wl-clipboard|isEphemeralHelperWindow"),
-    ("proxy-blocked", r"getSettings|extWm.*null"),
+    ("proxy-blocked", r"getSettings|runtime.*null"),
 ]
 
 SIGNATURE_HINTS: dict[str, list[str]] = {
@@ -30,7 +30,7 @@ SIGNATURE_HINTS: dict[str, list[str]] = {
         "Grep gnome-shell.log for JS stack after 'Extension error'",
     ],
     "resize-clamp": [
-        "Inspect _resizedWindows Map in src/lib/extension/window.ts",
+        "Inspect resize history in src/lib/extension/grab-resize-session.ts",
         "Verify count ≥ 2 before resize exemption (decisions.md)",
     ],
     "wl-clipboard": [
@@ -38,7 +38,7 @@ SIGNATURE_HINTS: dict[str, list[str]] = {
         "Check src/config/windows.json float entry for wl-clipboard",
     ],
     "proxy-blocked": [
-        "Use global.__anvil_extWm / global.__anvil_settings, not ext.extWm",
+        "Use global.__anvil_runtime / global.__anvil_settings, not ext.runtime",
         "Ensure test-mode=true before enable in isolated session",
     ],
 }

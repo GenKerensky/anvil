@@ -1,5 +1,5 @@
 /*
- * WindowManager window movement tests
+ * AnvilRuntime window movement tests
  *
  * Tests for move, moveCenter, rectForMonitor, and resize.
  * Ported from jcrussell/forge
@@ -8,21 +8,21 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Movement", () => {
+describe("AnvilRuntime - Movement", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   describe("move", () => {
     it("should do nothing when metaWindow is null", () => {

@@ -2,7 +2,7 @@
  * CommandBus — AnvilAction registry (B3-1, B10-2).
  *
  * Named command table (Hyprland dispatcher style). Handlers are registered by
- * name; WindowManager wires host methods. Keybindings build AnvilAction values
+ * name; AnvilRuntime wires host methods. Keybindings build AnvilAction values
  * and call dispatch — no mega-switch.
  *
  * @see codebase-review.md F5 Stage 1 residual, architecture rule 3

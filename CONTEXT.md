@@ -28,6 +28,11 @@ _Avoid_: workspace switch handler, ws change event
 A user drag-resize of a tiled window that redistributes space between adjacent windows in the tree.
 _Avoid_: window resize, mutter grab
 
+**Anvil Runtime**:
+The active, GNOME-aware tiling system that owns subsystem composition, the Tiling Tree, and
+coordinated enable/disable lifecycle.
+_Avoid_: window manager, global controller, pure tiling core
+
 ## Tree / render invariants
 
 1. Every **WINDOW** node has a **MONITOR** ancestor.

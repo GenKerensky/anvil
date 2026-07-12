@@ -2,7 +2,7 @@
  * RulesEngine — ordered float/tile classification for Meta windows.
  *
  * Single owner for float/tile decisions (JSON overrides + built-in rules).
- * WindowManager is a thin facade; do not reintroduce parallel exempt logic.
+ * AnvilRuntime wires this owner; do not reintroduce parallel exempt logic.
  *
  * Evaluation order (behavior-preserving; do not reorder casually):
  *   1. null window              → float exempt
@@ -252,7 +252,7 @@ export class RulesEngine {
     return { floatExempt: false, source: "default-tile" };
   }
 
-  /** Same boolean semantics as historical WindowManager.isFloatingExempt. */
+  /** Same boolean semantics as historical AnvilRuntime.isFloatingExempt. */
   isFloatingExempt(metaWindow: Meta.Window | null): boolean {
     return this.match(metaWindow).floatExempt;
   }

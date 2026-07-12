@@ -1,5 +1,5 @@
 /*
- * WindowManager resized counter race condition tests
+ * AnvilRuntime resized counter race condition tests
  *
  * Tests that _handleGrabOpEnd increments the _resizedWindows counter
  * on the correct window (_metaWindow, the window that was actually resized)
@@ -16,7 +16,7 @@ import GLib from "gi://GLib";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
@@ -52,7 +52,7 @@ function setupWindowOnMonitor(ctx: any, monitorIndex = 0, windowId: any = undefi
   return metaWindow;
 }
 
-describe("WindowManager - Resized Counter Race Fix", () => {
+describe("AnvilRuntime - Resized Counter Race Fix", () => {
   let ctx: any;
 
   beforeEach(() => {
@@ -60,10 +60,10 @@ describe("WindowManager - Resized Counter Race Fix", () => {
       get_monitor_manager: () => getMonitorManager(),
     };
     MonitorManagerReset();
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   describe("_handleGrabOpEnd - counter increments on _metaWindow not focusMetaWindow", () => {
     it("should increment counter on _metaWindow when focusMetaWindow is different", () => {

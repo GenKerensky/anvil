@@ -1,8 +1,26 @@
 # Architecture Decisions
 
+## Anvil Runtime replacement (2026-07-12)
+
+- **`AnvilRuntime` replaces `WindowManager`** as the active GNOME-aware tiling system. It owns the
+  owner-module graph, host adapters, Tiling Tree state, and coordinated runtime lifecycle.
+- **`AnvilExtension` remains the GNOME extension host** and owns GNOME settings overrides, theme,
+  session-mode, Quick Settings, and global automation exposure.
+- **Construction is inert.** Runtime graph construction and Tiling Tree actor/workspace activation
+  occur in `AnvilRuntime.enable()`, not constructors.
+- **Enable is atomic.** A partial failure disposes completed work, clears graph references, returns
+  to `disabled`, and permits retry. Enable/disable are idempotent.
+- **`EventScheduler` owns named FIFO delayed work**, its GLib source, pending count, and disposal.
+- **Automation hard rename:** `global.__anvil_runtime` / `getAnvilRuntime()` replace the old WM names
+  without aliases. E2E and debug code use `AnvilRuntimeTestProbe`, never private owner fields.
+- **The runtime may exceed the soft module budget** because composition order, private host adapters,
+  atomic rollback, and lifecycle teardown form one deep implementation behind a small interface.
+  Extracting a host-wiring factory would fail the deletion test by moving the same graph knowledge;
+  durable tiling behavior remains in its established owner modules.
+
 ## Test infrastructure
 
-- **`global.__anvil_extWm`** set in `enable()` always (not just test-mode) — bypasses GNOME 50 lookup
+- **`global.__anvil_runtime`** set in `enable()` always (not just test-mode) — bypasses GNOME 50 lookup
   proxy.
 - **`global.__anvil_settings`** set in `enable()` always — `getSettings()` blocked by proxy too.
 - **No GSettings writes from runner.js** — devkit shares host `~/.config/dconf/user`.
@@ -10,7 +28,7 @@
 - **Resolution fixed** to 1920×1080 via `--headless --virtual-monitor 1920x1080` (not `--devkit`,
   which adds a second 1280×800 monitor).
 - **`ext.getSettings()`** (base Extension method, proxied) for constraint read/write in test helpers.
-- **`sendKeyCombo()` / `getAnvilWM()`** use `global.__anvil_extWm`.
+- **`sendKeyCombo()` / `getAnvilRuntime()`** use `global.__anvil_runtime`.
 
 ## Resize exemption
 

@@ -26,11 +26,11 @@ Prefs write → GSettings / windows.json reload trigger → shell reacts
 
 | Role                        | Module(s)                                                                |
 | --------------------------- | ------------------------------------------------------------------------ |
-| Shell facade / public API   | `window.ts` (`WindowManager`) — may be refactored or split freely        |
+| Shell facade / public API   | `anvil-runtime.ts` (`AnvilRuntime`) — may be refactored or split freely  |
 | Typed user actions          | `window/actions.ts` + `command-bus.ts`                                   |
 | Float/tile rules            | `rules-engine.ts`                                                        |
 | Window admit/destroy        | `window-tracker.ts` (`admitWindow`)                                      |
-| Tree structure              | `tree.ts` + **TreeHost** (no `WindowManager` import)                     |
+| Tree structure              | `tree.ts` + **TreeHost** (no `AnvilRuntime` import)                      |
 | Layout algebra + percents   | `layout-engine.ts`                                                       |
 | Focus entry                 | `focus-controller.ts` (+ `LayoutEngine.focus`)                           |
 | Frame geometry              | `tiling-render.ts`                                                       |
@@ -54,7 +54,7 @@ Prefs write → GSettings / windows.json reload trigger → shell reacts
 - Constructors: fields and wiring only — no signal connects, no UI creation, no Shell mutation.
 - Extension subsystem fields are honest nulls while disabled (private `_x` + throwing getters);
   do **not** reintroduce `null as unknown as T` on disable.
-- `WindowManager.enable()` sets `disabled = false`; `disable()` sets `disabled = true`.
+- `AnvilRuntime.enable()` sets `disabled = false`; `disable()` sets `disabled = true`.
 - Wire subsystems after construction (`wireKeybindings`); getters must not lazy-create
   Keybindings or other heavy objects.
 
@@ -76,10 +76,10 @@ Do **not** invent a second write path.
 | Tab strip UI                       | `tab-decoration.ts`                                | Building St tabs inside `tree.ts`                           |
 | Directional focus helpers          | `FocusController`                                  | Duplicating stacked/tabbed raise logic in command handlers  |
 | GSettings reactions                | `SettingsBridge`                                   | Mega-`switch (key)` on WM                                   |
-| User command dispatch              | `CommandBus` via `WindowManager.command()`         | New open-coded `switch (action.name)`                       |
+| User command dispatch              | `CommandBus` via `AnvilRuntime.command()`          | New open-coded `switch (action.name)`                       |
 
 **Render scheduling:** idle coalesce, freeze, and tiling-mode gate may live on the shell entry
-that calls `TilingRender` (today: `WindowManager.renderTree`). Geometry **apply** stays on
+that calls `TilingRender` (today: `AnvilRuntime.renderTree`). Geometry **apply** stays on
 `TilingRender`.
 
 ---
@@ -100,15 +100,15 @@ that calls `TilingRender` (today: `WindowManager.renderTree`). Geometry **apply*
 
 ---
 
-## 4. Module budget — `window.ts` may be refactored freely
+## 4. Module budget — `anvil-runtime.ts` may be refactored freely
 
-**Big-bang refactors of `src/lib/extension/window.ts` are allowed and encouraged** when they
+**Big-bang refactors of `src/lib/extension/anvil-runtime.ts` are allowed and encouraged** when they
 preserve behavior and the ownership rules in §2. Do **not** treat historical “freeze growth”
 or “incremental only” guidance as a ban.
 
 - Prefer landing durable logic in the owner modules (tracker, layout, render, rules, …).
 - Soft module budget: **~500 LOC** per file — split when exceeded.
-- After a refactor, the public shell API used by tests/E2E (`command`, `extWm`, test probe)
+- After a refactor, the public shell API used by tests/E2E (`command`, `runtime`, test probe)
   should remain usable or be updated in the same change with tests.
 - Incremental extractions and full rewrites are both valid tactics.
 
@@ -145,7 +145,7 @@ or “incremental only” guidance as a ban.
 - Meta monkey-patches stay centralized in `window/types.ts`.
 - Discriminated unions for commands; typed search criteria on the tree (`NodeSearchCriteria`).
 - Prefer host interfaces (`TreeHost`, `WindowTrackerHost`, `CommandBusHost`, …) over importing
-  concrete `WindowManager` into subsystems.
+  concrete `AnvilRuntime` into subsystems.
 
 ---
 
@@ -168,9 +168,9 @@ or “incremental only” guidance as a ban.
 - Pure layout/rules/commands: unit-tested.
 - E2E: prefer **tree percents** and relative geometry; use `--tag` for PR smoke; full suite
   pre-release (`make test-e2e`).
-- Official test snapshot: `Tree.serializeForTest` / `WindowManager.getTestStateJson` /
+- Official test snapshot: `Tree.serializeForTest` / `AnvilRuntime.getTestStateJson` /
   `AnvilExtension.getTestState` — do not walk private `_nodes` / `_tree` from outside.
-- Changes that touch `window.ts` or lifecycle: unit + consider E2E (see workflow rules).
+- Changes that touch `anvil-runtime.ts` or lifecycle: unit + consider E2E (see workflow rules).
 
 ---
 
@@ -206,10 +206,10 @@ Use project terms in code and APIs:
 ```text
 tree (structure, TreeHost)  ←  layout-engine
                             ←  window-tracker / command-bus / tiling-render
-window.ts (or successor)    →  wires all of the above
+anvil-runtime.ts (or successor)    →  wires all of the above
 ```
 
-- **`tree.ts` must not import `WindowManager`.** Use `TreeHost`.
+- **`tree.ts` must not import `AnvilRuntime`.** Use `TreeHost`.
 - Subsystems take narrow host interfaces, not the concrete shell facade class.
 - Avoid new cycles: Keybindings → CommandBus/command API; never Tree → full WM.
 
@@ -232,7 +232,7 @@ window.ts (or successor)    →  wires all of the above
 Before marking a tiling-core task done:
 
 1. [ ] Correct **owner** from the table in §2; no second writer (refactor may move code out of
-       or restructure `window.ts`).
+       or restructure `anvil-runtime.ts`).
 2. [ ] User-facing behavior is an **AnvilAction** + CommandBus/keybinding table entry if applicable.
 3. [ ] Rules/float changes only in **RulesEngine** (+ shared schema if JSON shape changes).
 4. [ ] Lifecycle: enable/disable paired; no getter side effects; no leaky GLib sources.
@@ -245,21 +245,21 @@ Before marking a tiling-core task done:
 
 ## Anti-patterns (from the review — do not reintroduce)
 
-| Anti-pattern                                          | Do this instead                                         |
-| ----------------------------------------------------- | ------------------------------------------------------- |
-| New feature logic only on a god-class `WindowManager` | Owner module + host wire (`window.ts` refactor is fine) |
-| Mega-switch on `action.name` or settings key          | CommandBus / SettingsBridge registry                    |
-| `isFloatingExempt` copy-paste / dual classification   | RulesEngine only                                        |
-| Tree importing WM; Clutter tabs inside Node           | TreeHost; `tab-decoration.ts`                           |
-| `command({ name: "Split" })` from track               | `LayoutEngine.autoSplitFromFocus`                       |
-| Busy 120×16ms reconcile                               | Backoff + stop when stable                              |
-| `percent === 0` meaning unset                         | `undefined` + `isUnsetPercent`                          |
-| Four near-identical resize action names               | One action + direction enum                             |
-| Lazy-create Keybindings in a getter                   | `wireKeybindings` after construct                       |
-| `null as unknown as T` on extension disable           | Nullable fields / getters                               |
-| Exact pixel E2E as primary proof                      | Percents / relative geometry                            |
-| Ad-hoc timeouts without names                         | Named session constants + comments                      |
-| Substring class match as default                      | Exact / glob / `re:` / `~` policy                       |
+| Anti-pattern                                         | Do this instead                                                |
+| ---------------------------------------------------- | -------------------------------------------------------------- |
+| New feature logic only on a god-class `AnvilRuntime` | Owner module + host wire (`anvil-runtime.ts` refactor is fine) |
+| Mega-switch on `action.name` or settings key         | CommandBus / SettingsBridge registry                           |
+| `isFloatingExempt` copy-paste / dual classification  | RulesEngine only                                               |
+| Tree importing WM; Clutter tabs inside Node          | TreeHost; `tab-decoration.ts`                                  |
+| `command({ name: "Split" })` from track              | `LayoutEngine.autoSplitFromFocus`                              |
+| Busy 120×16ms reconcile                              | Backoff + stop when stable                                     |
+| `percent === 0` meaning unset                        | `undefined` + `isUnsetPercent`                                 |
+| Four near-identical resize action names              | One action + direction enum                                    |
+| Lazy-create Keybindings in a getter                  | `wireKeybindings` after construct                              |
+| `null as unknown as T` on extension disable          | Nullable fields / getters                                      |
+| Exact pixel E2E as primary proof                     | Percents / relative geometry                                   |
+| Ad-hoc timeouts without names                        | Named session constants + comments                             |
+| Substring class match as default                     | Exact / glob / `re:` / `~` policy                              |
 
 ---
 

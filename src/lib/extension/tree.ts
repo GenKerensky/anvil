@@ -41,7 +41,7 @@ import {
 } from "./tab-decoration.js";
 
 /**
- * Narrow host for Tree — no concrete WindowManager import (Stage 7).
+ * Narrow host for Tree — no concrete AnvilRuntime import (Stage 7).
  * Dependency direction: tree ← layout ← wm.
  */
 export interface TreeHost {
@@ -108,9 +108,14 @@ export type TreeTestNode = {
   type: string;
   layout: string | null;
   mode: string | null;
+  percent: number | null;
+  rect: RectLike | null;
   childCount: number;
   children: TreeTestNode[];
   wmClass?: string | null;
+  windowId?: number | null;
+  title?: string | null;
+  parentLayout?: string | null;
 };
 
 function serializeNodeForTest(node: Node<any>): TreeTestNode {
@@ -119,6 +124,8 @@ function serializeNodeForTest(node: Node<any>): TreeTestNode {
     type: node.nodeType,
     layout: node.layout ?? null,
     mode: node.mode || null,
+    percent: node.percent ?? null,
+    rect: node.rect ? { ...node.rect } : null,
     childCount: children.length,
     children,
   };
@@ -126,6 +133,13 @@ function serializeNodeForTest(node: Node<any>): TreeTestNode {
     const meta = node.nodeValue as Meta.Window | null;
     data.wmClass =
       meta?.get_wm_class?.() ?? (meta as { wm_class?: string | null } | null)?.wm_class ?? null;
+    data.windowId = meta?.get_id?.() ?? null;
+    data.title = meta?.get_title?.() ?? null;
+    data.parentLayout = node.parentNode?.layout ?? null;
+    const frame = meta?.get_frame_rect?.();
+    if (frame) {
+      data.rect = { x: frame.x, y: frame.y, width: frame.width, height: frame.height };
+    }
   }
   return data;
 }
@@ -168,7 +182,7 @@ export class Node<T extends string> extends GObject.Object {
   layout: string | undefined;
   lastTabFocus: any = null;
 
-  // --- WindowManager monkey-patched state (set at runtime) ---
+  // --- AnvilRuntime monkey-patched state (set at runtime) ---
   /** Previous layout before stacked/tabbed toggle */
   prevLayout?: string;
   /** Was floating before mass-float operation */
@@ -678,17 +692,50 @@ export class Tree extends Node<any> {
   allNodeWindows: any[] = [];
   attachNode: Node<any> | null = null;
   defaultStackHeight!: number;
+  private _initialized = false;
 
   constructor(host: TreeHost) {
-    const rootBin = new St.Bin();
-    super(NODE_TYPES.ROOT, rootBin);
+    super(NODE_TYPES.ROOT, null);
     this._host = host;
     this.defaultStackHeight = 35;
     this.settings = host.settings;
     this.layout = LAYOUT_TYPES.ROOT;
-    if (!global.window_group.contains(rootBin)) global.window_group.add_child(rootBin);
+  }
 
-    this._initWorkspaces();
+  /** Activate Shell actors and workspace state after the runtime graph is ready. */
+  initialize(): void {
+    if (this._initialized) return;
+    const rootBin = new St.Bin();
+    this._data = rootBin;
+    if (!global.window_group.contains(rootBin)) global.window_group.add_child(rootBin);
+    this._initialized = true;
+  }
+
+  /** Remove every Shell actor owned by the Tiling Tree and reset its state. */
+  dispose(): void {
+    if (!this._initialized) return;
+    this.reset();
+    const rootBin = this._data as St.Bin | null;
+    if (rootBin && global.window_group.contains(rootBin)) {
+      global.window_group.remove_child(rootBin);
+    }
+    this._data = null;
+    this._initialized = false;
+  }
+
+  /** Remove workspace/monitor actors and structural state while retaining the root actor. */
+  reset(): void {
+    const actorNodes = [
+      ...this.getNodeByType(NODE_TYPES.WORKSPACE),
+      ...this.getNodeByType(NODE_TYPES.MONITOR),
+    ];
+    for (const node of actorNodes) {
+      if (node.actorBin && global.window_group.contains(node.actorBin)) {
+        global.window_group.remove_child(node.actorBin);
+      }
+    }
+    this.childNodes.length = 0;
+    this.attachNode = null;
   }
 
   get host(): TreeHost {

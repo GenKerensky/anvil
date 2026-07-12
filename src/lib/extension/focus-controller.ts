@@ -11,11 +11,12 @@ import Meta from "gi://Meta";
 import { LAYOUT_TYPES, type Node } from "./tree.js";
 import { safeRaise } from "./mutter-safe.js";
 import type { LayoutEngine } from "./layout-engine.js";
+import type { EventSchedulerPort } from "./event-scheduler.js";
 
 export interface FocusControllerHost {
   readonly layoutEngine: LayoutEngine;
   isRenderFrozen(): boolean;
-  queueEvent(eventObj: { name: string; callback: () => void }, interval?: number): void;
+  readonly scheduler: EventSchedulerPort;
   renderTree(from: string, force?: boolean): void;
 }
 
@@ -40,7 +41,7 @@ export class FocusController {
       parentNode.childNodes
         .filter((child: Node<any>) => child.isWindow())
         .forEach((child: Node<any>) => safeRaise(child.nodeValue as Meta.Window));
-      this._host.queueEvent({
+      this._host.scheduler.enqueue({
         name: "render-focus-stack",
         callback: () => {
           this._host.renderTree("focus-stacked");

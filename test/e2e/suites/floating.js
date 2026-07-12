@@ -10,7 +10,8 @@ import {
   getWindowGeometries,
   getMonitorWorkArea,
   getSettings,
-  getAnvilWM,
+  getAnvilRuntime,
+  getRuntimeWindowState,
   sendAnvilCommand,
   sendAnvilCommandAndSettle,
   closeAllWindows,
@@ -84,7 +85,7 @@ describe("Floating and Snap Layout", function () {
     expect(before.length).toBeGreaterThanOrEqual(2);
 
     // Before the toggle, Nautilus is not float-exempt (override cleared in beforeEach).
-    const wm = getAnvilWM();
+    const wm = getAnvilRuntime();
     const focusBefore = /** @type {any} */ (global).display.get_focus_window();
     if (focusBefore) expect(wm.isFloatingExempt(focusBefore)).toBe(false);
 
@@ -106,7 +107,7 @@ describe("Floating and Snap Layout", function () {
     const focus = /** @type {any} */ (global).display.get_focus_window();
     expect(focus).toBeTruthy();
     expect(wm.isFloatingExempt(focus)).toBe(true);
-    const focusNode = wm.tree ? wm.tree.findNode(focus) : null;
+    const focusNode = getRuntimeWindowState(focus);
     expect(focusNode?.mode).toBe("FLOAT"); // WINDOW_MODES.FLOAT
   });
 

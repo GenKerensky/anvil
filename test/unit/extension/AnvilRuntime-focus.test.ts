@@ -1,5 +1,5 @@
 /*
- * WindowManager focus/pointer tests
+ * AnvilRuntime focus/pointer tests
  *
  * WM-specific integration tests for focus management and focus restoration.
  * Ported from jcrussell/forge
@@ -11,18 +11,18 @@ import { LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Focus", () => {
+describe("AnvilRuntime - Focus", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture({ settings: { "focus-on-hover-enabled": true } });
+    ctx = createAnvilRuntimeFixture({ settings: { "focus-on-hover-enabled": true } });
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   describe("_findNodeWindowAtPointer", () => {
     it("should return undefined for null metaWindow", () => {
@@ -59,7 +59,7 @@ describe("WindowManager - Focus", () => {
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       node.parentNode.layout = LAYOUT_TYPES.STACKED;
       const appendSpy = vi.spyOn(node.parentNode, "appendChild");
-      const queueSpy = vi.spyOn(wm(), "queueEvent");
+      const queueSpy = vi.spyOn(wm()._eventScheduler, "enqueue");
 
       wm().updateStackedFocus(node);
 

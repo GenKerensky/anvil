@@ -1,14 +1,14 @@
 /**
  * Test fixtures for Anvil extension tests
  *
- * Complete fixture factories for setting up WindowManager, Tree, and related
+ * Complete fixture factories for setting up AnvilRuntime, Tree, and related
  * objects with all necessary mocks.
  * Ported from jcrussell/forge
  */
 
 import { vi } from "vitest";
 import { installGnomeGlobals } from "./globalSetup.js";
-import { WindowManager } from "../../../../src/lib/extension/window.js";
+import { AnvilRuntime } from "../../../../src/lib/extension/anvil-runtime.js";
 import { Tree, LAYOUT_TYPES } from "../../../../src/lib/extension/tree.js";
 import { LayoutEngine } from "../../../../src/lib/extension/layout-engine.js";
 
@@ -129,7 +129,7 @@ export function createMockExtension(options = {}) {
   };
 }
 
-export function createWindowManagerFixture(options = {}) {
+export function createAnvilRuntimeFixture(options = {}) {
   const { globals = {}, extension = {}, settings = {} } = options;
 
   const extOptions = {
@@ -139,11 +139,18 @@ export function createWindowManagerFixture(options = {}) {
 
   const globalCtx = installGnomeGlobals(globals);
   const mockExtension = createMockExtension(extOptions);
-  const windowManager = new WindowManager(mockExtension);
+  const anvilRuntime = new AnvilRuntime(mockExtension);
+  // Owner-focused unit tests need the graph without binding real Shell signals.
+  // Runtime lifecycle behavior is covered separately through enable()/disable().
+  anvilRuntime._initializeGraph();
+  anvilRuntime.tree.initialize();
+  anvilRuntime.tree._initWorkspaces();
+  anvilRuntime.disabled = false;
+  anvilRuntime._state = "enabled";
 
   return {
-    windowManager,
-    tree: windowManager.tree,
+    anvilRuntime,
+    tree: anvilRuntime.tree,
     extension: mockExtension,
     settings: mockExtension.settings,
     configMgr: mockExtension.configMgr,
@@ -164,7 +171,7 @@ export function createTreeFixture(options = {}) {
   const globalCtx = installGnomeGlobals(globals);
   const mockSettings = createMockSettings(settings);
 
-  const mockWindowManager = {
+  const mockAnvilRuntime = {
     ext: {
       settings: mockSettings,
     },
@@ -178,7 +185,7 @@ export function createTreeFixture(options = {}) {
   };
 
   if (fullExtWm) {
-    Object.assign(mockWindowManager, {
+    Object.assign(mockAnvilRuntime, {
       move: vi.fn(),
       focusMetaWindow: null,
       currentMonWsNode: null,
@@ -198,10 +205,12 @@ export function createTreeFixture(options = {}) {
     });
   }
 
-  const tree = new Tree(mockWindowManager);
+  const tree = new Tree(mockAnvilRuntime);
+  tree.initialize();
+  tree._initWorkspaces();
 
   // Stage 5: tree layout ops (move/split/swap/focus/percent) delegate to LayoutEngine
-  mockWindowManager.layoutEngine = new LayoutEngine({
+  mockAnvilRuntime.layoutEngine = new LayoutEngine({
     get tree() {
       return tree;
     },
@@ -209,26 +218,26 @@ export function createTreeFixture(options = {}) {
       return mockSettings;
     },
     get focusMetaWindow() {
-      return mockWindowManager.focusMetaWindow ?? null;
+      return mockAnvilRuntime.focusMetaWindow ?? null;
     },
     get currentMonWsNode() {
-      return mockWindowManager.currentMonWsNode ?? null;
+      return mockAnvilRuntime.currentMonWsNode ?? null;
     },
-    notifyFocusChanged: (...args) => mockWindowManager.notifyFocusChanged?.(...args),
-    moveWindow: (...args) => mockWindowManager.move?.(...args),
+    notifyFocusChanged: (...args) => mockAnvilRuntime.notifyFocusChanged?.(...args),
+    moveWindow: (...args) => mockAnvilRuntime.move?.(...args),
     rectForMonitor: (...args) =>
-      mockWindowManager.rectForMonitor?.(...args) ?? { x: 0, y: 0, width: 1920, height: 1080 },
-    sameParentMonitor: (...args) => mockWindowManager.sameParentMonitor?.(...args) ?? true,
-    floatingWindow: (...args) => mockWindowManager.floatingWindow?.(...args) ?? false,
+      mockAnvilRuntime.rectForMonitor?.(...args) ?? { x: 0, y: 0, width: 1920, height: 1080 },
+    sameParentMonitor: (...args) => mockAnvilRuntime.sameParentMonitor?.(...args) ?? true,
+    floatingWindow: (...args) => mockAnvilRuntime.floatingWindow?.(...args) ?? false,
   });
-  mockWindowManager.determineSplitLayout = (...args) =>
-    mockWindowManager.layoutEngine.determineSplitLayout(...args);
+  mockAnvilRuntime.determineSplitLayout = (...args) =>
+    mockAnvilRuntime.layoutEngine.determineSplitLayout(...args);
 
   return {
     tree,
     settings: mockSettings,
-    extWm: mockWindowManager,
-    layoutEngine: mockWindowManager.layoutEngine,
+    runtime: mockAnvilRuntime,
+    layoutEngine: mockAnvilRuntime.layoutEngine,
     display: globalCtx.display,
     workspaceManager: globalCtx.workspaceManager,
     workspaces: globalCtx.workspaces,
@@ -245,6 +254,6 @@ export default {
   createMockConfigManager,
   createMockTheme,
   createMockExtension,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   createTreeFixture,
 };

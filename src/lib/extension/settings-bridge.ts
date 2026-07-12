@@ -1,8 +1,8 @@
 /*
  * SettingsBridge — GSettings "changed" → typed host effects.
  *
- * Owns the settings key → handler map previously inlined in WindowManager.
- * Meta/overview signals stay on WM.
+ * Owns the settings key → handler map previously inlined in AnvilRuntime.
+ * Meta/overview signals remain owned by SignalManager.
  *
  * Prefs → shell contract (C3-1):
  *   Prefs and the shell process share GSettings (and windows.json via
@@ -105,7 +105,7 @@ function handleTabbedTilingMode(host: SettingsBridgeHost, key: string): void {
   host.renderTree(key);
 }
 
-/** GSettings key → effect (behavior-preserving from WindowManager switch). */
+/** GSettings key → effect (behavior-preserving from AnvilRuntime switch). */
 const SETTINGS_HANDLERS: Record<string, SettingHandler> = {
   "window-overrides-reload-trigger": (h) => h.reloadWindowOverrides(),
   "focus-border-toggle": handleBorderToggles,

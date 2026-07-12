@@ -1,5 +1,5 @@
 /*
- * WindowManager resize operation tests
+ * AnvilRuntime resize operation tests
  *
  * Tests for resize() and WindowResize commands.
  * Ported from jcrussell/forge
@@ -10,7 +10,7 @@ import Meta from "gi://Meta";
 import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
@@ -28,14 +28,14 @@ function setupFocusWindow(ctx: any, overrides: any = {}) {
   return metaWindow;
 }
 
-describe("WindowManager - Resize", () => {
+describe("AnvilRuntime - Resize", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
 
   describe("resize - null guard", () => {
     it("should do nothing when focusMetaWindow is null", () => {
@@ -109,17 +109,18 @@ describe("WindowManager - Resize", () => {
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
 
-      expect(ctx.windowManager._grab.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
+      expect(ctx.anvilRuntime._grab.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
     });
   });
 
   describe("resize - queued event", () => {
     it("should enqueue a manual-resize event", () => {
       const metaWindow = setupFocusWindow(ctx);
+      const enqueue = vi.spyOn(wm()._eventScheduler, "enqueue");
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
 
-      expect(ctx.windowManager.eventQueue.length).toBeGreaterThan(0);
+      expect(enqueue).toHaveBeenCalled();
     });
   });
 
@@ -178,7 +179,7 @@ describe("WindowManager - Resize", () => {
     });
 
     it("should return early in resize when no focus window", () => {
-      const spy = vi.spyOn(ctx.windowManager, "move");
+      const spy = vi.spyOn(ctx.anvilRuntime, "move");
 
       wm().command({ name: "WindowResize", direction: "Right", amount: 10 });
 
@@ -188,7 +189,7 @@ describe("WindowManager - Resize", () => {
 
   describe("resize - _handleResizing triggers", () => {
     it("should call _handleGrabOpBegin during resize", () => {
-      const spy = vi.spyOn(ctx.windowManager, "_handleGrabOpBegin");
+      const spy = vi.spyOn(ctx.anvilRuntime, "_handleGrabOpBegin");
       const metaWindow = setupFocusWindow(ctx);
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
@@ -198,10 +199,14 @@ describe("WindowManager - Resize", () => {
 
     it("should enqueue a manual-resize event with callback", () => {
       const metaWindow = setupFocusWindow(ctx);
+      const enqueue = vi.spyOn(wm()._eventScheduler, "enqueue");
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
 
-      expect(ctx.windowManager.eventQueue.length).toBe(1);
+      expect(enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ name: expect.any(String), callback: expect.any(Function) }),
+        expect.any(Number)
+      );
     });
   });
 
@@ -220,7 +225,7 @@ describe("WindowManager - Resize", () => {
 
   describe("resize - move calls", () => {
     it("should call move with updated rect", () => {
-      const spy = vi.spyOn(ctx.windowManager, "move");
+      const spy = vi.spyOn(ctx.anvilRuntime, "move");
       const metaWindow = setupFocusWindow(ctx);
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);

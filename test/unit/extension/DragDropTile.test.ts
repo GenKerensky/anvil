@@ -1,7 +1,7 @@
 /*
  * DragDropTile unit tests
  *
- * Tests for the drag-drop tiling logic extracted from WindowManager.
+ * Tests for the drag-drop tiling logic extracted from AnvilRuntime.
  * Tests use a mock host to isolate DragDropTile from the shell runtime.
  */
 
@@ -9,11 +9,11 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import St from "gi://St";
 import Meta from "gi://Meta";
 import { DragDropTile } from "../../../src/lib/extension/drag-drop-tile.js";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import { Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
@@ -23,17 +23,17 @@ describe("DragDropTile", () => {
   let mockHost: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture({
+    ctx = createAnvilRuntimeFixture({
       settings: {
         "dnd-center-layout": "SWAP",
         "preview-hint-enabled": true,
       },
     });
 
-    const wm = ctx.windowManager;
+    const wm = ctx.anvilRuntime;
     mockHost = {
       tree: ctx.tree,
-      settings: ctx.windowManager.ext.settings,
+      settings: ctx.anvilRuntime.ext.settings,
       layoutEngine: wm._layout,
       nodeWinAtPointer: null,
       cancelGrab: false,
@@ -208,7 +208,7 @@ describe("DragDropTile", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const tabbedCon = new Node(NODE_TYPES.CON, new St.Bin());
       tabbedCon.layout = LAYOUT_TYPES.TABBED;
-      tabbedCon.settings = ctx.windowManager.ext.settings;
+      tabbedCon.settings = ctx.anvilRuntime.ext.settings;
       monitor.childNodes[0] = tabbedCon;
       tabbedCon.parentNode = monitor;
 
@@ -239,7 +239,7 @@ describe("DragDropTile", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const con = new Node(NODE_TYPES.CON, new St.Bin());
       con.layout = LAYOUT_TYPES.HSPLIT;
-      con.settings = ctx.windowManager.ext.settings;
+      con.settings = ctx.anvilRuntime.ext.settings;
       monitor.childNodes[0] = con;
       con.parentNode = monitor;
 

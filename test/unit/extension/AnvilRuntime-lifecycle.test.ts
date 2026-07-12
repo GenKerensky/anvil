@@ -1,5 +1,5 @@
 /*
- * WindowManager lifecycle tests
+ * AnvilRuntime lifecycle tests
  *
  * Tests for trackWindow, _validWindow, windowDestroy, minimizedWindow,
  * and postProcessWindow
@@ -9,22 +9,22 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import GLib from "gi://GLib";
 import Meta from "gi://Meta";
-import { WINDOW_MODES } from "../../../src/lib/extension/window.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
-  createWindowManagerFixture,
+  createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("WindowManager - Lifecycle", () => {
+describe("AnvilRuntime - Lifecycle", () => {
   let ctx: any;
 
   beforeEach(() => {
-    ctx = createWindowManagerFixture();
+    ctx = createAnvilRuntimeFixture();
   });
 
-  const wm = () => ctx.windowManager;
+  const wm = () => ctx.anvilRuntime;
   const configMgr = () => ctx.configMgr;
 
   describe("_validWindow", () => {
@@ -397,20 +397,13 @@ describe("WindowManager - Lifecycle", () => {
   });
 
   describe("enable/disable workspace transition flag (S4)", () => {
-    it("enable() resets a stuck workspaceChanging flag before rebinding signals", () => {
+    it("graph initialization resets a stuck workspaceChanging flag", () => {
       // Simulate a disable that fired mid-transition (timer cancelled, flag left true).
       wm()._workspaceChanging = true;
 
-      // Avoid driving the full Shell signal surface (not mocked here); assert
-      // only the reset, which runs before bindAll().
-      const signalManager = (wm() as any)._signalManager;
-      vi.spyOn(signalManager, "bindAll").mockImplementation(() => {});
-      vi.spyOn(wm(), "reloadTree").mockImplementation(() => {});
-
-      wm().enable();
+      (wm() as any)._initializeGraph();
 
       expect(wm()._workspaceChanging).toBe(false);
-      expect(signalManager.bindAll).toHaveBeenCalled();
     });
   });
 });

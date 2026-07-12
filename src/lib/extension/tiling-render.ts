@@ -4,9 +4,9 @@
  * Owns: processFloats (layout float flags), percent/split layout, gaps,
  * ultrawide/monitor constraints, and frame application via moveWindow.
  *
- * Callers use `wm.tilingRender` (or this class directly). WindowManager must
+ * Callers use `wm.tilingRender` (or this class directly). AnvilRuntime must
  * not reintroduce thin wrappers (calculateGaps / processFloats /
- * enforceUltrawideSize / getMonitor*). WM.renderTree only schedules idle
+ * enforceUltrawideSize / getMonitor*). AnvilRuntime only schedules idle
  * coalesce, freeze, tiling-mode gate, then borders/decorations.
  *
  * Freeze protocol (B7-3):

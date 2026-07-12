@@ -44,7 +44,7 @@ function waitForMain() {
 }
 
 /**
- * Wait until the extension is ACTIVE and test-mode state (extWm) is ready.
+ * Wait until the extension is ACTIVE and test-mode state (runtime) is ready.
  * @returns {Promise<void>}
  */
 function ensureExtensionReady() {
@@ -52,10 +52,10 @@ function ensureExtensionReady() {
     function check() {
       const ext = Main.extensionManager.lookup(UUID);
       const g = /** @type {any} */ (global);
-      const hasTestState = g.__anvil_test_state != null && g.__anvil_test_state.extWm != null;
+      const hasTestState = g.__anvil_test_state != null && g.__anvil_runtime != null;
 
       if (ext && ext.state === 1 && hasTestState) {
-        log("[E2E] Extension ACTIVE with __anvil_test_state.extWm");
+        log("[E2E] Extension ACTIVE with __anvil_runtime");
         resolve(undefined);
         return GLib.SOURCE_REMOVE;
       }

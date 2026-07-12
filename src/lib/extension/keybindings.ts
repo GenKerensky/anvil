@@ -35,7 +35,7 @@ export class Keybindings extends GObject.Object {
     GObject.registerClass(this);
   }
 
-  extWm!: import("./window.js").WindowManager;
+  runtime!: import("./anvil-runtime.js").AnvilRuntime;
   kbdSettings!: Gio.Settings;
   settings!: Gio.Settings;
   private _bindings!: Record<string, () => void>;
@@ -46,7 +46,7 @@ export class Keybindings extends GObject.Object {
     super();
     Logger.debug(`created keybindings`);
     this.ext = ext;
-    this.extWm = ext.extWm;
+    this.runtime = ext.runtime;
     this.kbdSettings = ext.kbdSettings;
     this.settings = ext.settings;
     this.buildBindingDefinitions();
@@ -88,8 +88,8 @@ export class Keybindings extends GObject.Object {
     const modState = this.modifierState;
     // Using Clutter.ModifierType values and also testing for pointer
     // being grabbed (256). E.g. grabbed + pressing Super = 256 + 64 = 320
-    // See window.js#_handleMoving() - an overlay preview is shown.
-    // See window.js#_handleGrabOpEnd() - when the drag has been dropped
+    // See anvil-runtime.js#_handleMoving() - an overlay preview is shown.
+    // See anvil-runtime.js#_handleGrabOpEnd() - when the drag has been dropped
     switch (tileModifier) {
       case "Super":
         return modState === 64 || modState === 320;
@@ -114,7 +114,7 @@ export class Keybindings extends GObject.Object {
         () => {
           const action: AnvilAction =
             typeof spec.action === "function" ? spec.action(ctx) : spec.action;
-          this.extWm.command(action);
+          this.runtime.command(action);
         },
       ])
     );

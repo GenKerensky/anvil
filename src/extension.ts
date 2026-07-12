@@ -26,7 +26,7 @@ import { Logger } from "./lib/shared/logger.js";
 import { ConfigManager } from "./lib/shared/settings.js";
 
 import { Keybindings } from "./lib/extension/keybindings.js";
-import { WindowManager } from "./lib/extension/window.js";
+import { AnvilRuntime } from "./lib/extension/anvil-runtime.js";
 import {
   FeatureIndicator,
   FeatureMenuToggle,
@@ -88,7 +88,7 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
   private _kbdSettings: Gio.Settings | null = null;
   private _configMgr: ConfigManager | null = null;
   private _theme: ExtensionThemeManager | null = null;
-  private _extWm: WindowManager | null = null;
+  private _runtime: AnvilRuntime | null = null;
   private _keybindings: Keybindings | null = null;
   indicator: FeatureIndicator | null = null;
   private _sessionId: number | null = null;
@@ -116,9 +116,9 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
     return this._theme;
   }
 
-  get extWm(): WindowManager {
-    if (!this._extWm) throw new Error("AnvilExtension.extWm used while disabled");
-    return this._extWm;
+  get runtime(): AnvilRuntime {
+    if (!this._runtime) throw new Error("AnvilExtension.runtime used while disabled");
+    return this._runtime;
   }
 
   get keybindings(): Keybindings {
@@ -132,16 +132,16 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
     Logger.init(this.settings);
     Logger.info("enable");
 
-    // Always export extWm + settings for E2E test access (used by test/e2e/lib/commands.js)
+    // Always export runtime + settings for E2E test access (used by test/e2e/lib/commands.js)
     // In GNOME 50+, Main.extensionManager.lookup() returns a proxy that only
     // exposes base Extension properties — custom fields and methods (getSettings)
     // are not forwarded. Expose them on global to bypass the proxy.
     {
       const g = global as unknown as {
-        __anvil_extWm?: WindowManager | null;
+        __anvil_runtime?: AnvilRuntime | null;
         __anvil_settings?: Gio.Settings | null;
       };
-      g.__anvil_extWm = null;
+      g.__anvil_runtime = null;
       g.__anvil_settings = this.settings;
     }
 
@@ -187,22 +187,23 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
 
     this._configMgr = new ConfigManager(this as { dir: Gio.File });
     this._theme = new ExtensionThemeManager(this);
-    // Construct WM first (Keybindings needs ext.extWm), then wire keybindings
+    // Construct the runtime first (Keybindings needs ext.runtime), then wire keybindings
     // explicitly so getters never lazy-create subsystems (B2-2, B4-9).
-    this._extWm = new WindowManager(this);
-    {
-      const g = global as unknown as { __anvil_extWm?: WindowManager | null };
-      g.__anvil_extWm = this._extWm;
-    }
+    this._runtime = new AnvilRuntime(this);
     this._keybindings = new Keybindings(this);
-    this._extWm.wireKeybindings(this._keybindings);
-
-    this._onSessionModeChanged(Main.sessionMode);
-    this._sessionId = Main.sessionMode.connect("updated", this._onSessionModeChanged.bind(this));
+    this._runtime.wireKeybindings(this._keybindings);
 
     this._theme.patchCss();
     this._theme.reloadStylesheet();
-    this._extWm.enable();
+    // Runtime must be fully active before session-mode handling enables keybindings.
+    this._runtime.enable();
+    {
+      const g = global as unknown as { __anvil_runtime?: AnvilRuntime | null };
+      g.__anvil_runtime = this._runtime;
+    }
+
+    this._onSessionModeChanged(Main.sessionMode);
+    this._sessionId = Main.sessionMode.connect("updated", this._onSessionModeChanged.bind(this));
     Logger.info("enable: finalized vars");
   }
 
@@ -215,10 +216,10 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
 
     {
       const g = global as unknown as {
-        __anvil_extWm?: WindowManager | null;
+        __anvil_runtime?: AnvilRuntime | null;
         __anvil_settings?: Gio.Settings | null;
       };
-      g.__anvil_extWm = null;
+      g.__anvil_runtime = null;
       g.__anvil_settings = null;
     }
 
@@ -246,11 +247,11 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
     }
 
     this._removeIndicator();
-    this._extWm?.disable();
+    this._runtime?.disable();
     this._keybindings?.disable();
     // Honest nulls — no `null as unknown as T` (B1-2).
     this._keybindings = null;
-    this._extWm = null;
+    this._runtime = null;
     this._theme = null;
     this._configMgr = null;
     this._settings = null;
@@ -303,13 +304,13 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
 
   /**
    * AnvilTestProbe — JSON snapshot for E2E (B1-3).
-   * Delegates tree serialization to WindowManager; does not walk private fields.
+   * Delegates tree serialization to AnvilRuntime; does not walk private fields.
    */
   getTestState(): string | null {
     if (!this._settings?.get_boolean("test-mode")) return null;
-    if (!this._extWm) {
-      return JSON.stringify({ error: "WindowManager not initialized" });
+    if (!this._runtime) {
+      return JSON.stringify({ error: "AnvilRuntime not initialized" });
     }
-    return this._extWm.getTestStateJson();
+    return this._runtime.getTestStateJson();
   }
 }

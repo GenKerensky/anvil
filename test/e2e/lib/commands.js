@@ -150,19 +150,19 @@ export function sendKeyCombo(combo) {
   const action = COMBO_ACTIONS[key];
   if (!action) throw new Error("Unknown combo: " + combo);
 
-  // Try global.__anvil_extWm first (set always by extension's enable())
+  // Try global.__anvil_runtime first (set always by extension's enable())
   const g = /** @type {any} */ (global);
-  let wm = g.__anvil_extWm;
+  let wm = g.__anvil_runtime;
 
   // Fallback: global.__anvil_test_state (set when test-mode is enabled)
   if (!wm) {
-    if (g.__anvil_test_state && g.__anvil_test_state.extWm) wm = g.__anvil_test_state.extWm;
+    if (g.__anvil_test_state && g.__anvil_test_state.runtime) wm = g.__anvil_test_state.runtime;
   }
 
   if (!wm) {
     log(
-      "[E2E] sendKeyCombo: __anvil_extWm=" +
-        (g.__anvil_extWm ? "set" : "null") +
+      "[E2E] sendKeyCombo: __anvil_runtime=" +
+        (g.__anvil_runtime ? "set" : "null") +
         " __anvil_test_state=" +
         (g.__anvil_test_state ? "found" : "null")
     );
@@ -176,7 +176,7 @@ export function sendKeyCombo(combo) {
         log("[E2E] Re-enable failed: " + (e instanceof Error ? e.message : String(e)));
       }
     }
-    wm = g.__anvil_extWm;
+    wm = g.__anvil_runtime;
     if (!wm) throw new Error("Anvil extension not loaded, cannot send key combo");
   }
   wm.command(action);
@@ -240,25 +240,25 @@ export function takeScreenshot(path) {
 /* ── Anvil extension internals ─────────────────────────────────────── */
 
 /** @returns {any} */
-export function getAnvilWM() {
+export function getAnvilRuntime() {
   // In GNOME 50+, Main.extensionManager.lookup() returns a proxy that only
   // exposes base Extension properties — custom fields/methods are not forwarded.
-  // The extension always sets global.__anvil_extWm in enable() for E2E access.
+  // The extension always sets global.__anvil_runtime in enable() for E2E access.
   const g = /** @type {any} */ (global);
-  if (g.__anvil_extWm) return g.__anvil_extWm;
+  if (g.__anvil_runtime) return g.__anvil_runtime;
 
   // Fallback: global.__anvil_test_state (set when test-mode is enabled)
   const state = g.__anvil_test_state;
-  if (state && state.extWm) return state.extWm;
+  if (state && state.runtime) return state.runtime;
 
-  throw new Error("Anvil extWm not available");
+  throw new Error("Anvil runtime not available");
 }
 
 /**
  * @param {{ name: string, [key: string]: any }} action
  */
 export function sendAnvilCommand(action) {
-  const wm = getAnvilWM();
+  const wm = getAnvilRuntime();
   wm.command(action);
 }
 
@@ -266,20 +266,29 @@ export function sendAnvilCommand(action) {
  * @returns {Array<{title: string | null, percent: number, rect: {x: number, y: number, width: number, height: number} | null, parentLayout: any}>}
  */
 export function getNodePercents() {
-  const wm = getAnvilWM();
-  const tree = wm.tree;
-  if (!tree) throw new Error("Anvil tree not available");
-  const windows = /** @type {any[]} */ (tree.getNodeByType("WINDOW"));
-  return windows.map(function (node) {
-    const metaWin = node.nodeValue;
-    const rect = metaWin ? metaWin.get_frame_rect() : null;
+  return getRuntimeWindowStates().map(function (node) {
     return {
-      title: metaWin ? metaWin.get_title() : "(no meta)",
+      title: node.title,
       percent: node.percent,
-      rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
-      parentLayout: node.parentNode ? node.parentNode.nodeValue : "(no parent)",
+      rect: node.rect,
+      parentLayout: node.parentLayout,
     };
   });
+}
+
+/** @returns {any[]} */
+export function getRuntimeWindowStates() {
+  const state = JSON.parse(getAnvilRuntime().getStateJson());
+  /** @type {any[]} */
+  const windows = [];
+  /** @param {any} node */
+  function visit(node) {
+    if (!node) return;
+    if (node.type === "WINDOW") windows.push(node);
+    for (const child of node.children || []) visit(child);
+  }
+  visit(state.tree);
+  return windows;
 }
 
 /** @returns {any} */
@@ -294,7 +303,7 @@ export function getAnvilSettings() {
 /* ── Monitor constraint management ─────────────────────────────────────── */
 
 // clearResizedWindows lives in ../lib/shared-commands.js (single source of
-// truth) and calls the owner interface wm._grab.clearResizedWindows().
+// truth) and calls the explicit runtime test interface.
 // Do not duplicate it here — resize/constraints suites import from there.
 
 export function clearMonitorConstraints() {
