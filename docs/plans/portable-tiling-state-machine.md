@@ -954,6 +954,16 @@ The lock test drives the real GNOME Shell `SessionMode` stack through `unlock-di
 The headless Shell has no `Main.screenShield` or GDM authentication service, so this does not claim
 lock-screen UI or authentication coverage; those are outside the tiling engine's state boundary.
 
+Combined automated evidence (2026-07-13, commits `f4d0458` through `7d2d20d`):
+
+- `npm test` passed 55 portable-core tests and 1010 Runtime/unit tests; the boundary, lint, and all
+  TypeScript projects were green.
+- A fresh Fedora Devbox core run passed 132/132. The default one-monitor run includes every
+  completed row above except the separately invoked two-monitor churn scenario.
+- `python3 test/e2e/run.py --engine core --virtual-monitors 2 --tag monitor-churn` passed its
+  surface-identity/integrity scenario; the legacy control passed with the same two Mutter
+  work-area assertions.
+
 Remaining manual cutover checklist:
 
 1. Start an isolated core-mode Devkit session with
