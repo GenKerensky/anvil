@@ -244,6 +244,15 @@ export type PlatformFact =
       windowId: WindowId;
       frame: Rect;
       causalToken?: IntentionToken;
+    }>
+  | Readonly<{
+      type: "WindowObserved";
+      window: WindowFact;
+    }>
+  | Readonly<{
+      type: "WindowSurfaceObserved";
+      windowId: WindowId;
+      surfaceId: SurfaceId;
     }>;
 
 export type TilingCommand =

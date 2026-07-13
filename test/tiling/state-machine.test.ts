@@ -607,4 +607,86 @@ describe("TilingStateMachine", () => {
       },
     });
   });
+
+  it("discovers and reassigns a window using only Surface identities", () => {
+    const machine = createTilingStateMachine(policy);
+    const left = surfaceId("left");
+    const right = surfaceId("right");
+    const terminal = windowId("terminal");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: left,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: { right },
+            capabilities,
+          },
+          {
+            id: right,
+            workArea: { x: 0, y: 0, width: 1200, height: 900 },
+            neighbors: { left },
+            capabilities,
+          },
+        ],
+        windows: [],
+      },
+    });
+
+    const discovered = machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "WindowObserved",
+          window: {
+            id: terminal,
+            surfaceId: left,
+            frame: { x: 20, y: 20, width: 500, height: 400 },
+            available: true,
+            capabilities,
+            applicationId: "org.example.Terminal",
+          },
+        },
+      ],
+    });
+    expect(discovered).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        { type: "WindowParticipationChanged", windowId: terminal, participating: true },
+        {
+          type: "PlaceWindow",
+          windowId: terminal,
+          surfaceId: left,
+          frame: { x: 0, y: 0, width: 1000, height: 800 },
+        },
+      ],
+    });
+
+    const reassigned = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "WindowSurfaceObserved", windowId: terminal, surfaceId: right }],
+    });
+    expect(reassigned).toMatchObject({
+      status: "committed",
+      revision: 3,
+      intentions: [
+        {
+          type: "PlaceWindow",
+          windowId: terminal,
+          surfaceId: right,
+          frame: { x: 0, y: 0, width: 1200, height: 900 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [{ id: terminal, surfaceId: right, parentId: "container:2" }],
+      containers: [
+        { id: "container:1", surfaceId: left, childIds: [] },
+        { id: "container:2", surfaceId: right, childIds: [terminal] },
+      ],
+    });
+  });
 });

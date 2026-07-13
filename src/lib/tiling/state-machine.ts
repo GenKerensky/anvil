@@ -7,6 +7,7 @@ import type {
   TilingPolicy,
   TilingStateMachine,
   TilingTransition,
+  WindowFact,
   WindowInspection,
 } from "./contracts.js";
 import { copyInspection, copyPolicy } from "./copy.js";
@@ -16,6 +17,39 @@ import { applyOperation } from "./operations.js";
 import { classifyParticipation, effectiveParticipation } from "./participation.js";
 import { reconcile } from "./reconciliation.js";
 import { validateSurfaces } from "./validation.js";
+
+function inspectWindowFact(
+  fact: WindowFact,
+  policy: TilingPolicy,
+  availableSurfaces: ReadonlySet<string>,
+  previous?: WindowInspection
+): WindowInspection {
+  const classification = classifyParticipation(fact, policy);
+  const manualParticipation = previous?.manualParticipation;
+  const candidate: WindowInspection = {
+    id: fact.id,
+    surfaceId: fact.surfaceId,
+    participating: false,
+    policyParticipation: classification.participating,
+    policyParticipationSource: classification.source,
+    ...(manualParticipation !== undefined ? { manualParticipation } : {}),
+    participationSource: manualParticipation === undefined ? classification.source : "manual",
+    available: fact.available,
+    frame: copyRect(fact.frame),
+    capabilities: { ...fact.capabilities },
+    ...(fact.applicationId ? { applicationId: fact.applicationId } : {}),
+    ...(fact.title ? { title: fact.title } : {}),
+    ...(fact.role ? { role: fact.role } : {}),
+    ...(fact.transientParentId ? { transientParentId: fact.transientParentId } : {}),
+    ...(fact.resizable !== undefined ? { resizable: fact.resizable } : {}),
+    tags: [...(fact.tags ?? [])],
+    reconcileAttempts: previous?.reconcileAttempts ?? 0,
+  };
+  return {
+    ...candidate,
+    participating: effectiveParticipation(candidate, policy, availableSurfaces),
+  };
+}
 
 export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingStateMachine {
   const policy = copyPolicy(initialPolicy);
@@ -538,6 +572,91 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             };
             changed = true;
           }
+          if (fact.type === "WindowObserved") {
+            const index = windows.findIndex((window) => window.id === fact.window.id);
+            const previous = index >= 0 ? windows[index] : undefined;
+            const availableSurfaces = new Set(surfaces.map((surface) => surface.id));
+            const observed = inspectWindowFact(
+              fact.window,
+              inspection.policy,
+              availableSurfaces,
+              previous
+            );
+            const surface = surfaces.find((candidate) => candidate.id === observed.surfaceId);
+            const next: WindowInspection = {
+              ...observed,
+              ...(observed.participating && surface
+                ? { parentId: surface.rootId }
+                : { parentId: undefined }),
+            };
+            if (previous && JSON.stringify(previous) === JSON.stringify(next)) continue;
+            if (
+              (previous !== undefined && previous.participating !== next.participating) ||
+              (previous === undefined && next.participating)
+            ) {
+              participationChanges.push({
+                windowId: next.id,
+                participating: next.participating,
+              });
+            }
+            containers = containers.map((container) => {
+              const childIds = container.childIds.filter((id) => id !== next.id);
+              return container.id === next.parentId
+                ? { ...container, childIds: [...childIds, next.id] }
+                : { ...container, childIds };
+            });
+            if (index >= 0) windows[index] = next;
+            else windows.push(next);
+            operations = operations.filter(
+              (operation) =>
+                operation.windowId !== next.id && operation.neighborWindowId !== next.id
+            );
+            changed = true;
+          }
+          if (fact.type === "WindowSurfaceObserved") {
+            const index = windows.findIndex((window) => window.id === fact.windowId);
+            if (index < 0 || windows[index].surfaceId === fact.surfaceId) continue;
+            const previous = windows[index];
+            if (previous.parentId) {
+              placementHints = placementHints.filter((hint) => hint.windowId !== previous.id);
+              placementHints.push({
+                windowId: previous.id,
+                surfaceId: previous.surfaceId,
+                parentId: previous.parentId,
+                selected: false,
+              });
+            }
+            const candidate = { ...previous, surfaceId: fact.surfaceId };
+            const availableSurfaces = new Set(surfaces.map((surface) => surface.id));
+            const participating = effectiveParticipation(
+              candidate,
+              inspection.policy,
+              availableSurfaces
+            );
+            const surface = surfaces.find((item) => item.id === fact.surfaceId);
+            const next: WindowInspection = {
+              ...candidate,
+              participating,
+              ...(participating && surface
+                ? { parentId: surface.rootId }
+                : { parentId: undefined }),
+            };
+            if (previous.participating !== participating) {
+              participationChanges.push({ windowId: next.id, participating });
+            }
+            windows[index] = next;
+            containers = containers.map((container) => {
+              const childIds = container.childIds.filter((id) => id !== next.id);
+              return container.id === next.parentId
+                ? { ...container, childIds: [...childIds, next.id] }
+                : { ...container, childIds };
+            });
+            operations = operations.filter(
+              (operation) =>
+                operation.windowId !== next.id && operation.neighborWindowId !== next.id
+            );
+            changed = true;
+          }
           if (fact.type === "WindowWithdrawn") {
             const index = windows.findIndex((window) => window.id === fact.windowId);
             if (index < 0) continue;
@@ -779,30 +898,8 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         const windows: WindowInspection[] = [...event.snapshot.windows]
           .sort((a, b) => a.id.localeCompare(b.id))
           .map((window) => {
-            const classification = classifyParticipation(window, inspection.policy);
-            const classifiedWindow: WindowInspection = {
-              id: window.id,
-              surfaceId: window.surfaceId,
-              participating: false,
-              policyParticipation: classification.participating,
-              policyParticipationSource: classification.source,
-              participationSource: classification.source,
-              available: window.available,
-              frame: copyRect(window.frame),
-              capabilities: { ...window.capabilities },
-              ...(window.applicationId ? { applicationId: window.applicationId } : {}),
-              ...(window.title ? { title: window.title } : {}),
-              ...(window.role ? { role: window.role } : {}),
-              ...(window.transientParentId ? { transientParentId: window.transientParentId } : {}),
-              ...(window.resizable !== undefined ? { resizable: window.resizable } : {}),
-              tags: [...(window.tags ?? [])],
-              reconcileAttempts: 0,
-            };
-            const participating = effectiveParticipation(
-              classifiedWindow,
-              inspection.policy,
-              surfaceIds
-            );
+            const classifiedWindow = inspectWindowFact(window, inspection.policy, surfaceIds);
+            const participating = classifiedWindow.participating;
             const parentId = participating ? surfaceRoots.get(window.surfaceId) : undefined;
             if (parentId) {
               const parentIndex = containers.findIndex((container) => container.id === parentId);
