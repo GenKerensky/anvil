@@ -541,7 +541,12 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         evacuationHints.sort((left, right) => left.surfaceId.localeCompare(right.surfaceId));
         const revision = inspection.revision + 1;
         const windowPlans = deriveWindowPlans(surfaces, windows, containers, inspection.policy);
-        const containerPlans = deriveContainerPlans(surfaces, windows, containers);
+        const containerPlans = deriveContainerPlans(
+          surfaces,
+          windows,
+          containers,
+          inspection.policy
+        );
         const intentions = changedTransitionIntentions(
           inspection.renderPlan.windows,
           windowPlans,

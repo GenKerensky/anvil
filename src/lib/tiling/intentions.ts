@@ -47,6 +47,10 @@ export function changedContainerIntentions(
       return (
         !old ||
         old.layout !== plan.layout ||
+        !(
+          (!old.headerRect && !plan.headerRect) ||
+          (old.headerRect && plan.headerRect && sameRect(old.headerRect, plan.headerRect))
+        ) ||
         old.selectedChildId !== plan.selectedChildId ||
         !sameOrder(old.stackingOrder, plan.stackingOrder)
       );
@@ -58,6 +62,7 @@ export function changedContainerIntentions(
       containerId: plan.id,
       surfaceId: plan.surfaceId,
       layout: plan.layout,
+      ...(plan.headerRect ? { headerRect: copyRect(plan.headerRect) } : {}),
       ...(plan.selectedChildId ? { selectedChildId: plan.selectedChildId } : {}),
       stackingOrder: [...plan.stackingOrder],
     }));

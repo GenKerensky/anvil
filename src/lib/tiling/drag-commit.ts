@@ -300,7 +300,12 @@ export function commitDragPlacement(
     windowPlans,
     revision
   );
-  const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers);
+  const containerPlans = deriveContainerPlans(
+    inspection.surfaces,
+    windows,
+    containers,
+    inspection.policy
+  );
   intentions.push(
     ...changedContainerIntentions(
       inspection.renderPlan.containers,

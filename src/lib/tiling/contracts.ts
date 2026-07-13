@@ -223,6 +223,7 @@ export type ContainerPlan = Readonly<{
   id: ContainerId;
   surfaceId: SurfaceId;
   rect: Rect;
+  headerRect?: Rect;
   layout: Layout;
   selectedChildId?: ContainerId | WindowId;
   stackingOrder: readonly (ContainerId | WindowId)[];
@@ -426,6 +427,7 @@ export type TilingIntention =
         containerId: ContainerId;
         surfaceId: SurfaceId;
         layout: Layout;
+        headerRect?: Rect;
         selectedChildId?: ContainerId | WindowId;
         stackingOrder: readonly (ContainerId | WindowId)[];
       }>)

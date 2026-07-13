@@ -22,8 +22,8 @@ const policy: TilingPolicy = {
   reconcileAttempts: 3,
 };
 
-function twoWindowMachine() {
-  const machine = createTilingStateMachine(policy);
+function twoWindowMachine(policyOverrides: Partial<TilingPolicy> = {}) {
+  const machine = createTilingStateMachine({ ...policy, ...policyOverrides });
   const surface = surfaceId("surface");
   const first = windowId("first");
   const second = windowId("second");
@@ -226,6 +226,52 @@ describe("Tiling Commands", () => {
       containers: [{ id: "container:1", layout: "vertical", childIds: [first, second] }],
     });
   });
+
+  it.each(["stacked", "tabbed"] as const)(
+    "reserves portable header geometry for the %s layout",
+    (layout) => {
+      const { machine, first, second } = twoWindowMachine({ headerExtent: 35 });
+
+      const transition = machine.dispatch({
+        type: "CommandRequested",
+        command: { type: "SetLayout", windowId: first, layout },
+      });
+
+      expect(transition).toMatchObject({
+        status: "committed",
+        intentions: [
+          {
+            type: "PlaceWindow",
+            windowId: first,
+            frame: { x: 0, y: 35, width: 1000, height: 765 },
+          },
+          {
+            type: "PlaceWindow",
+            windowId: second,
+            frame: { x: 0, y: 35, width: 1000, height: 765 },
+          },
+          {
+            type: "PresentContainer",
+            containerId: "container:1",
+            layout,
+          },
+        ],
+      });
+      expect(machine.inspect().renderPlan).toMatchObject({
+        windows: [
+          { id: first, frame: { x: 0, y: 35, width: 1000, height: 765 } },
+          { id: second, frame: { x: 0, y: 35, width: 1000, height: 765 } },
+        ],
+        containers: [
+          {
+            id: "container:1",
+            rect: { x: 0, y: 0, width: 1000, height: 800 },
+            headerRect: { x: 0, y: 0, width: 1000, height: 35 },
+          },
+        ],
+      });
+    }
+  );
 
   it("keeps stacked selection on an available child", () => {
     const { machine, first, second } = twoWindowMachine();

@@ -190,7 +190,8 @@ function withRender(
   const containerPlans = deriveContainerPlans(
     inspection.surfaces,
     inspection.windows,
-    renderContainers
+    renderContainers,
+    inspection.policy
   );
   const intentions = changedPlacementIntentions(inspection.renderPlan.windows, windows, revision);
   const next: TilingInspection = {

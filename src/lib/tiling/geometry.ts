@@ -65,6 +65,23 @@ type DerivedPlans = Readonly<{
   containers: ContainerPlan[];
 }>;
 
+function presentationHeaderRect(
+  container: ContainerInspection,
+  rect: Rect,
+  policy?: TilingPolicy
+): Rect | undefined {
+  if (
+    (container.layout !== "stacked" && container.layout !== "tabbed") ||
+    !policy ||
+    policy.headerExtent <= 0 ||
+    rect.height <= 1
+  ) {
+    return undefined;
+  }
+  const height = Math.min(policy.headerExtent, rect.height - 1);
+  return { x: rect.x, y: rect.y, width: rect.width, height };
+}
+
 function allocateChildRects(
   container: ContainerInspection,
   rect: Rect,
@@ -134,15 +151,25 @@ function derivePlans(
     const gap = policy ? (policy.hideGapWhenSingle && availableCount === 1 ? 0 : policy.gap) : 0;
     const visit = (container: ContainerInspection, rect: Rect, ancestors: Set<string>): void => {
       if (ancestors.has(container.id)) return;
+      const headerRect = presentationHeaderRect(container, rect, policy);
       containerPlans.push({
         id: container.id,
         surfaceId: container.surfaceId,
         rect: copyRect(rect),
+        ...(headerRect ? { headerRect } : {}),
         layout: container.layout,
         ...(container.selectedChildId ? { selectedChildId: container.selectedChildId } : {}),
         stackingOrder: [...container.childIds],
       });
-      const childRects = allocateChildRects(container, rect, isAvailable);
+      const contentRect = headerRect
+        ? {
+            x: rect.x,
+            y: rect.y + headerRect.height,
+            width: rect.width,
+            height: rect.height - headerRect.height,
+          }
+        : rect;
+      const childRects = allocateChildRects(container, contentRect, isAvailable);
       const nextAncestors = new Set(ancestors).add(container.id);
       for (const childId of container.childIds) {
         const childRect = childRects.get(childId) ?? rect;
@@ -193,7 +220,8 @@ export function deriveWindowPlans(
 export function deriveContainerPlans(
   surfaces: readonly SurfaceInspection[],
   windows: readonly WindowInspection[],
-  containers: readonly ContainerInspection[]
+  containers: readonly ContainerInspection[],
+  policy: TilingPolicy
 ): ContainerPlan[] {
-  return derivePlans(surfaces, windows, containers).containers;
+  return derivePlans(surfaces, windows, containers, policy).containers;
 }

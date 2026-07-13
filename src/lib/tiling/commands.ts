@@ -5,7 +5,7 @@ import type {
   TilingTransition,
   WindowInspection,
 } from "./contracts.js";
-import { deriveContainerPlans, deriveWindowPlans } from "./geometry.js";
+import { copyRect, deriveContainerPlans, deriveWindowPlans } from "./geometry.js";
 import { changedContainerIntentions, changedPlacementIntentions } from "./intentions.js";
 import { effectiveParticipation } from "./participation.js";
 import { normalizeTopology, tilingSurfaceIds } from "./transition-helpers.js";
@@ -132,7 +132,12 @@ export function applyCommand(
       revision,
       participationIntentions.length
     );
-    const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers);
+    const containerPlans = deriveContainerPlans(
+      inspection.surfaces,
+      windows,
+      containers,
+      inspection.policy
+    );
     const containerIntentions = changedContainerIntentions(
       inspection.renderPlan.containers,
       containerPlans,
@@ -267,7 +272,12 @@ export function applyCommand(
       windowPlans,
       revision
     );
-    const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers);
+    const containerPlans = deriveContainerPlans(
+      inspection.surfaces,
+      windows,
+      containers,
+      inspection.policy
+    );
     const presentation = changedContainerIntentions(
       inspection.renderPlan.containers,
       containerPlans,
@@ -358,7 +368,8 @@ export function applyCommand(
     const containerPlans = deriveContainerPlans(
       inspection.surfaces,
       inspection.windows,
-      containers
+      containers,
+      inspection.policy
     );
     const presentation = changedContainerIntentions(
       inspection.renderPlan.containers,
@@ -468,7 +479,8 @@ export function applyCommand(
     const containerPlans = deriveContainerPlans(
       inspection.surfaces,
       inspection.windows,
-      containers
+      containers,
+      inspection.policy
     );
     intentions.push(
       ...changedContainerIntentions(
@@ -571,6 +583,13 @@ export function applyCommand(
     windowPlans,
     revision
   );
+  const containerPlans = deriveContainerPlans(
+    inspection.surfaces,
+    inspection.windows,
+    containers,
+    inspection.policy
+  );
+  const nextPlan = containerPlans.find((container) => container.id === current.id);
   const present = {
     type: "PresentContainer" as const,
     revision,
@@ -578,6 +597,7 @@ export function applyCommand(
     containerId: current.id,
     surfaceId: current.surfaceId,
     layout: command.layout,
+    ...(nextPlan?.headerRect ? { headerRect: copyRect(nextPlan.headerRect) } : {}),
     ...(nextContainer.selectedChildId ? { selectedChildId: nextContainer.selectedChildId } : {}),
     stackingOrder: [...current.childIds],
   };
@@ -592,18 +612,7 @@ export function applyCommand(
       ...inspection.renderPlan,
       revision,
       windows: windowPlans,
-      containers: inspection.renderPlan.containers.map((container) =>
-        container.id === current.id
-          ? {
-              ...container,
-              layout: command.layout,
-              ...(nextContainer.selectedChildId
-                ? { selectedChildId: nextContainer.selectedChildId }
-                : {}),
-              stackingOrder: [...current.childIds],
-            }
-          : container
-      ),
+      containers: containerPlans,
     },
   });
   return {

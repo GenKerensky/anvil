@@ -125,7 +125,7 @@ export function applyPolicy(
         frame: copyRect(plan.frame),
       })),
   ].map((intention, ordinal) => ({ ...intention, ordinal }));
-  const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers);
+  const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers, nextPolicy);
   intentions.push(
     ...changedContainerIntentions(
       inspection.renderPlan.containers,
