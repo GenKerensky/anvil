@@ -1181,6 +1181,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       tabbedEnabled: this.ext.settings.get_boolean("tabbed-tiling-mode-enabled"),
       tree: this._tree ? this._tree!.serializeForTest() : null,
       portableTiling: this._tilingShadow?.inspect() ?? null,
+      portablePresentation: this._tilingShadow?.presentationPlan() ?? null,
       portableTilingShadow: this._tilingShadowComparison,
       portableTilingShadowFailure: this._tilingShadowFailure,
     });

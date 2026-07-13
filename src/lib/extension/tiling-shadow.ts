@@ -3,6 +3,10 @@ import Meta from "gi://Meta";
 
 import type { WindowOverride } from "../shared/settings.js";
 import { GnomeGrabOperationAdapter } from "./gnome-grab-operation-adapter.js";
+import {
+  createGnomePresentationPlan,
+  type GnomePresentationPlan,
+} from "./gnome-tiling-presentation.js";
 import * as Utils from "./utils.js";
 import type { AnvilAction } from "./window/actions.js";
 import { GRAB_TYPES } from "./window/constants.js";
@@ -114,18 +118,34 @@ export class GnomeTilingIdentityRegistry {
   private nextSurface = 1;
   private nextOperation = 1;
   private readonly windows = new WeakMap<Meta.Window, WindowId>();
+  private readonly windowsById = new Map<WindowId, Meta.Window>();
   private readonly surfaces = new WeakMap<Meta.Workspace, Map<string, SurfaceId>>();
 
   window(metaWindow: Meta.Window): WindowId {
     const existing = this.windows.get(metaWindow);
-    if (existing) return existing;
+    if (existing) {
+      this.windowsById.set(existing, metaWindow);
+      return existing;
+    }
     const id = windowId(`window:${this.nextWindow++}`);
     this.windows.set(metaWindow, id);
+    this.windowsById.set(id, metaWindow);
     return id;
   }
 
   knownWindow(metaWindow: Meta.Window): WindowId | undefined {
     return this.windows.get(metaWindow);
+  }
+
+  resolveWindow(id: WindowId): Meta.Window | undefined {
+    return this.windowsById.get(id);
+  }
+
+  forgetWindow(metaWindow: Meta.Window): void {
+    const id = this.windows.get(metaWindow);
+    if (!id) return;
+    this.windows.delete(metaWindow);
+    this.windowsById.delete(id);
   }
 
   surface(workspace: Meta.Workspace, outputKey: string): SurfaceId {
@@ -151,6 +171,7 @@ export class TilingShadow {
   private readonly identities = new GnomeTilingIdentityRegistry();
   private machine: TilingStateMachine;
   private activeSurfaces = new Set<SurfaceId>();
+  private readonly surfaceOrigins = new Map<SurfaceId, Readonly<{ x: number; y: number }>>();
   private bootstrapped = false;
   private pendingEvents: TilingEvent[] = [];
   private readonly grabOperations: GnomeGrabOperationAdapter;
@@ -266,6 +287,8 @@ export class TilingShadow {
 
   private surfaceFact(workspace: Meta.Workspace, monitor: number): SurfaceFact {
     const workArea = workspace.get_work_area_for_monitor(monitor);
+    const id = this.surfaceIdentity(workspace, monitor);
+    this.surfaceOrigins.set(id, { x: workArea.x, y: workArea.y });
     const neighbors: Partial<Record<Direction, SurfaceId>> = {};
     const directions: ReadonlyArray<readonly [Direction, Meta.DisplayDirection]> = [
       ["left", Meta.DisplayDirection.LEFT],
@@ -278,7 +301,7 @@ export class TilingShadow {
       if (neighbor >= 0) neighbors[direction] = this.surfaceIdentity(workspace, neighbor);
     }
     return {
-      id: this.surfaceIdentity(workspace, monitor),
+      id,
       workArea: { x: 0, y: 0, width: workArea.width, height: workArea.height },
       neighbors,
       capabilities: { focus: true, raise: true, move: true, resize: true },
@@ -391,6 +414,7 @@ export class TilingShadow {
     this.machine = createTilingStateMachine(this.policy());
     this.rejectedEvents = [];
     this.grabOperations.reset();
+    this.surfaceOrigins.clear();
     const surfaces = this.surfaceFacts();
     this.activeSurfaces = new Set(surfaces.map((surface) => surface.id));
     const observedWindows = windows
@@ -458,6 +482,9 @@ export class TilingShadow {
     });
     if (this.bootstrapped && transition?.status !== "rejected") {
       this.activeSurfaces = nextSurfaces;
+      for (const surfaceId of this.surfaceOrigins.keys()) {
+        if (!nextSurfaces.has(surfaceId)) this.surfaceOrigins.delete(surfaceId);
+      }
     }
     this.observePolicy();
   }
@@ -579,6 +606,15 @@ export class TilingShadow {
       type: "FactsObserved",
       facts: [{ type: "WindowWithdrawn", windowId: knownWindow }],
     });
+    this.identities.forgetWindow(metaWindow);
+  }
+
+  resolveWindow(id: WindowId): Meta.Window | undefined {
+    return this.identities.resolveWindow(id);
+  }
+
+  presentationPlan(): GnomePresentationPlan {
+    return createGnomePresentationPlan(this.machine.inspect(), this.surfaceOrigins);
   }
 
   compareObservedGeometry(): Readonly<{

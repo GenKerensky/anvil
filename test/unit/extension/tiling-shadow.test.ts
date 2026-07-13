@@ -65,6 +65,59 @@ describe("TilingShadow", () => {
     expect(inspection.windows).toHaveLength(1);
     expect(inspection.windows[0].frame).toEqual({ x: 100, y: 50, width: 800, height: 600 });
     expect(inspection.windows[0].surfaceId).toBe(inspection.surfaces[1].id);
+    expect(shadow.presentationPlan().windows[0]).toMatchObject({
+      id: inspection.windows[0].id,
+      surfaceId: inspection.surfaces[1].id,
+      frame: { x: 1920, y: 0, width: 1920, height: 1080 },
+      parentId: inspection.windows[0].parentId,
+      parentLayout: "horizontal",
+      selected: true,
+    });
+    expect(shadow.resolveWindow(inspection.windows[0].id)).toBe(window);
+    globals.cleanup();
+  });
+
+  it("removes withdrawn windows from the GNOME identity resolver", () => {
+    const globals = installGnomeGlobals();
+    const window = createMockWindow({ workspace: globals.workspaces[0] });
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([window], () => true);
+    const id = shadow.inspect().windows[0].id;
+
+    shadow.withdrawWindow(window);
+
+    expect(shadow.resolveWindow(id)).toBeUndefined();
+    expect(shadow.presentationPlan().windows).toEqual([]);
+
+    shadow.observeWindow(window);
+    const replacementId = shadow.inspect().windows[0].id;
+    expect(replacementId).not.toBe(id);
+    expect(shadow.resolveWindow(replacementId)).toBe(window);
+    globals.cleanup();
+  });
+
+  it("projects stacked and tabbed selection without exposing legacy Nodes", () => {
+    const first = createMockWindow();
+    const second = createMockWindow();
+    const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+
+    shadow.observeCommand({ name: "LayoutTabbedToggle" }, first);
+
+    const [firstPlan, secondPlan] = shadow.presentationPlan().windows;
+    expect(firstPlan).toMatchObject({ parentLayout: "tabbed", selected: true });
+    expect(secondPlan).toMatchObject({ parentLayout: "tabbed", selected: false });
+    const containerPlan = shadow.presentationPlan().containers[0];
+    expect(containerPlan.stackingOrder).toEqual([firstPlan.id, secondPlan.id]);
+    (containerPlan.stackingOrder as unknown as string[]).reverse();
+    expect(shadow.presentationPlan().containers[0].stackingOrder).toEqual([
+      firstPlan.id,
+      secondPlan.id,
+    ]);
+    expect(JSON.stringify(shadow.presentationPlan())).not.toContain("nodeValue");
     globals.cleanup();
   });
 

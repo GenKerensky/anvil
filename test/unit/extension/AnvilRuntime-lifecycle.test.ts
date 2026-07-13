@@ -32,6 +32,7 @@ describe("AnvilRuntime - Lifecycle", () => {
 
     expect(state.portableTiling.schemaVersion).toBe(1);
     expect(state.portableTiling.surfaces).toHaveLength(1);
+    expect(state.portablePresentation).toMatchObject({ revision: expect.any(Number), windows: [] });
   });
 
   describe("_validWindow", () => {
