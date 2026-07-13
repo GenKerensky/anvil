@@ -118,6 +118,7 @@ export type WindowInspection = Readonly<{
   transientParentId?: WindowId;
   resizable?: boolean;
   tags: readonly string[];
+  reconcileAttempts: number;
 }>;
 
 export type ContainerInspection = Readonly<{
@@ -215,6 +216,11 @@ export type PlatformSnapshot = Readonly<{
   focusedWindowId?: WindowId;
 }>;
 
+export type IntentionToken = Readonly<{
+  revision: TilingRevision;
+  ordinal: number;
+}>;
+
 export type PlatformFact =
   | Readonly<{
       type: "WindowAvailabilityObserved";
@@ -232,6 +238,12 @@ export type PlatformFact =
   | Readonly<{
       type: "SurfaceWithdrawn";
       surfaceId: SurfaceId;
+    }>
+  | Readonly<{
+      type: "FrameObserved";
+      windowId: WindowId;
+      frame: Rect;
+      causalToken?: IntentionToken;
     }>;
 
 export type TilingCommand =
@@ -301,12 +313,11 @@ export type TilingEvent =
   | Readonly<{
       type: "OperationCommitted" | "OperationCancelled";
       operationId: OperationId;
+    }>
+  | Readonly<{
+      type: "ReconcileRequested";
+      surfaceId?: SurfaceId;
     }>;
-
-type IntentionToken = Readonly<{
-  revision: TilingRevision;
-  ordinal: number;
-}>;
 
 export type TilingIntention =
   | (IntentionToken &

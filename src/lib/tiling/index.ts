@@ -5,6 +5,7 @@ export type {
   ContainerInspection,
   ContainerPlan,
   Direction,
+  IntentionToken,
   Layout,
   OperationId,
   OperationInspection,

@@ -14,6 +14,7 @@ import { copyRect, deriveContainerPlans, deriveWindowPlans, sameRect } from "./g
 import { changedPlacementIntentions } from "./intentions.js";
 import { applyOperation } from "./operations.js";
 import { classifyParticipation, effectiveParticipation } from "./participation.js";
+import { reconcile } from "./reconciliation.js";
 import { validateSurfaces } from "./validation.js";
 
 export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingStateMachine {
@@ -41,6 +42,12 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
   return {
     dispatch(event: TilingEvent): TilingTransition {
+      if (event.type === "ReconcileRequested") {
+        const result = reconcile(inspection, event.surfaceId);
+        inspection = result.inspection;
+        return result.transition;
+      }
+
       if (
         event.type === "OperationStarted" ||
         event.type === "OperationUpdated" ||
@@ -519,6 +526,18 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             }
             changed = true;
           }
+          if (fact.type === "FrameObserved") {
+            const index = windows.findIndex((window) => window.id === fact.windowId);
+            if (index < 0) continue;
+            const window = windows[index];
+            if (sameRect(window.frame, fact.frame) && window.reconcileAttempts === 0) continue;
+            windows[index] = {
+              ...window,
+              frame: copyRect(fact.frame),
+              reconcileAttempts: 0,
+            };
+            changed = true;
+          }
           if (fact.type === "WindowWithdrawn") {
             const index = windows.findIndex((window) => window.id === fact.windowId);
             if (index < 0) continue;
@@ -777,6 +796,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               ...(window.transientParentId ? { transientParentId: window.transientParentId } : {}),
               ...(window.resizable !== undefined ? { resizable: window.resizable } : {}),
               tags: [...(window.tags ?? [])],
+              reconcileAttempts: 0,
             };
             const participating = effectiveParticipation(
               classifiedWindow,
