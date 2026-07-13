@@ -475,8 +475,10 @@ A second audit of the refactor found remaining work; all resolved.
 ### Window hint corner masks (2026-07-12)
 
 - **Configured-radius mask, not outline inference**: while either focus or split hints are enabled,
-  every Anvil-tracked normal window is continuously cropped to the hint border's effective inner
-  radius. Anvil does not inspect client pixels or attempt to infer each application's decorations.
+  every Anvil-tracked normal window is continuously cropped to the configured hint radius plus
+  half the hint stroke in the window's local rectangle. The half-stroke margin keeps differing
+  St/GLSL anti-alias coverage from exposing client pixels. Anvil does not inspect client pixels or
+  attempt to infer each application's decorations.
 - **BorderController owns policy and lifecycle**: it attaches, refreshes, and removes the named
   mask effect alongside border actors. A dedicated `WindowCornerMaskEffect` owns only the
   compositor-native GLSL crop; `WindowTracker` delegates visual teardown to the controller.
@@ -485,3 +487,38 @@ A second audit of the refactor found remaining work; all resolved.
 - **Failure policy**: effect setup fails open, retaining the existing unmasked rounded border and
   logging once. No CPU texture readback or supported-Shell-version reduction is acceptable for
   this cosmetic feature.
+
+### Platform-independent Tiling State (2026-07-13)
+
+- The Tiling State Machine will own a new platform-independent **Tiling State** whose entities are
+  keyed exclusively by **Tiling Identity**. The existing GObject-based `Tree` is a legacy model to
+  retire, not the implementation to purify in place. Live GNOME objects remain in Anvil Runtime and
+  cross the boundary only as normalized Platform Facts or Tiling Intentions. See
+  `docs/adr/0001-platform-independent-tiling-state.md`.
+- The Tiling State Machine is the sole owner of Tiling State, its revision sequence, event ordering,
+  and event processing. Anvil Runtime observes GNOME and submits normalized Tiling Events; it has no
+  direct state-mutation path. The state machine may derive Reconciliation Events internally.
+- Tiling transitions use **commit first, reconcile afterward** semantics. Processing an event
+  synchronously commits its state and revision before Runtime applies the returned intentions.
+  Delayed, clamped, or failed GNOME effects do not roll state back; Runtime reports their observed
+  results as Platform Facts, and persistent divergence is handled through reconciliation.
+- `SurfaceId` is the core's sole placement-space identity. The core has no workspace, monitor, or
+  output identities; the adapter decides what comprises a Surface and translates its local geometry.
+  A Surface may be one workspace/output pair or a workspace spanning outputs. The v1 geometry
+  contract is one rectangular layout canvas per Surface; genuinely non-rectangular regions are
+  exposed as multiple Surfaces until region-set geometry is designed explicitly.
+
+### Rounded window shadow ownership (2026-07-13)
+
+- **BorderController owns replacement shadows**: while window hint masking is active, each normal
+  tracked window has a dedicated `cornerShadow` actor below its window actor. This preserves a
+  rounded shadow for unfocused windows instead of coupling the replacement shadow to the focused
+  border actor.
+- **Focus is presentation state**: the shadow actor switches between
+  `.window-focused-shadow` and `.window-unfocused-shadow`; it is repositioned from the same
+  frame-plus-border-inset geometry as the concentric mask and hint. Maximized/fullscreen windows
+  hide the actor, and controller teardown removes it.
+- **The user stylesheet is the configuration contract**: focused and unfocused `box-shadow`
+  declarations hold offset, blur, spread, color, and opacity. Appearance preferences edit those
+  declarations through `PrefsThemeManager`; the existing `css-updated` event reloads the shell and
+  refreshes decoration layout without adding parallel GSettings state.
