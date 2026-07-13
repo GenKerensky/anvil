@@ -713,12 +713,26 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   /** Dispatch a typed user action via CommandBus (B3-1). */
   command(action: AnvilAction) {
     this._assertEnabled("command");
+    if (this._tilingEngineMode === "core" && this._handleCorePlatformCommand(action)) return;
     let handledByCore = false;
     this._withTilingShadow("command", (shadow) => {
       handledByCore = shadow.observeCommand(action, this.focusMetaWindow);
     });
     if (this._tilingEngineMode === "core" && handledByCore) return;
     this._commandBus!.dispatch(action);
+  }
+
+  private _handleCorePlatformCommand(action: AnvilAction): boolean {
+    if (action.name !== "FloatClassToggle") return false;
+    const metaWindow = this.focusMetaWindow;
+    if (!metaWindow) return true;
+    if (this.isFloatingExempt(metaWindow)) {
+      this.removeFloatOverride(metaWindow, false);
+    } else {
+      this.addFloatOverride(metaWindow, false);
+    }
+    this._withTilingShadow("float-class-policy", (shadow) => shadow.observePolicy());
+    return true;
   }
 
   private _withTilingShadow(name: string, callback: (shadow: TilingShadow) => void): void {
@@ -1258,6 +1272,10 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   getStateJson(): string {
     return this.getTestStateJson();
+  }
+
+  getPortableWindowStateJson(metaWindow: Meta.Window): string {
+    return JSON.stringify(this._tilingShadow?.inspectWindow(metaWindow) ?? null);
   }
 
   getMonitorConnector(index: number): string | null {

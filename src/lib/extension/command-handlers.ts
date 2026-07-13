@@ -397,13 +397,13 @@ function handleSnapLayoutMove(host: CommandHandlerHost, action: SnapLayoutMoveAc
 }
 
 function handleShowTabDecorationToggle(host: CommandHandlerHost) {
-  const focusNodeWindow = host.findNodeWindow(host.focusMetaWindow!);
-  if (!focusNodeWindow) return;
   if (!host.settings.get_boolean("tabbed-tiling-mode-enabled")) return;
 
   const showTabs = host.settings.get_boolean("showtab-decoration-enabled");
   host.settings.set_boolean("showtab-decoration-enabled", !showTabs);
 
+  const focusNodeWindow = host.findNodeWindow(host.focusMetaWindow!);
+  if (!focusNodeWindow) return;
   host.unfreezeRender();
   host.layoutEngine.setAttachNode(focusNodeWindow!.parentNode!);
   host.renderTree("showtab-decoration-enabled");

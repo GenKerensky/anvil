@@ -517,6 +517,12 @@ export function getRuntimeWindowStates() {
 
 /** @param {any} metaWindow @returns {any | undefined} */
 export function getRuntimeWindowState(metaWindow) {
+  const runtime = getAnvilRuntime();
+  const state = JSON.parse(runtime.getStateJson());
+  if (state.tilingEngineMode === "core") {
+    const portable = JSON.parse(runtime.getPortableWindowStateJson(metaWindow));
+    return portable ? { ...portable, mode: portable.participating ? "TILE" : "FLOAT" } : undefined;
+  }
   if (!metaWindow) return undefined;
   const id = metaWindow.get_id();
   return getRuntimeWindowStates().find((candidate) => candidate.windowId === id);

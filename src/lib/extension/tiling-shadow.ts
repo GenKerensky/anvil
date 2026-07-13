@@ -35,6 +35,7 @@ import {
   type TilingPolicy,
   type TilingStateMachine,
   type TilingTransition,
+  type WindowInspection,
   type WindowFact,
   type WindowId,
 } from "../tiling/index.js";
@@ -666,6 +667,11 @@ export class TilingShadow {
 
   resolveWindow(id: WindowId): Meta.Window | undefined {
     return this.identities.resolveWindow(id);
+  }
+
+  inspectWindow(metaWindow: Meta.Window): WindowInspection | undefined {
+    const id = this.identities.knownWindow(metaWindow);
+    return id ? this.machine.inspect().windows.find((window) => window.id === id) : undefined;
   }
 
   toGlobalRect(surface: SurfaceId, rect: Rect): Rect {

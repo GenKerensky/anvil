@@ -60,6 +60,21 @@ describe("AnvilRuntime - Commands", () => {
       expect(ctx.tree.findNode(metaWindow)?.mode).toBe(WINDOW_MODES.FLOAT);
     });
 
+    it("persists class participation policy in core writer mode", () => {
+      const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
+      ctx.display.get_focus_window.mockReturnValue(metaWindow);
+      wm()._tilingEngineMode = "core";
+      const observePolicy = vi.spyOn(wm()._tilingShadow, "observePolicy");
+
+      wm().command({ name: "FloatClassToggle", mode: WINDOW_MODES.FLOAT });
+
+      expect(wm().isFloatingExempt(metaWindow)).toBe(true);
+      expect(configMgr().windowProps.overrides).toContainEqual(
+        expect.objectContaining({ wmClass: "TestApp", mode: "float", wmId: undefined })
+      );
+      expect(observePolicy).toHaveBeenCalledOnce();
+    });
+
     it("should handle FloatNonPersistentToggle action", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const { monitor } = getWorkspaceAndMonitor(ctx);
@@ -463,8 +478,12 @@ describe("AnvilRuntime - Commands", () => {
       expect(ctx.settings.get_boolean("showtab-decoration-enabled")).toBe(true);
     });
 
-    it("should do nothing if no focus node window", () => {
+    it("toggles the platform setting without a legacy focus node", () => {
+      ctx.settings.set_boolean("tabbed-tiling-mode-enabled", true);
+      ctx.settings.set_boolean("showtab-decoration-enabled", true);
+
       expect(() => wm().command({ name: "ShowTabDecorationToggle" })).not.toThrow();
+      expect(ctx.settings.get_boolean("showtab-decoration-enabled")).toBe(false);
     });
   });
 

@@ -33,6 +33,7 @@ export interface BorderControllerHost {
 export class BorderController {
   private _host: BorderControllerHost;
   private _maskFailureLogged = false;
+  private readonly _windowActors = new Set<AnvilWindowActor>();
 
   constructor(host: BorderControllerHost) {
     this._host = host;
@@ -46,7 +47,9 @@ export class BorderController {
   }
 
   ensureBorderActors(windowActor: AnvilWindowActor | null) {
-    if (!windowActor || !this.bordersEnabled()) return;
+    if (!windowActor) return;
+    this._windowActors.add(windowActor);
+    if (!this.bordersEnabled()) return;
     if (!windowActor.border) {
       const border = new St.Bin({ style_class: "window-tiled-border" });
       if (global.window_group) global.window_group.add_child(border);
@@ -60,23 +63,23 @@ export class BorderController {
     }
     this.updateWindowMask(windowActor);
     this.updateWindowShadow(windowActor);
+    this.updateWindowBorderVisibility(windowActor);
   }
 
   ensureAllBorderActors() {
-    this._host.tree.nodeWindows.forEach((nodeWindow) => {
-      const actor = nodeWindow.windowActor as AnvilWindowActor | null;
-      if (actor) this.ensureBorderActors(actor);
-    });
+    this._windowActors.forEach((actor) => this.ensureBorderActors(actor));
   }
 
   destroyAllBorderActors() {
-    this._host.tree.nodeWindows.forEach((nodeWindow) => {
-      const actor = nodeWindow.windowActor as AnvilWindowActor | null;
-      if (actor) this.destroyWindowActors(actor);
-    });
+    this._windowActors.forEach((actor) => this._removeBorderActors(actor));
   }
 
   destroyWindowActors(actor: AnvilWindowActor) {
+    this._removeBorderActors(actor);
+    this._windowActors.delete(actor);
+  }
+
+  private _removeBorderActors(actor: AnvilWindowActor) {
     this.removeWindowMask(actor);
     if (actor.border) {
       if (global.window_group) global.window_group.remove_child(actor.border);
@@ -163,6 +166,18 @@ export class BorderController {
       global.window_group.remove_child(shadow);
       global.window_group.insert_child_below(shadow, actor);
     }
+  }
+
+  private updateWindowBorderVisibility(actor: AnvilWindowActor) {
+    const border = actor.border;
+    const metaWindow = actor.get_meta_window?.() ?? actor.meta_window ?? null;
+    if (!border || !metaWindow) return;
+    const visible =
+      this._host.settings.get_boolean("focus-border-toggle") &&
+      !this._isMaximized(metaWindow) &&
+      !metaWindow.is_fullscreen();
+    if (visible) border.show();
+    else border.hide();
   }
 
   private _isMaximized(metaWindow: Meta.Window): boolean {

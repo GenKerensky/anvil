@@ -129,6 +129,32 @@ describe("AnvilRuntime - Borders", () => {
   });
 
   describe("settings toggles", () => {
+    it("registers actor lifecycle while borders are disabled", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: {
+          "focus-border-toggle": false,
+          "split-border-toggle": false,
+        },
+      });
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const actor = window.get_compositor_private();
+
+      ctx.anvilRuntime._borders.ensureBorderActors(actor);
+      ctx.settings.set_boolean("focus-border-toggle", true);
+      ctx.anvilRuntime._borders.ensureAllBorderActors();
+
+      expect(actor.border).not.toBeNull();
+      expect(actor.cornerShadow).not.toBeNull();
+
+      window.maximize();
+      ctx.anvilRuntime._borders.ensureBorderActors(actor);
+      expect(actor.border.visible).toBe(false);
+
+      window.unmaximize();
+      ctx.anvilRuntime._borders.ensureBorderActors(actor);
+      expect(actor.border.visible).toBe(true);
+    });
+
     it("should destroy border actors when toggled off at runtime", () => {
       const ctx = createAnvilRuntimeFixture({
         settings: {

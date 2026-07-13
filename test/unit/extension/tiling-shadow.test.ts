@@ -91,6 +91,7 @@ describe("TilingShadow", () => {
       selected: true,
     });
     expect(shadow.resolveWindow(inspection.windows[0].id)).toBe(window);
+    expect(shadow.inspectWindow(window)).toEqual(inspection.windows[0]);
     const nativeRect = {} as { x: number; y: number; width: number; height: number };
     Object.defineProperties(nativeRect, {
       x: { value: 2020, enumerable: true },

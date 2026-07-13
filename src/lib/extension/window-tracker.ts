@@ -183,6 +183,7 @@ export class WindowTracker {
   trackWhenReady(display: Meta.Display, metaWindow: Meta.Window, afterTrack?: () => void) {
     const host = this._host;
     if (this._trackedWindows.has(metaWindow) || host.tree.findNode(metaWindow)) {
+      if (host.coreTilingEngine) this.trackCoreActor(metaWindow);
       this.clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
       return;
     }
@@ -513,22 +514,34 @@ export class WindowTracker {
     const anvilMetaWin = metaWindow as AnvilMetaWindow;
     this.clearPendingWindowSignals(anvilMetaWin);
     this._trackedWindows.add(metaWindow);
-    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+    const updateBorder = () => {
+      const actor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+      if (actor) host.ensureBorderActors(actor);
+    };
 
     if (!anvilMetaWin.windowSignals) {
       anvilMetaWin.windowSignals = [
         metaWindow.connect("position-changed", (_metaWindow: Meta.Window) => {
           host.observePortableFrame(_metaWindow);
+          updateBorder();
         }),
         metaWindow.connect("size-changed", (_metaWindow: Meta.Window) => {
           host.observePortableFrame(_metaWindow);
+          updateBorder();
         }),
         metaWindow.connect("notify::wm-class", () => host.observePortableWindow(metaWindow)),
         metaWindow.connect("notify::title", () => host.observePortableWindow(metaWindow)),
-        metaWindow.connect("notify::minimized", () => host.observePortableWindow(metaWindow)),
-        metaWindow.connect("notify::fullscreen", () => host.observePortableWindow(metaWindow)),
+        metaWindow.connect("notify::minimized", () => {
+          host.observePortableWindow(metaWindow);
+          updateBorder();
+        }),
+        metaWindow.connect("notify::fullscreen", () => {
+          host.observePortableWindow(metaWindow);
+          updateBorder();
+        }),
         metaWindow.connect("focus", (_metaWindow: Meta.Window) => {
           host.observePortableFocus(_metaWindow);
+          updateBorder();
         }),
         metaWindow.connect("workspace-changed", (_metaWindow: Meta.Window) => {
           host.observePortableWindow(_metaWindow);
@@ -540,14 +553,25 @@ export class WindowTracker {
       ];
     }
 
+    this.trackCoreActor(metaWindow);
+  }
+
+  private trackCoreActor(metaWindow: Meta.Window): void {
+    const host = this._host;
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
     if (windowActor && !windowActor.actorSignals) {
+      host.ensureBorderActors(windowActor);
       windowActor.actorSignals = [
         windowActor.connect("destroy", () => {
           this._trackedWindows.delete(metaWindow);
           host.withdrawPortableWindow(metaWindow);
+          host.destroyWindowActors(windowActor);
+        }),
+        windowActor.connect("first-frame", () => {
+          host.observePortableWindow(metaWindow);
+          host.ensureBorderActors(windowActor);
         }),
       ];
-      windowActor.connect("first-frame", () => host.observePortableWindow(metaWindow));
     }
   }
 
