@@ -122,6 +122,47 @@ describe("TilingStateMachine", () => {
     expect(machine.inspect().surfaces[0].rootId).toBe("container:1");
   });
 
+  it("does not consume container identities when a candidate is rejected", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const missing = surfaceId("missing");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({ type: "PlatformSnapshotObserved", snapshot: { surfaces: [], windows: [] } });
+
+    expect(
+      machine.dispatch({
+        type: "FactsObserved",
+        facts: [
+          {
+            type: "SurfaceObserved",
+            surface: {
+              id: primary,
+              workArea: { x: 0, y: 0, width: 1000, height: 800 },
+              neighbors: { right: missing },
+              capabilities,
+            },
+          },
+        ],
+      })
+    ).toMatchObject({ status: "rejected" });
+
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "SurfaceObserved",
+          surface: {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        },
+      ],
+    });
+    expect(machine.inspect().surfaces[0].rootId).toBe("container:1");
+  });
+
   it("admits available windows and derives split geometry", () => {
     const machine = createTilingStateMachine(policy);
     const primary = surfaceId("primary");
@@ -257,6 +298,64 @@ describe("TilingStateMachine", () => {
       windows: [{ id: fixed, policyParticipation: true, participating: false }],
       containers: [{ childIds: [] }],
       renderPlan: { windows: [] },
+    });
+  });
+
+  it("reevaluates participation when Surface capabilities change", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const terminal = windowId("terminal");
+    const surface = {
+      id: primary,
+      workArea: { x: 0, y: 0, width: 1000, height: 800 },
+      neighbors: {},
+      capabilities: { focus: true, raise: true, move: true, resize: true },
+    } as const;
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [surface],
+        windows: [
+          {
+            id: terminal,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 1000, height: 800 },
+            available: true,
+            capabilities: surface.capabilities,
+          },
+        ],
+      },
+    });
+
+    const disabled = machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "SurfaceObserved",
+          surface: {
+            ...surface,
+            capabilities: { ...surface.capabilities, resize: false },
+          },
+        },
+      ],
+    });
+
+    expect(disabled).toMatchObject({
+      status: "committed",
+      intentions: [
+        { type: "WindowParticipationChanged", windowId: terminal, participating: false },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [{ id: terminal, participating: false }],
+      containers: [{ childIds: [] }],
+      renderPlan: { windows: [] },
+    });
+
+    machine.dispatch({ type: "FactsObserved", facts: [{ type: "SurfaceObserved", surface }] });
+    expect(machine.inspect()).toMatchObject({
+      windows: [{ id: terminal, participating: true }],
+      containers: [{ childIds: [terminal] }],
     });
   });
 
@@ -825,6 +924,10 @@ describe("TilingStateMachine", () => {
       },
     });
 
+    expect(machine.inspect().renderPlan.containers[0]).toMatchObject({
+      selectedChildId: first,
+      stackingOrder: [first, second],
+    });
     const before = machine.inspect().containers[0].childIds;
     const transition = machine.dispatch({
       type: "FactsObserved",

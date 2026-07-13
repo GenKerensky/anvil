@@ -91,6 +91,34 @@ describe("Tiling Commands", () => {
     });
   });
 
+  it("keeps stacked selection on an available child", () => {
+    const { machine, first, second } = twoWindowMachine();
+    machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "SetLayout", windowId: first, layout: "stacked" },
+    });
+    expect(machine.inspect().containers[0].selectedChildId).toBe(first);
+
+    const transition = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "WindowAvailabilityObserved", windowId: first, available: false }],
+    });
+
+    expect(transition).toMatchObject({
+      intentions: [
+        {
+          type: "PresentContainer",
+          containerId: "container:1",
+          selectedChildId: second,
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      containers: [{ selectedChildId: second }],
+      renderPlan: { containers: [{ selectedChildId: second }] },
+    });
+  });
+
   it("commits directional focus as selection plus one-shot intention", () => {
     const { machine, first, second } = twoWindowMachine();
 

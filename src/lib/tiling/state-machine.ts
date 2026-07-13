@@ -1,89 +1,35 @@
 import type {
   ContainerId,
-  ContainerInspection,
-  SurfaceInspection,
   TilingEvent,
   TilingInspection,
   TilingPolicy,
   TilingStateMachine,
   TilingTransition,
-  WindowFact,
   WindowInspection,
 } from "./contracts.js";
 import { copyInspection, copyPolicy } from "./copy.js";
 import { copyRect, deriveContainerPlans, deriveWindowPlans, sameRect } from "./geometry.js";
-import { changedPlacementIntentions } from "./intentions.js";
+import { changedTransitionIntentions } from "./intentions.js";
 import { assertTilingInvariants } from "./invariants.js";
 import { applyOperation } from "./operations.js";
-import { classifyParticipation, effectiveParticipation } from "./participation.js";
+import { effectiveParticipation } from "./participation.js";
 import { reconcile } from "./reconciliation.js";
 import { validateSurfaces } from "./validation.js";
-
-function tilingSurfaceIds(
-  surfaces: readonly { id: string; capabilities: { move: boolean; resize: boolean } }[]
-): Set<string> {
-  return new Set(
-    surfaces
-      .filter((surface) => surface.capabilities.move && surface.capabilities.resize)
-      .map((surface) => surface.id)
-  );
-}
-
-function inspectWindowFact(
-  fact: WindowFact,
-  policy: TilingPolicy,
-  availableSurfaces: ReadonlySet<string>,
-  previous?: WindowInspection
-): WindowInspection {
-  const classification = classifyParticipation(fact, policy);
-  const manualParticipation = previous?.manualParticipation;
-  const candidate: WindowInspection = {
-    id: fact.id,
-    surfaceId: fact.surfaceId,
-    participating: false,
-    policyParticipation: classification.participating,
-    policyParticipationSource: classification.source,
-    ...(manualParticipation !== undefined ? { manualParticipation } : {}),
-    participationSource: manualParticipation === undefined ? classification.source : "manual",
-    available: fact.available,
-    frame: copyRect(fact.frame),
-    capabilities: { ...fact.capabilities },
-    ...(fact.applicationId ? { applicationId: fact.applicationId } : {}),
-    ...(fact.title ? { title: fact.title } : {}),
-    ...(fact.role ? { role: fact.role } : {}),
-    ...(fact.transientParentId ? { transientParentId: fact.transientParentId } : {}),
-    ...(fact.resizable !== undefined ? { resizable: fact.resizable } : {}),
-    tags: [...(fact.tags ?? [])],
-    reconcileAttempts: previous?.reconcileAttempts ?? 0,
-  };
-  return {
-    ...candidate,
-    participating: effectiveParticipation(candidate, policy, availableSurfaces),
-  };
-}
+import { applyCommand } from "./commands.js";
+import { applyPolicy } from "./policy.js";
+import {
+  cancelOperationsForChangedTopology,
+  createInitialInspection,
+  normalizeSelections,
+  tilingSurfaceIds,
+} from "./transition-helpers.js";
+import { applyBootstrap } from "./bootstrap.js";
+import { inspectWindowFact } from "./window-facts.js";
 
 export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingStateMachine {
   const policy = copyPolicy(initialPolicy);
   let nextContainer = 1;
-  let inspection: TilingInspection = {
-    schemaVersion: 1,
-    revision: 0,
-    policy,
-    surfaces: [],
-    windows: [],
-    containers: [],
-    operations: [],
-    placementHints: [],
-    evacuationHints: [],
-    renderPlan: {
-      revision: 0,
-      surfaces: [],
-      windows: [],
-      containers: [],
-      previews: [],
-    },
-    diagnostics: [],
-  };
+  let inspection: TilingInspection = createInitialInspection(policy);
   const commitCandidate = (candidate: TilingInspection): void => {
     assertTilingInvariants(candidate);
     inspection = candidate;
@@ -109,534 +55,15 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
       }
 
       if (event.type === "CommandRequested") {
-        const command = event.command;
-        if (command.type === "SetParticipation") {
-          const windowIndex = inspection.windows.findIndex(
-            (candidate) => candidate.id === command.windowId
-          );
-          if (windowIndex < 0) {
-            return {
-              status: "rejected",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [
-                {
-                  code: "unknown-window",
-                  message: "SetParticipation requires a known window",
-                  identity: command.windowId,
-                },
-              ],
-            };
-          }
-          const current = inspection.windows[windowIndex];
-          const manualParticipation = command.participating ?? undefined;
-          if (manualParticipation === current.manualParticipation) {
-            return {
-              status: "ignored",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [],
-            };
-          }
-          const availableSurfaces = tilingSurfaceIds(inspection.surfaces);
-          const candidate: WindowInspection = {
-            ...current,
-            manualParticipation,
-            participationSource:
-              manualParticipation === undefined ? current.policyParticipationSource : "manual",
-          };
-          const participating = effectiveParticipation(
-            candidate,
-            inspection.policy,
-            availableSurfaces
-          );
-          const participationSurface = inspection.surfaces.find(
-            (item) => item.id === current.surfaceId
-          );
-          if (
-            participating &&
-            (!current.capabilities.move ||
-              !current.capabilities.resize ||
-              !participationSurface?.capabilities.move ||
-              !participationSurface.capabilities.resize)
-          ) {
-            return {
-              status: "rejected",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [
-                {
-                  code: "capability-unsupported",
-                  message: "Tiling participation requires move and resize capabilities",
-                  identity: current.id,
-                },
-              ],
-            };
-          }
-          let placementHints = [...inspection.placementHints];
-          if (current.participating && !participating) {
-            placementHints = placementHints.filter((hint) => hint.windowId !== current.id);
-            placementHints.push({
-              windowId: current.id,
-              surfaceId: current.surfaceId,
-              ...(current.parentId ? { parentId: current.parentId } : {}),
-              selected: false,
-            });
-          }
-          const surface = inspection.surfaces.find(
-            (candidateSurface) => candidateSurface.id === current.surfaceId
-          );
-          const nextWindow: WindowInspection = {
-            ...candidate,
-            participating,
-            ...(participating && surface ? { parentId: surface.rootId } : { parentId: undefined }),
-          };
-          const windows = [...inspection.windows];
-          windows[windowIndex] = nextWindow;
-          const containers = inspection.containers.map((container) => {
-            const childIds = container.childIds.filter((id) => id !== current.id);
-            return container.id === nextWindow.parentId
-              ? { ...container, childIds: [...childIds, current.id] }
-              : { ...container, childIds };
-          });
-          const revision = inspection.revision + 1;
-          const windowPlans = deriveWindowPlans(
-            inspection.surfaces,
-            windows,
-            containers,
-            inspection.policy
-          );
-          const participationIntentions =
-            participating === current.participating
-              ? []
-              : [
-                  {
-                    type: "WindowParticipationChanged" as const,
-                    revision,
-                    ordinal: 0,
-                    windowId: current.id,
-                    participating,
-                  },
-                ];
-          const placementIntentions = changedPlacementIntentions(
-            inspection.renderPlan.windows,
-            windowPlans,
-            revision,
-            participationIntentions.length
-          );
-          commitCandidate({
-            ...inspection,
-            revision,
-            windows,
-            containers,
-            operations: inspection.operations.filter(
-              (operation) =>
-                operation.windowId !== current.id && operation.neighborWindowId !== current.id
-            ),
-            placementHints,
-            renderPlan: {
-              ...inspection.renderPlan,
-              revision,
-              windows: windowPlans,
-              containers: deriveContainerPlans(inspection.surfaces, containers),
-            },
-          });
-          return {
-            status: "committed",
-            revision,
-            intentions: [...participationIntentions, ...placementIntentions],
-            diagnostics: [],
-          };
-        }
-
-        if (command.type === "FocusDirection") {
-          const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
-          const containerIndex = inspection.containers.findIndex(
-            (container) => container.id === window?.parentId
-          );
-          if (!window?.participating || containerIndex < 0) {
-            return {
-              status: "rejected",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [
-                {
-                  code: "invalid-focus-command",
-                  message: "FocusDirection requires a participating window",
-                  identity: command.windowId,
-                },
-              ],
-            };
-          }
-          const container = inspection.containers[containerIndex];
-          const candidates = container.childIds.filter((id) =>
-            inspection.windows.some(
-              (candidate) => candidate.id === id && candidate.participating && candidate.available
-            )
-          );
-          const currentIndex = candidates.indexOf(window.id);
-          const delta = command.direction === "left" || command.direction === "up" ? -1 : 1;
-          const targetId = candidates[currentIndex + delta];
-          if (!targetId) {
-            return {
-              status: "ignored",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [],
-            };
-          }
-          const target = inspection.windows.find((candidate) => candidate.id === targetId);
-          const surface = inspection.surfaces.find(
-            (candidate) => candidate.id === target?.surfaceId
-          );
-          if (!target?.capabilities.focus || !surface?.capabilities.focus) {
-            return {
-              status: "rejected",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [
-                {
-                  code: "capability-unsupported",
-                  message: "Focus target does not support platform focus",
-                  identity: targetId,
-                },
-              ],
-            };
-          }
-          const revision = inspection.revision + 1;
-          const containers = [...inspection.containers];
-          containers[containerIndex] = { ...container, selectedChildId: targetId };
-          commitCandidate({
-            ...inspection,
-            revision,
-            containers,
-            renderPlan: {
-              ...inspection.renderPlan,
-              revision,
-              containers: inspection.renderPlan.containers.map((plan) =>
-                plan.id === container.id ? { ...plan, selectedChildId: targetId } : plan
-              ),
-            },
-          });
-          return {
-            status: "committed",
-            revision,
-            intentions: [
-              {
-                type: "FocusWindow",
-                revision,
-                ordinal: 0,
-                windowId: targetId as WindowInspection["id"],
-              },
-            ],
-            diagnostics: [],
-          };
-        }
-
-        if (command.type === "MoveDirection" || command.type === "SwapDirection") {
-          const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
-          const containerIndex = inspection.containers.findIndex(
-            (container) => container.id === window?.parentId
-          );
-          if (!window?.participating || containerIndex < 0) {
-            return {
-              status: "rejected",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [
-                {
-                  code: "invalid-move-command",
-                  message: `${command.type} requires a participating window`,
-                  identity: command.windowId,
-                },
-              ],
-            };
-          }
-          const container = inspection.containers[containerIndex];
-          const surface = inspection.surfaces.find(
-            (candidate) => candidate.id === container.surfaceId
-          );
-          const placementUnsupported = container.childIds.some((id) => {
-            const child = inspection.windows.find((candidate) => candidate.id === id);
-            return child && (!child.capabilities.move || !child.capabilities.resize);
-          });
-          if (placementUnsupported || !surface?.capabilities.move || !surface.capabilities.resize) {
-            return {
-              status: "rejected",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [
-                {
-                  code: "capability-unsupported",
-                  message: `${command.type} requires move and resize capabilities`,
-                  identity: command.windowId,
-                },
-              ],
-            };
-          }
-          const horizontal = container.layout === "horizontal";
-          const compatible = horizontal
-            ? command.direction === "left" || command.direction === "right"
-            : command.direction === "up" || command.direction === "down";
-          const delta = command.direction === "left" || command.direction === "up" ? -1 : 1;
-          const currentIndex = container.childIds.indexOf(window.id);
-          const targetIndex = currentIndex + delta;
-          if (!compatible || targetIndex < 0 || targetIndex >= container.childIds.length) {
-            return {
-              status: "ignored",
-              revision: inspection.revision,
-              intentions: [],
-              diagnostics: [],
-            };
-          }
-          const childIds = [...container.childIds];
-          [childIds[currentIndex], childIds[targetIndex]] = [
-            childIds[targetIndex],
-            childIds[currentIndex],
-          ];
-          const containers = [...inspection.containers];
-          containers[containerIndex] = { ...container, childIds };
-          const revision = inspection.revision + 1;
-          const windowPlans = deriveWindowPlans(
-            inspection.surfaces,
-            inspection.windows,
-            containers,
-            inspection.policy
-          );
-          const intentions = changedPlacementIntentions(
-            inspection.renderPlan.windows,
-            windowPlans,
-            revision
-          );
-          commitCandidate({
-            ...inspection,
-            revision,
-            containers,
-            renderPlan: {
-              ...inspection.renderPlan,
-              revision,
-              windows: windowPlans,
-              containers: inspection.renderPlan.containers.map((plan) =>
-                plan.id === container.id ? { ...plan, stackingOrder: childIds } : plan
-              ),
-            },
-          });
-          return { status: "committed", revision, intentions, diagnostics: [] };
-        }
-
-        const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
-        const containerIndex = inspection.containers.findIndex(
-          (container) => container.id === window?.parentId
-        );
-        if (
-          !window?.participating ||
-          containerIndex < 0 ||
-          !inspection.policy.allowedLayouts.includes(command.layout)
-        ) {
-          return {
-            status: "rejected",
-            revision: inspection.revision,
-            intentions: [],
-            diagnostics: [
-              {
-                code: "invalid-layout-command",
-                message: "SetLayout requires a participating window and an allowed layout",
-                identity: command.windowId,
-              },
-            ],
-          };
-        }
-        const current = inspection.containers[containerIndex];
-        const surface = inspection.surfaces.find((candidate) => candidate.id === current.surfaceId);
-        const placementUnsupported = current.childIds.some((id) => {
-          const child = inspection.windows.find((candidate) => candidate.id === id);
-          return child && (!child.capabilities.move || !child.capabilities.resize);
-        });
-        if (placementUnsupported || !surface?.capabilities.move || !surface.capabilities.resize) {
-          return {
-            status: "rejected",
-            revision: inspection.revision,
-            intentions: [],
-            diagnostics: [
-              {
-                code: "capability-unsupported",
-                message: "SetLayout requires move and resize capabilities",
-                identity: command.windowId,
-              },
-            ],
-          };
-        }
-        if (current.layout === command.layout) {
-          return {
-            status: "ignored",
-            revision: inspection.revision,
-            intentions: [],
-            diagnostics: [],
-          };
-        }
-        const containers = [...inspection.containers];
-        containers[containerIndex] = { ...current, layout: command.layout };
-        const revision = inspection.revision + 1;
-        const windowPlans = deriveWindowPlans(
-          inspection.surfaces,
-          inspection.windows,
-          containers,
-          inspection.policy
-        );
-        const placement = changedPlacementIntentions(
-          inspection.renderPlan.windows,
-          windowPlans,
-          revision
-        );
-        const present = {
-          type: "PresentContainer" as const,
-          revision,
-          ordinal: placement.length,
-          containerId: current.id,
-          surfaceId: current.surfaceId,
-          layout: command.layout,
-          ...(current.selectedChildId ? { selectedChildId: current.selectedChildId } : {}),
-          stackingOrder: [...current.childIds],
-        };
-        commitCandidate({
-          ...inspection,
-          revision,
-          containers,
-          renderPlan: {
-            ...inspection.renderPlan,
-            revision,
-            windows: windowPlans,
-            containers: inspection.renderPlan.containers.map((container) =>
-              container.id === current.id
-                ? {
-                    ...container,
-                    layout: command.layout,
-                    stackingOrder: [...current.childIds],
-                  }
-                : container
-            ),
-          },
-        });
-        return {
-          status: "committed",
-          revision,
-          intentions: [...placement, present],
-          diagnostics: [],
-        };
+        return applyCommand(inspection, event, commitCandidate);
       }
 
       if (event.type === "PolicyReplaced") {
-        if (JSON.stringify(event.policy) === JSON.stringify(inspection.policy)) {
-          return {
-            status: "ignored",
-            revision: inspection.revision,
-            intentions: [],
-            diagnostics: [],
-          };
-        }
-
-        const nextPolicy = copyPolicy(event.policy);
-        const availableSurfaces = tilingSurfaceIds(inspection.surfaces);
-        const participationChanges: Array<{
-          windowId: WindowInspection["id"];
-          participating: boolean;
-        }> = [];
-        const placementHints = [...inspection.placementHints];
-        const windows = inspection.windows.map((window) => {
-          const classification = classifyParticipation(window, nextPolicy);
-          const classifiedWindow = {
-            ...window,
-            policyParticipation: classification.participating,
-            policyParticipationSource: classification.source,
-            participationSource:
-              window.manualParticipation === undefined ? classification.source : "manual",
-          };
-          const participating = effectiveParticipation(
-            classifiedWindow,
-            nextPolicy,
-            availableSurfaces
-          );
-          if (participating === window.participating) {
-            return { ...classifiedWindow, participating };
-          }
-          participationChanges.push({ windowId: window.id, participating });
-          if (!participating) {
-            placementHints.push({
-              windowId: window.id,
-              surfaceId: window.surfaceId,
-              ...(window.parentId ? { parentId: window.parentId } : {}),
-              selected: false,
-            });
-            return { ...classifiedWindow, participating: false, parentId: undefined };
-          }
-          const surface = inspection.surfaces.find(
-            (candidate) => candidate.id === window.surfaceId
-          );
-          return { ...classifiedWindow, participating: true, parentId: surface?.rootId };
-        });
-        const containers = inspection.containers.map((container) => {
-          const desired = windows
-            .filter((window) => window.participating && window.parentId === container.id)
-            .map((window) => window.id);
-          const desiredSet = new Set<string>(desired);
-          const retained = container.childIds.filter((id) => desiredSet.has(id));
-          const retainedSet = new Set<string>(retained);
-          return {
-            ...container,
-            childIds: [...retained, ...desired.filter((id) => !retainedSet.has(id))],
-          };
-        });
-        const revision = inspection.revision + 1;
-        const windowPlans = deriveWindowPlans(inspection.surfaces, windows, containers, nextPolicy);
-        const intentions = [
-          ...participationChanges.map((change) => ({
-            type: "WindowParticipationChanged" as const,
-            revision,
-            ordinal: 0,
-            ...change,
-          })),
-          ...windowPlans
-            .filter((plan) => {
-              const previous = inspection.renderPlan.windows.find(
-                (window) => window.id === plan.id
-              );
-              return (
-                !previous ||
-                previous.surfaceId !== plan.surfaceId ||
-                !sameRect(previous.frame, plan.frame)
-              );
-            })
-            .map((plan) => ({
-              type: "PlaceWindow" as const,
-              revision,
-              ordinal: 0,
-              windowId: plan.id,
-              surfaceId: plan.surfaceId,
-              frame: copyRect(plan.frame),
-            })),
-        ].map((intention, ordinal) => ({ ...intention, ordinal }));
-
-        commitCandidate({
-          ...inspection,
-          revision,
-          policy: nextPolicy,
-          windows,
-          containers,
-          placementHints,
-          renderPlan: {
-            ...inspection.renderPlan,
-            revision,
-            windows: windowPlans,
-            containers: inspection.renderPlan.containers.map((container) => {
-              const stateContainer = containers.find((candidate) => candidate.id === container.id)!;
-              return { ...container, layout: stateContainer.layout };
-            }),
-          },
-        });
-        return { status: "committed", revision, intentions, diagnostics: [] };
+        return applyPolicy(inspection, event, commitCandidate);
       }
 
       if (event.type === "FactsObserved") {
+        let candidateNextContainer = nextContainer;
         const windows: WindowInspection[] = [...inspection.windows];
         let focusedWindowId = inspection.focusedWindowId;
         let surfaces = [...inspection.surfaces];
@@ -873,6 +300,36 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 neighbors: { ...fact.surface.neighbors },
                 capabilities: { ...fact.surface.capabilities },
               };
+              const availableSurfaces = tilingSurfaceIds(surfaces);
+              for (let windowIndex = 0; windowIndex < windows.length; windowIndex += 1) {
+                const window = windows[windowIndex];
+                if (window.surfaceId !== fact.surface.id) continue;
+                const participating = effectiveParticipation(
+                  window,
+                  inspection.policy,
+                  availableSurfaces
+                );
+                if (participating !== window.participating) {
+                  participationChanges.push({ windowId: window.id, participating });
+                }
+                windows[windowIndex] = {
+                  ...window,
+                  participating,
+                  ...(participating ? { parentId: current.rootId } : { parentId: undefined }),
+                };
+              }
+              containers = containers.map((container) => {
+                const assigned = windows
+                  .filter((window) => window.participating && window.parentId === container.id)
+                  .map((window) => window.id);
+                const assignedSet = new Set<string>(assigned);
+                const retained = container.childIds.filter((id) => assignedSet.has(id));
+                const retainedSet = new Set<string>(retained);
+                return {
+                  ...container,
+                  childIds: [...retained, ...assigned.filter((id) => !retainedSet.has(id))],
+                };
+              });
               const affectedContainerIds = new Set(
                 containers
                   .filter((container) => container.surfaceId === fact.surface.id)
@@ -888,7 +345,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             const hint = evacuationHints.find(
               (candidate) => candidate.surfaceId === fact.surface.id
             );
-            const rootId = `container:${nextContainer++}` as ContainerId;
+            const rootId = `container:${candidateNextContainer++}` as ContainerId;
             const knownWindowIds = new Set(
               windows
                 .filter((window) => window.surfaceId === fact.surface.id)
@@ -958,24 +415,27 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         }
 
         surfaces = surfaces.sort((left, right) => left.id.localeCompare(right.id));
-        containers = containers.sort((left, right) => left.id.localeCompare(right.id));
+        containers = normalizeSelections(containers, windows).sort((left, right) =>
+          left.id.localeCompare(right.id)
+        );
+        operations = cancelOperationsForChangedTopology(
+          inspection.containers,
+          containers,
+          operations
+        );
         windows.sort((left, right) => left.id.localeCompare(right.id));
         evacuationHints.sort((left, right) => left.surfaceId.localeCompare(right.surfaceId));
         const revision = inspection.revision + 1;
         const windowPlans = deriveWindowPlans(surfaces, windows, containers, inspection.policy);
-        const participationIntentions = participationChanges.map((change, ordinal) => ({
-          type: "WindowParticipationChanged" as const,
-          revision,
-          ordinal,
-          ...change,
-        }));
-        const placementIntentions = changedPlacementIntentions(
+        const containerPlans = deriveContainerPlans(surfaces, containers);
+        const intentions = changedTransitionIntentions(
           inspection.renderPlan.windows,
           windowPlans,
-          revision,
-          participationIntentions.length
+          inspection.renderPlan.containers,
+          containerPlans,
+          participationChanges,
+          revision
         );
-        const intentions = [...participationIntentions, ...placementIntentions];
         commitCandidate({
           ...inspection,
           revision,
@@ -995,149 +455,23 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               workArea: copyRect(surface.workArea),
             })),
             windows: windowPlans,
-            containers: deriveContainerPlans(surfaces, containers),
+            containers: containerPlans,
           },
         });
+        nextContainer = candidateNextContainer;
         return { status: "committed", revision, intentions, diagnostics: eventDiagnostics };
       }
 
       if (event.type === "PlatformSnapshotObserved") {
-        if (inspection.revision !== 0) {
-          return {
-            status: "rejected",
-            revision: inspection.revision,
-            intentions: [],
-            diagnostics: [
-              {
-                code: "already-bootstrapped",
-                message: "PlatformSnapshotObserved is valid only for initial bootstrap",
-              },
-            ],
-          };
-        }
-        const invalid = validateSurfaces(event.snapshot.surfaces);
-        if (invalid) {
-          return {
-            status: "rejected",
-            revision: inspection.revision,
-            intentions: [],
-            diagnostics: [{ code: "invalid-surface", message: invalid }],
-          };
-        }
-
-        const revision = inspection.revision + 1;
-        const surfaces: SurfaceInspection[] = [];
-        const containers: ContainerInspection[] = [];
-        const surfaceRoots = new Map<string, ContainerId>();
-        for (const surface of [...event.snapshot.surfaces].sort((a, b) =>
-          a.id.localeCompare(b.id)
-        )) {
-          const rootId = `container:${nextContainer++}` as ContainerId;
-          surfaces.push({
-            id: surface.id,
-            workArea: copyRect(surface.workArea),
-            rootId,
-            neighbors: { ...surface.neighbors },
-            capabilities: { ...surface.capabilities },
-          });
-          containers.push({
-            id: rootId,
-            surfaceId: surface.id,
-            layout: inspection.policy.defaultLayout,
-            childIds: [],
-            weights: {},
-          });
-          surfaceRoots.set(surface.id, rootId);
-        }
-
-        const surfaceIds = tilingSurfaceIds(surfaces);
-        const windows: WindowInspection[] = [...event.snapshot.windows]
-          .sort((a, b) => a.id.localeCompare(b.id))
-          .map((window) => {
-            const classifiedWindow = inspectWindowFact(window, inspection.policy, surfaceIds);
-            const participating = classifiedWindow.participating;
-            const parentId = participating ? surfaceRoots.get(window.surfaceId) : undefined;
-            if (parentId) {
-              const parentIndex = containers.findIndex((container) => container.id === parentId);
-              const parent = containers[parentIndex];
-              containers[parentIndex] = { ...parent, childIds: [...parent.childIds, window.id] };
-            }
-            return {
-              ...classifiedWindow,
-              ...(parentId ? { parentId } : {}),
-              participating,
-            };
-          });
-
-        const focusedWindowId = windows.some(
-          (window) => window.id === event.snapshot.focusedWindowId
-        )
-          ? event.snapshot.focusedWindowId
-          : undefined;
-        if (focusedWindowId) {
-          const focused = windows.find((window) => window.id === focusedWindowId);
-          if (focused?.participating && focused.parentId) {
-            const parentIndex = containers.findIndex(
-              (container) => container.id === focused.parentId
-            );
-            if (parentIndex >= 0) {
-              containers[parentIndex] = {
-                ...containers[parentIndex],
-                selectedChildId: focusedWindowId,
-              };
-            }
-          }
-        }
-
-        const windowPlans = deriveWindowPlans(surfaces, windows, containers, inspection.policy);
-
-        const intentions = [
-          ...windows
-            .filter((window) => window.participating)
-            .map((window) => ({
-              type: "WindowParticipationChanged" as const,
-              revision,
-              ordinal: 0,
-              windowId: window.id,
-              participating: true,
-            })),
-          ...windowPlans.map((window) => ({
-            type: "PlaceWindow" as const,
-            revision,
-            ordinal: 0,
-            windowId: window.id,
-            surfaceId: window.surfaceId,
-            frame: copyRect(window.frame),
-          })),
-        ].map((intention, ordinal) => ({ ...intention, ordinal }));
-
-        commitCandidate({
-          ...inspection,
-          revision,
-          focusedWindowId,
-          surfaces,
-          windows,
-          containers,
-          renderPlan: {
-            revision,
-            surfaces: surfaces.map((surface) => ({
-              id: surface.id,
-              workArea: copyRect(surface.workArea),
-            })),
-            windows: windowPlans,
-            containers: containers.map((container) => ({
-              id: container.id,
-              surfaceId: container.surfaceId,
-              rect: copyRect(
-                surfaces.find((surface) => surface.id === container.surfaceId)!.workArea
-              ),
-              layout: container.layout,
-              stackingOrder: [],
-            })),
-            previews: [],
+        return applyBootstrap(
+          inspection,
+          event,
+          nextContainer,
+          (candidate) => {
+            nextContainer = candidate;
           },
-        });
-        return { status: "committed", revision, intentions, diagnostics: [] };
+          commitCandidate
+        );
       }
       return {
         status: "ignored",

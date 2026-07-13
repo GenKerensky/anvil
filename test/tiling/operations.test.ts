@@ -155,6 +155,46 @@ describe("Tiling Operations", () => {
     });
   });
 
+  it("cancels an operation when another sibling changes the container topology", () => {
+    const { machine, surface, first } = resizeMachine();
+    const third = windowId("third");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "WindowObserved",
+          window: {
+            id: third,
+            surfaceId: surface,
+            frame: { x: 0, y: 0, width: 300, height: 800 },
+            available: true,
+            capabilities,
+          },
+        },
+      ],
+    });
+    const operation = operationId("resize-sibling");
+    machine.dispatch({
+      type: "OperationStarted",
+      operation: { id: operation, kind: "resize", windowId: first, direction: "right" },
+    });
+
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "WindowWithdrawn", windowId: third }],
+    });
+
+    expect(machine.inspect().operations).toEqual([]);
+    expect(
+      machine.dispatch({
+        type: "OperationUpdated",
+        operationId: operation,
+        update: { shareDelta: 0.1 },
+      })
+    ).toMatchObject({ status: "ignored" });
+  });
+
   it("rejects resize when an affected window cannot resize", () => {
     const { machine, surface, first } = resizeMachine();
     machine.dispatch({
@@ -187,5 +227,28 @@ describe("Tiling Operations", () => {
       status: "rejected",
       diagnostics: [{ code: "capability-unsupported" }],
     });
+  });
+
+  it("cancels a resize before changing its container layout", () => {
+    const { machine, first } = resizeMachine();
+    const operation = operationId("resize-layout");
+    machine.dispatch({
+      type: "OperationStarted",
+      operation: { id: operation, kind: "resize", windowId: first, direction: "right" },
+    });
+
+    machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "SetLayout", windowId: first, layout: "vertical" },
+    });
+
+    expect(machine.inspect().operations).toEqual([]);
+    expect(
+      machine.dispatch({
+        type: "OperationUpdated",
+        operationId: operation,
+        update: { shareDelta: 0.1 },
+      })
+    ).toMatchObject({ status: "ignored" });
   });
 });

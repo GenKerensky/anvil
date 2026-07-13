@@ -67,6 +67,19 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
         `Container ${container.id} weights are positive`
       );
     }
+    if (container.layout === "stacked" || container.layout === "tabbed") {
+      const availableChildren = container.childIds.filter((id) =>
+        inspection.windows.some(
+          (window) => window.id === id && window.participating && window.available
+        )
+      );
+      invariant(
+        availableChildren.length === 0 ||
+          (container.selectedChildId !== undefined &&
+            availableChildren.includes(container.selectedChildId)),
+        `Container ${container.id} selection must resolve to an available child`
+      );
+    }
   }
 
   for (const window of inspection.windows) {
