@@ -554,3 +554,7 @@ A second audit of the refactor found remaining work; all resolved.
   frame, resize delta, and pointer position through the operation adapter. Drag previews are St
   effects owned by `GnomePreviewPresenter`; drag-end commits or cancels the operation event and
   never asks `GrabResizeSession` or `DragDropTile` to mutate topology.
+- **Core command routing is fail-closed**: each `AnvilAction` is either translated to a portable
+  command/operation or handled as a Runtime-only platform effect. An unhandled core action is
+  diagnosed and stopped; it cannot fall through to CommandBus. Keyboard resize converts pixel
+  amounts into share deltas, and last-active swaps cross the boundary as `SwapWindows` identities.

@@ -342,6 +342,11 @@ export type TilingCommand =
       direction: Direction;
     }>
   | Readonly<{
+      type: "SwapWindows";
+      firstWindowId: WindowId;
+      secondWindowId: WindowId;
+    }>
+  | Readonly<{
       type: "SetParticipation";
       windowId: WindowId;
       participating: boolean | null;

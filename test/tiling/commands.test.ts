@@ -318,6 +318,26 @@ describe("Tiling Commands", () => {
     );
   });
 
+  it("swaps two windows by identity without a platform object", () => {
+    const { machine, first, second } = twoWindowMachine();
+
+    const transition = machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "SwapWindows", firstWindowId: first, secondWindowId: second },
+    });
+
+    expect(transition).toMatchObject({
+      status: "committed",
+      intentions: [
+        { type: "PlaceWindow", windowId: first, frame: { x: 500, width: 500 } },
+        { type: "PlaceWindow", windowId: second, frame: { x: 0, width: 500 } },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      containers: [{ childIds: [second, first] }],
+    });
+  });
+
   it("keeps stacked selection on an available child", () => {
     const { machine, first, second } = twoWindowMachine();
     machine.dispatch({

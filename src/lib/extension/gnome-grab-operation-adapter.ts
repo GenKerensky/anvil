@@ -193,6 +193,24 @@ export class GnomeGrabOperationAdapter {
     this.activeResize = { ...active, axes };
   }
 
+  updateResizeByPixels(metaWindow: Meta.Window, amount: number): void {
+    const id = this.port.knownWindowId(metaWindow);
+    const active = id === this.activeResize?.windowId ? this.activeResize : undefined;
+    if (!id || !active || !Number.isFinite(amount) || amount === 0) return;
+    const shareDeltas: Partial<Record<Direction, number>> = {};
+    const axes = active.axes.map((axis) => {
+      const shareDelta = (amount * axis.primaryToWindowScale) / axis.containerExtent;
+      shareDeltas[axis.direction] = shareDelta;
+      return { ...axis, lastShareDelta: shareDelta };
+    });
+    const transition = this.port.dispatch({
+      type: "OperationUpdated",
+      operationId: active.operationId,
+      update: { shareDeltas },
+    });
+    if (transition.status === "committed") this.activeResize = { ...active, axes };
+  }
+
   updateDrag(metaWindow: Meta.Window, pointer: Point, eligible: boolean): void {
     const id = this.port.knownWindowId(metaWindow);
     let session = id === this.dragSession?.windowId ? this.dragSession : undefined;

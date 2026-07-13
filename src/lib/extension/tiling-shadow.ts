@@ -522,6 +522,10 @@ export class TilingShadow {
     this.submit({ type: "PolicyReplaced", policy: this.policy() });
   }
 
+  cancelOperation(): void {
+    this.grabOperations.cancelActive();
+  }
+
   observeTopology(): void {
     const surfaces = this.surfaceFacts();
     const nextSurfaces = new Set(surfaces.map((surface) => surface.id));
@@ -617,6 +621,17 @@ export class TilingShadow {
     return true;
   }
 
+  observeWindowSwap(firstWindow: Meta.Window, secondWindow: Meta.Window): boolean {
+    const firstWindowId = this.identities.knownWindow(firstWindow);
+    const secondWindowId = this.identities.knownWindow(secondWindow);
+    if (!firstWindowId || !secondWindowId) return false;
+    this.submit({
+      type: "CommandRequested",
+      command: { type: "SwapWindows", firstWindowId, secondWindowId },
+    });
+    return true;
+  }
+
   observeGrabBegin(metaWindow: Meta.Window, grabOp: Meta.GrabOp): void {
     if (!this.bootstrapped) return;
     if (!this.grabOperations.cancelActive()) return;
@@ -630,6 +645,12 @@ export class TilingShadow {
 
   observeGrabUpdate(metaWindow: Meta.Window): void {
     this.grabOperations.updateResize(metaWindow);
+  }
+
+  observeKeyboardResize(metaWindow: Meta.Window, grabOp: Meta.GrabOp, amount: number): void {
+    this.grabOperations.beginResize(metaWindow, grabOp);
+    this.grabOperations.updateResizeByPixels(metaWindow, amount);
+    this.grabOperations.end(metaWindow, false, false);
   }
 
   observeGrabMoveUpdate(

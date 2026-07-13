@@ -403,6 +403,142 @@ export function applyCommand(
     };
   }
 
+  if (command.type === "SwapWindows") {
+    const first = inspection.windows.find((window) => window.id === command.firstWindowId);
+    const second = inspection.windows.find((window) => window.id === command.secondWindowId);
+    const firstParentIndex = inspection.containers.findIndex(
+      (container) => container.id === first?.parentId
+    );
+    const secondParentIndex = inspection.containers.findIndex(
+      (container) => container.id === second?.parentId
+    );
+    if (
+      !first?.participating ||
+      !second?.participating ||
+      first.id === second.id ||
+      firstParentIndex < 0 ||
+      secondParentIndex < 0
+    ) {
+      return {
+        status: "rejected",
+        revision: inspection.revision,
+        intentions: [],
+        diagnostics: [
+          {
+            code: "invalid-swap-command",
+            message: "SwapWindows requires two distinct participating windows",
+          },
+        ],
+      };
+    }
+    const affectedSurfaces = new Set([first.surfaceId, second.surfaceId]);
+    const unsupported = [first, second].some(
+      (window) => !window.capabilities.move || !window.capabilities.resize
+    );
+    if (
+      unsupported ||
+      inspection.surfaces.some(
+        (surface) =>
+          affectedSurfaces.has(surface.id) &&
+          (!surface.capabilities.move || !surface.capabilities.resize)
+      )
+    ) {
+      return {
+        status: "rejected",
+        revision: inspection.revision,
+        intentions: [],
+        diagnostics: [
+          {
+            code: "capability-unsupported",
+            message: "SwapWindows requires move and resize capabilities",
+          },
+        ],
+      };
+    }
+    const replaceWindow = (
+      container: TilingInspection["containers"][number],
+      from: WindowInspection,
+      to: WindowInspection
+    ) => {
+      const weights = { ...container.weights };
+      const inheritedWeight = weights[from.id];
+      delete weights[from.id];
+      if (inheritedWeight !== undefined) weights[to.id] = inheritedWeight;
+      return {
+        ...container,
+        childIds: container.childIds.map((id) => (id === from.id ? to.id : id)),
+        weights,
+        ...(container.selectedChildId === from.id ? { selectedChildId: to.id } : {}),
+      };
+    };
+    const containers = [...inspection.containers];
+    if (firstParentIndex === secondParentIndex) {
+      const parent = containers[firstParentIndex];
+      containers[firstParentIndex] = {
+        ...parent,
+        childIds: parent.childIds.map((id) =>
+          id === first.id ? second.id : id === second.id ? first.id : id
+        ),
+      };
+    } else {
+      containers[firstParentIndex] = replaceWindow(containers[firstParentIndex], first, second);
+      containers[secondParentIndex] = replaceWindow(containers[secondParentIndex], second, first);
+    }
+    const firstParent = containers[firstParentIndex];
+    const secondParent = containers[secondParentIndex];
+    const windows = inspection.windows.map((window) =>
+      window.id === first.id
+        ? { ...window, parentId: secondParent.id, surfaceId: secondParent.surfaceId }
+        : window.id === second.id
+        ? { ...window, parentId: firstParent.id, surfaceId: firstParent.surfaceId }
+        : window
+    );
+    const revision = inspection.revision + 1;
+    const windowPlans = deriveWindowPlans(
+      inspection.surfaces,
+      windows,
+      containers,
+      inspection.policy
+    );
+    const intentions = changedPlacementIntentions(
+      inspection.renderPlan.windows,
+      windowPlans,
+      revision
+    );
+    const containerPlans = deriveContainerPlans(
+      inspection.surfaces,
+      windows,
+      containers,
+      inspection.policy
+    );
+    intentions.push(
+      ...changedContainerIntentions(
+        inspection.renderPlan.containers,
+        containerPlans,
+        revision,
+        intentions.length
+      )
+    );
+    commitCandidate({
+      ...inspection,
+      revision,
+      windows,
+      containers,
+      operations: inspection.operations.filter(
+        (operation) =>
+          !operation.affectedWindowIds.includes(first.id) &&
+          !operation.affectedWindowIds.includes(second.id)
+      ),
+      renderPlan: {
+        ...inspection.renderPlan,
+        revision,
+        windows: windowPlans,
+        containers: containerPlans,
+      },
+    });
+    return { status: "committed", revision, intentions, diagnostics: [] };
+  }
+
   if (command.type === "MoveDirection" || command.type === "SwapDirection") {
     const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
     const containerIndex = inspection.containers.findIndex(

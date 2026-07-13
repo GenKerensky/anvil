@@ -67,6 +67,7 @@ import { selectTilingEngineMode, type TilingEngineMode } from "./tiling-engine-m
 import { safeRaise } from "./mutter-safe.js";
 import { GnomeContainerPresenter } from "./gnome-container-presenter.js";
 import { GnomePreviewPresenter } from "./gnome-preview-presenter.js";
+import { computeSnapLayout } from "./snap-layout.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -723,16 +724,107 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   /** Dispatch a typed user action via CommandBus (B3-1). */
   command(action: AnvilAction) {
     this._assertEnabled("command");
-    if (this._tilingEngineMode === "core" && this._handleCorePlatformCommand(action)) return;
-    let handledByCore = false;
+    if (this._tilingEngineMode === "core") {
+      if (this._handleCorePlatformCommand(action)) return;
+      let handledByCore = false;
+      this._withTilingShadow("command", (shadow) => {
+        handledByCore = shadow.observeCommand(action, this.focusMetaWindow);
+      });
+      if (!handledByCore) Logger.warn(`core tiling command unsupported (${action.name})`);
+      return;
+    }
     this._withTilingShadow("command", (shadow) => {
-      handledByCore = shadow.observeCommand(action, this.focusMetaWindow);
+      shadow.observeCommand(action, this.focusMetaWindow);
     });
-    if (this._tilingEngineMode === "core" && handledByCore) return;
     this._commandBus!.dispatch(action);
   }
 
   private _handleCorePlatformCommand(action: AnvilAction): boolean {
+    if (action.name === "FocusBorderToggle") {
+      const enabled = this.ext.settings.get_boolean("focus-border-toggle");
+      this.ext.settings.set_boolean("focus-border-toggle", !enabled);
+      return true;
+    }
+    if (action.name === "GapSize") {
+      const current = this.ext.settings.get_uint("window-gap-size-increment");
+      this.ext.settings.set_uint(
+        "window-gap-size-increment",
+        Math.max(0, Math.min(8, current + action.amount))
+      );
+      this._withTilingShadow("gap-policy", (shadow) => shadow.observePolicy());
+      return true;
+    }
+    if (action.name === "TilingModeToggle") {
+      const enabled = this.ext.settings.get_boolean("tiling-mode-enabled");
+      this.ext.settings.set_boolean("tiling-mode-enabled", !enabled);
+      this._withTilingShadow("tiling-policy", (shadow) => shadow.observePolicy());
+      return true;
+    }
+    if (action.name === "WorkspaceActiveTileToggle") {
+      const active = `${global.workspace_manager.get_active_workspace_index()}`;
+      const skipped = this.ext.settings
+        .get_string("workspace-skip-tile")
+        .split(",")
+        .filter(Boolean);
+      const next = skipped.includes(active)
+        ? skipped.filter((workspace) => workspace !== active)
+        : [...skipped, active];
+      this.ext.settings.set_string("workspace-skip-tile", next.join(","));
+      this._withTilingShadow("workspace-policy", (shadow) => shadow.observePolicy());
+      return true;
+    }
+    if (action.name === "CancelOperation") {
+      this._withTilingShadow("cancel-operation", (shadow) => shadow.cancelOperation());
+      return true;
+    }
+    if (action.name === "PrefsOpen") {
+      const existing = Utils.findWindowWith(this.prefsTitle);
+      if (existing?.get_workspace()) {
+        existing.get_workspace()!.activate_with_focus(existing, global.display.get_current_time());
+        this.moveCenter(existing);
+      } else {
+        this.ext.openPreferences();
+      }
+      return true;
+    }
+    if (action.name === "WindowClose") {
+      this.focusMetaWindow?.delete(global.display.get_current_time());
+      return true;
+    }
+    if (action.name === "WindowSwapLastActive") {
+      const focused = this.focusMetaWindow;
+      if (!focused) return true;
+      const target = global.display.get_tab_next(
+        Meta.TabList.NORMAL,
+        global.display.get_workspace_manager().get_active_workspace(),
+        focused,
+        false
+      );
+      if (target) {
+        this._withTilingShadow("swap-last-active", (shadow) =>
+          shadow.observeWindowSwap(focused, target)
+        );
+      }
+      return true;
+    }
+    if (action.name === "WindowResize") {
+      const metaWindow = this.focusMetaWindow;
+      if (!metaWindow) return true;
+      const grabOp = {
+        Right: Meta.GrabOp.KEYBOARD_RESIZING_E,
+        Left: Meta.GrabOp.KEYBOARD_RESIZING_W,
+        Top: Meta.GrabOp.KEYBOARD_RESIZING_N,
+        Bottom: Meta.GrabOp.KEYBOARD_RESIZING_S,
+      }[action.direction];
+      this._withTilingShadow("keyboard-resize", (shadow) =>
+        shadow.observeKeyboardResize(metaWindow, grabOp, action.amount)
+      );
+      return true;
+    }
+    if (action.name === "SnapLayoutMove") {
+      this._handleCoreSnapLayoutMove(action);
+      return true;
+    }
     if (action.name === "ShowTabDecorationToggle") {
       if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return true;
       const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
@@ -750,6 +842,47 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     }
     this._withTilingShadow("float-class-policy", (shadow) => shadow.observePolicy());
     return true;
+  }
+
+  private _handleCoreSnapLayoutMove(action: Extract<AnvilAction, { name: "SnapLayoutMove" }>) {
+    const metaWindow = this.focusMetaWindow;
+    if (!metaWindow) return;
+    const snap = computeSnapLayout(
+      action.direction,
+      metaWindow.get_work_area_current_monitor(),
+      action.amount,
+      metaWindow.get_frame_rect()
+    );
+    if (!snap) return;
+    const requested = snap.rect;
+    const rectRequest = {
+      x: requested.x,
+      y: requested.y,
+      width: requested.width,
+      height: requested.height,
+    };
+    let rect = {
+      x: Utils.resolveX(rectRequest, metaWindow),
+      y: Utils.resolveY(rectRequest, metaWindow),
+      width: requested.width,
+      height: requested.height,
+    };
+    if (snap.processGap) {
+      const gap =
+        this.ext.settings.get_uint("window-gap-size") *
+        this.ext.settings.get_uint("window-gap-size-increment");
+      if (rect.width > gap * 2 && rect.height > gap * 2) {
+        rect = {
+          x: rect.x + gap,
+          y: rect.y + gap,
+          width: rect.width - gap * 2,
+          height: rect.height - gap * 2,
+        };
+      }
+    }
+    if (!this.isFloatingExempt(metaWindow)) this.addFloatOverride(metaWindow, false);
+    this._withTilingShadow("snap-policy", (shadow) => shadow.observePolicy());
+    this.move(metaWindow, rect);
   }
 
   private _withTilingShadow(name: string, callback: (shadow: TilingShadow) => void): void {

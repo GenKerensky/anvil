@@ -570,6 +570,18 @@ describe("AnvilRuntime - Commands", () => {
         wm().command({ name: "WindowResize", direction: "Right", amount: 10 })
       ).not.toThrow();
     });
+
+    it("dispatches core keyboard resize through the portable operation adapter", () => {
+      const metaWindow = setupResizeWindow();
+      wm()._tilingEngineMode = "core";
+      const portableResize = vi.spyOn(wm()._tilingShadow, "observeKeyboardResize");
+      const legacyDispatch = vi.spyOn(wm()._commandBus, "dispatch");
+
+      wm().command({ name: "WindowResize", direction: "Right", amount: 192 });
+
+      expect(portableResize).toHaveBeenCalledWith(metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E, 192);
+      expect(legacyDispatch).not.toHaveBeenCalled();
+    });
   });
 
   describe("WindowClose", () => {

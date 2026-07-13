@@ -485,6 +485,31 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("commits keyboard resize pixels without mutating a Meta.Window first", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    const [firstId, secondId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeKeyboardResize(first, Meta.GrabOp.KEYBOARD_RESIZING_E, 192);
+
+    expect(shadow.inspect()).toMatchObject({
+      operations: [],
+      containers: [{ weights: { [firstId]: 0.6, [secondId]: 0.4 } }],
+      renderPlan: {
+        windows: [
+          { id: firstId, frame: { width: 1152 } },
+          { id: secondId, frame: { width: 768 } },
+        ],
+      },
+    });
+    globals.cleanup();
+  });
+
   it("translates a moving GNOME grab into a portable drag preview and commit", () => {
     const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
     const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
