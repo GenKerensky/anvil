@@ -128,6 +128,12 @@ need_cmd dbus-run-session
 need_cmd gdbus
 need_cmd gsettings
 
+# Codex Desktop may force GTK applications onto X11. That override leaks into
+# the isolated D-Bus activation environment after DISPLAY is changed to the
+# nested Xwayland server, where the devkit frontend does not own the matching
+# Xauthority cookie. Let GTK select the outer Wayland display normally.
+unset GDK_BACKEND
+
 if ! gnome-shell --help 2>&1 | grep -q -- '--devkit'; then
   echo "error: this gnome-shell does not support --devkit" >&2
   exit 1
