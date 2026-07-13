@@ -1,5 +1,6 @@
 {
   "references": [
+    { "path": "./tsconfig.tiling.json" },
     { "path": "./tsconfig.src.json" },
     { "path": "./tsconfig.unit.json" },
     { "path": "./tsconfig.e2e.json" }

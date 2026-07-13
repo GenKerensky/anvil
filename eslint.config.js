@@ -41,6 +41,35 @@ export default [
     },
   },
   {
+    files: ["src/lib/tiling/**/*.ts"],
+    languageOptions: {
+      globals: {
+        global: "off",
+        imports: "off",
+        log: "off",
+        logError: "off",
+        print: "off",
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+      "no-restricted-globals": ["error", "global", "imports", "log", "logError", "print"],
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["gi://*", "resource:///*"], message: "Portable tiling cannot import GJS." },
+            {
+              group: ["../extension/*", "../../extension/*", "../prefs/*", "../../prefs/*"],
+              message: "Portable tiling cannot depend on GNOME or preferences modules.",
+            },
+            { group: ["node:*"], message: "Portable tiling cannot depend on Node built-ins." },
+          ],
+        },
+      ],
+    },
+  },
+  {
     files: ["test/unit/**/*.{js,ts}"],
     plugins: { vitest },
     languageOptions: {

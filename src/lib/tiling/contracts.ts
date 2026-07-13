@@ -1,0 +1,186 @@
+export type TilingIdentity<Kind extends string> = string & { readonly __kind: Kind };
+
+export type WindowId = TilingIdentity<"window">;
+export type SurfaceId = TilingIdentity<"surface">;
+export type ContainerId = TilingIdentity<"container">;
+export type OperationId = TilingIdentity<"operation">;
+
+export type TilingRevision = number;
+export type Layout = "horizontal" | "vertical" | "stacked" | "tabbed";
+export type Direction = "left" | "right" | "up" | "down";
+
+export type Rect = Readonly<{
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}>;
+
+export type SurfaceConstraint = Readonly<{
+  maxWidth?: number;
+  maxHeight?: number;
+  resizeExempt?: boolean;
+}>;
+
+export type ParticipationRule = Readonly<{
+  id: string;
+  action: "tile" | "float";
+  applicationId?: string;
+  title?: string;
+  role?: string;
+  transient?: boolean;
+  resizable?: boolean;
+  tags?: readonly string[];
+  windowId?: WindowId;
+}>;
+
+export type TilingPolicy = Readonly<{
+  enabled: boolean;
+  surfaceTiling: Readonly<Record<string, boolean>>;
+  allowedLayouts: readonly Layout[];
+  defaultLayout: Layout;
+  gap: number;
+  hideGapWhenSingle: boolean;
+  autoSplit: boolean;
+  singleTabExit: "preserve" | "split";
+  headerExtent: number;
+  constraints: Readonly<Record<string, SurfaceConstraint>>;
+  participationRules: readonly ParticipationRule[];
+  reconcileAttempts: number;
+}>;
+
+export type TilingDiagnostic = Readonly<{
+  code: string;
+  message: string;
+  identity?: string;
+}>;
+
+export type SurfaceInspection = Readonly<{
+  id: SurfaceId;
+  workArea: Rect;
+  rootId: ContainerId;
+  neighbors: Readonly<Partial<Record<Direction, SurfaceId>>>;
+}>;
+
+export type WindowInspection = Readonly<{
+  id: WindowId;
+  surfaceId: SurfaceId;
+  parentId?: ContainerId;
+  participating: boolean;
+  available: boolean;
+  frame: Rect;
+}>;
+
+export type ContainerInspection = Readonly<{
+  id: ContainerId;
+  surfaceId: SurfaceId;
+  parentId?: ContainerId;
+  layout: Layout;
+  childIds: readonly (ContainerId | WindowId)[];
+  weights: Readonly<Record<string, number>>;
+  selectedChildId?: ContainerId | WindowId;
+}>;
+
+export type OperationInspection = Readonly<{
+  id: OperationId;
+  kind: "resize" | "drag";
+}>;
+
+export type PlacementHintInspection = Readonly<{
+  windowId: WindowId;
+  surfaceId: SurfaceId;
+  parentId?: ContainerId;
+  beforeId?: ContainerId | WindowId;
+  afterId?: ContainerId | WindowId;
+  weight?: number;
+  selected: boolean;
+}>;
+
+export type SurfaceEvacuationInspection = Readonly<{
+  surfaceId: SurfaceId;
+  windowIds: readonly WindowId[];
+}>;
+
+export type SurfacePlan = Readonly<{
+  id: SurfaceId;
+  workArea: Rect;
+}>;
+
+export type WindowPlan = Readonly<{
+  id: WindowId;
+  surfaceId: SurfaceId;
+  frame: Rect;
+}>;
+
+export type ContainerPlan = Readonly<{
+  id: ContainerId;
+  surfaceId: SurfaceId;
+  rect: Rect;
+  layout: Layout;
+  selectedChildId?: ContainerId | WindowId;
+  stackingOrder: readonly (ContainerId | WindowId)[];
+}>;
+
+export type PreviewPlan = Readonly<{
+  operationId: OperationId;
+  surfaceId: SurfaceId;
+  rect: Rect;
+}>;
+
+export type TilingRenderPlan = Readonly<{
+  revision: TilingRevision;
+  surfaces: readonly SurfacePlan[];
+  windows: readonly WindowPlan[];
+  containers: readonly ContainerPlan[];
+  previews: readonly PreviewPlan[];
+}>;
+
+export type TilingInspection = Readonly<{
+  schemaVersion: 1;
+  revision: TilingRevision;
+  policy: TilingPolicy;
+  surfaces: readonly SurfaceInspection[];
+  windows: readonly WindowInspection[];
+  containers: readonly ContainerInspection[];
+  operations: readonly OperationInspection[];
+  placementHints: readonly PlacementHintInspection[];
+  evacuationHints: readonly SurfaceEvacuationInspection[];
+  renderPlan: TilingRenderPlan;
+  diagnostics: readonly TilingDiagnostic[];
+}>;
+
+export type PlatformSnapshot = Readonly<{
+  surfaces: readonly never[];
+  windows: readonly never[];
+  focusedWindowId?: WindowId;
+}>;
+
+export type TilingEvent = Readonly<{
+  type: "PlatformSnapshotObserved";
+  snapshot: PlatformSnapshot;
+}>;
+
+export type TilingIntention = Readonly<{
+  type: string;
+  revision: TilingRevision;
+  ordinal: number;
+}>;
+
+export type TilingTransition =
+  | Readonly<{
+      status: "committed";
+      revision: TilingRevision;
+      intentions: readonly TilingIntention[];
+      diagnostics: readonly TilingDiagnostic[];
+    }>
+  | Readonly<{
+      status: "ignored" | "rejected";
+      revision: TilingRevision;
+      intentions: readonly [];
+      diagnostics: readonly TilingDiagnostic[];
+    }>;
+
+export interface TilingStateMachine {
+  dispatch(event: TilingEvent): TilingTransition;
+  inspect(): TilingInspection;
+}
