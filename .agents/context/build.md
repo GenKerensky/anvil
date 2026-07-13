@@ -32,9 +32,11 @@ npm test             # typecheck → lint → unit
 ### Host E2E tests
 
 ```bash
-make test-e2e                              # Full suite (nightly / pre-release)
-python3 test/e2e/run.py --tag resize       # PR smoke: filter by suite/spec substring
-python3 test/e2e/run.py --tag focus        # PR smoke: focus suite
+distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && make test-e2e'
+distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --tag resize'
+python3 test/e2e/run.py --tag focus        # Direct host smoke when dependencies exist
 python3 test/e2e/run.py --no-build         # Skip make dist
 ```
 
@@ -45,7 +47,10 @@ CI runs unit only. Prefer `--tag` for PR-local E2E; full suite before release (D
 `__anvil_test_state.runtime`, bootstraps Jasmine from `/usr/share/jasmine-gjs/`, writes
 `/tmp/anvil-e2e-results.json`.
 
-Requires host `gnome-shell` + `jasmine-gjs` + `glib2-devel`.
+Requires `gnome-shell` + `jasmine-gjs` + `glib2-devel`. The core-default Xwayland soak also requires
+`xterm`; install it inside the mutable Devbox with `sudo dnf install -y xterm`. On Bazzite, the
+Fedora Devbox command above is the normal E2E route; do not classify a missing immutable-host
+`jasmine-gjs` as an E2E product failure.
 
 **Important**: `Shell.Eval` is broken system-wide (returns `(false, '')` for all expressions). Use
 D-Bus APIs (`org.gnome.Shell.Extensions.*`) and direct GJS API calls instead.

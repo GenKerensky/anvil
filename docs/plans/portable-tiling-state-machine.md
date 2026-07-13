@@ -896,6 +896,17 @@ but the selected session mode determines the sole state/effect writer.
 **Gate:** `npm test`, `npm run check:tiling-boundary`, `npm run typecheck:e2e`, and the complete
 real-shell suite pass in core mode twice consecutively.
 
+Gate evidence (2026-07-13, Fedora Devbox, GNOME Shell/Mutter 50.1, commit `d0425ad`):
+
+- `npm test`: 54 portable-core tests and 1009 Runtime/unit tests passed.
+- `npm run check:tiling-boundary` and `npm run typecheck:e2e` passed.
+- `python3 test/e2e/run.py --no-build --engine core` passed 128/128 twice consecutively from the
+  same installed artifact and unchanged source revision.
+- The matrix includes lifecycle, tiling, focus, move, swap, layouts, floating participation,
+  workspace policy, minimize/restore, constraints, keyboard resize, and command cancellation.
+
+**Phase 6 gate status:** complete.
+
 ### Phase 7 — default, soak, and retire legacy
 
 33. **`feat(runtime): make core mode the default tiling engine`**
@@ -914,6 +925,26 @@ real-shell suite pass in core mode twice consecutively.
 36. **`docs(architecture): make the portable state machine authoritative`**
     - Rewrite architecture rules, source map, test guidance, glossary links, and test probes.
     - Mark legacy extraction decisions as superseded where appropriate.
+
+Core-default soak matrix (tracked independently from the Phase 6 functional matrix):
+
+| Scenario                        | Current evidence                                                             | Status   |
+| ------------------------------- | ---------------------------------------------------------------------------- | -------- |
+| enable/disable with core writer | full E2E `Extension Lifecycle`                                               | complete |
+| fullscreen enter/exit           | full E2E border/window-state scenario                                        | complete |
+| ordinary minimize/restore       | full E2E `Minimize Behavior`                                                 | complete |
+| repeated keyboard resize        | 74-case full E2E resize matrix                                               | complete |
+| rapid minimize/restore churn    | five-cycle core E2E with diagnostic assertions                               | complete |
+| dynamic workspace create/remove | core E2E surface/window referential-integrity test                           | complete |
+| monitor add/remove/reconfigure  | constraint coverage is not monitor hotplug                                   | pending  |
+| Xwayland window mapped late     | late `xterm` admission core E2E                                              | complete |
+| repeated pointer drag/resize    | headless `begin_grab_op` segfaults both engines; manual Devkit soak required | pending  |
+| lock/unlock                     | not exercised by the headless functional suite                               | pending  |
+
+The engine does not become the production default until every pending row has a reproducible
+real-shell test or a recorded environment limitation plus an approved manual result. Legacy removal
+still requires explicit approval after the default soak; passing this matrix alone does not approve
+deletion.
 
 **Final gate:** no production import outside `src/lib/tiling/` mutates logical topology, shares,
 selection, or render plans; no file inside imports GNOME; full unit/build/E2E validation is green.
