@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 from shell_session import (
     SCHEMA_ID,
@@ -24,6 +25,64 @@ def _dist_built() -> bool:
     return (DIST_DIR / "extension.js").is_file() and (
         DIST_DIR / "schemas" / "gschemas.compiled"
     ).is_file()
+
+
+class HeadlessShellSessionEnvironmentTests(unittest.TestCase):
+    def test_forces_wayland_when_host_environment_prefers_x11(self) -> None:
+        session = HeadlessShellSession(
+            session_dir=pathlib.Path("/tmp/anvil-env-test"),
+            extension_dir=DIST_DIR,
+            isolate_xdg=False,
+            enable_before_ready=False,
+        )
+
+        with mock.patch.dict(os.environ, {"GDK_BACKEND": "x11"}):
+            env = session._build_session_env("unix:path=/tmp/test-bus")
+
+        self.assertEqual(env["GDK_BACKEND"], "wayland")
+
+    def test_propagates_wayland_backend_to_dbus_activated_apps(self) -> None:
+        session = HeadlessShellSession(
+            session_dir=pathlib.Path("/tmp/anvil-env-test"),
+            extension_dir=DIST_DIR,
+            isolate_xdg=False,
+            enable_before_ready=False,
+        )
+        session.display_name = "wayland-9"
+        session.x11_display = ":12"
+
+        with mock.patch("shell_session.subprocess.run") as run:
+            session._update_activation_environment(
+                {"DBUS_SESSION_BUS_ADDRESS": "unix:path=/tmp/test-bus"}
+            )
+
+        command = run.call_args.args[0]
+        self.assertIn("'GDK_BACKEND': 'wayland'", command[-1])
+
+    def test_publishes_isolated_xdg_paths_before_display_discovery(self) -> None:
+        session = HeadlessShellSession(
+            session_dir=pathlib.Path("/tmp/anvil-env-test"),
+            extension_dir=DIST_DIR,
+            isolate_xdg=True,
+            enable_before_ready=False,
+        )
+
+        with mock.patch("shell_session.subprocess.run") as run:
+            session._update_activation_environment(
+                {
+                    "DBUS_SESSION_BUS_ADDRESS": "unix:path=/tmp/test-bus",
+                    "XDG_CONFIG_HOME": "/tmp/anvil-env-test/config",
+                    "GSETTINGS_SCHEMA_DIR": "/tmp/anvil-env-test/schemas",
+                }
+            )
+
+        serialized_env = run.call_args.args[0][-1]
+        self.assertIn("'XDG_CONFIG_HOME': '/tmp/anvil-env-test/config'", serialized_env)
+        self.assertIn(
+            "'GSETTINGS_SCHEMA_DIR': '/tmp/anvil-env-test/schemas'",
+            serialized_env,
+        )
+        self.assertNotIn("WAYLAND_DISPLAY", serialized_env)
 
 
 @unittest.skipUnless(gnome_shell_available(), "gnome-shell not available")

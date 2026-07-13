@@ -142,7 +142,14 @@ def start_gnome_shell(
     Stderr is piped so a background thread can scan it for the Wayland display
     name announcement.
     """
-    env = {**os.environ, "DBUS_SESSION_BUS_ADDRESS": dbus_addr}
+    env = {
+        **os.environ,
+        "DBUS_SESSION_BUS_ADDRESS": dbus_addr,
+        # Distrobox commonly inherits GDK_BACKEND=x11. The nested compositor
+        # has a private Wayland socket, while its Xauthority is not owned by
+        # this runner, so E2E clients must use Wayland.
+        "GDK_BACKEND": "wayland",
+    }
     ext_schemas = str(
         pathlib.Path.home() / ".local/share/gnome-shell/extensions" / UUID / "schemas"
     )
@@ -308,7 +315,11 @@ class DevkitSession:
         self.mocks = start_mocks(self.dbus_addr)
 
         # 3. gsettings tweaks on the isolated session
-        env = {**os.environ, "DBUS_SESSION_BUS_ADDRESS": self.dbus_addr}
+        env = {
+            **os.environ,
+            "DBUS_SESSION_BUS_ADDRESS": self.dbus_addr,
+            "GDK_BACKEND": "wayland",
+        }
         subprocess.run(
             ["gsettings", "set", "org.gnome.shell",
              "welcome-dialog-last-shown-version", "999"],
@@ -348,7 +359,8 @@ class DevkitSession:
                 "--dest", "org.freedesktop.DBus",
                 "--object-path", "/org/freedesktop/DBus",
                 "--method", "org.freedesktop.DBus.UpdateActivationEnvironment",
-                f"{{'WAYLAND_DISPLAY': '{self.display_name}', 'DISPLAY': '{self.x11_display}'}}",
+                f"{{'WAYLAND_DISPLAY': '{self.display_name}', "
+                f"'DISPLAY': '{self.x11_display}', 'GDK_BACKEND': 'wayland'}}",
             ],
             env=env,
             capture_output=True,

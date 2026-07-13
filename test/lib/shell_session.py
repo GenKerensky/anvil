@@ -81,7 +81,14 @@ class HeadlessShellSession:
         self._session_env: dict[str, str] = {}
 
     def _build_session_env(self, dbus_addr: str) -> dict[str, str]:
-        env = {**os.environ, "DBUS_SESSION_BUS_ADDRESS": dbus_addr}
+        env = {
+            **os.environ,
+            "DBUS_SESSION_BUS_ADDRESS": dbus_addr,
+            # Distrobox can inherit GDK_BACKEND=x11 from the host. Headless
+            # sessions own a Wayland socket but not the nested XAUTHORITY, so
+            # forcing Wayland keeps activated GTK clients on the test display.
+            "GDK_BACKEND": "wayland",
+        }
         env.pop("WAYLAND_DISPLAY", None)
         env.pop("DISPLAY", None)
 
@@ -228,6 +235,25 @@ class HeadlessShellSession:
         raise TimeoutError(f"Wayland socket {sock} did not appear within {timeout}s")
 
     def _update_activation_environment(self, env: dict[str, str]) -> None:
+        activation_env = {
+            "GDK_BACKEND": "wayland",
+        }
+        for name in (
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+            "XDG_CACHE_HOME",
+            "GSETTINGS_SCHEMA_DIR",
+        ):
+            if value := env.get(name):
+                activation_env[name] = value
+        if self.display_name:
+            activation_env["WAYLAND_DISPLAY"] = self.display_name
+        if self.x11_display:
+            activation_env["DISPLAY"] = self.x11_display
+
+        serialized_env = "{" + ", ".join(
+            f"'{name}': '{value}'" for name, value in activation_env.items()
+        ) + "}"
         subprocess.run(
             [
                 "gdbus",
@@ -239,7 +265,7 @@ class HeadlessShellSession:
                 "/org/freedesktop/DBus",
                 "--method",
                 "org.freedesktop.DBus.UpdateActivationEnvironment",
-                f"{{'WAYLAND_DISPLAY': '{self.display_name}', 'DISPLAY': '{self.x11_display}'}}",
+                serialized_env,
             ],
             env=env,
             capture_output=True,
@@ -323,6 +349,9 @@ class HeadlessShellSession:
         self.dbus_proc, self.dbus_addr = start_dbus_session()
         self.mocks = start_mocks(self.dbus_addr)
         self._session_env = self._build_session_env(self.dbus_addr)
+        # Publish isolated XDG paths before the first gsettings call can
+        # D-Bus-activate dconf-service against the outer user profile.
+        self._update_activation_environment(self._session_env)
 
         if self.isolate_xdg:
             self._apply_gsettings_defaults(self._session_env)
