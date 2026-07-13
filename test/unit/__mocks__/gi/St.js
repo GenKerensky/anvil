@@ -7,6 +7,13 @@ export const Corner = {
   BOTTOMLEFT: 3,
 };
 
+export const Side = {
+  TOP: 0,
+  RIGHT: 1,
+  BOTTOM: 2,
+  LEFT: 3,
+};
+
 export class Widget extends withSignals() {
   constructor(params = {}) {
     super();
@@ -199,4 +206,5 @@ export default {
   ThemeContext,
   Icon,
   Corner,
+  Side,
 };

@@ -1,6 +1,9 @@
 import Cogl from "gi://Cogl";
+import Clutter from "gi://Clutter";
 import GObject from "gi://GObject";
 import Shell from "gi://Shell";
+
+import { mapWindowMaskToOffscreen } from "./window-corner-mask.js";
 
 const MASK_DECLARATIONS = `
 uniform vec4 anvilMaskBounds;
@@ -34,12 +37,20 @@ export const WindowCornerMaskEffect = GObject.registerClass(
   { GTypeName: "AnvilWindowCornerMaskEffect" },
   class WindowCornerMaskEffect extends Shell.GLSLEffect {
     _uniforms: { bounds: number; radius: number; pixelStep: number } | null = null;
+    _bounds: [number, number, number, number] = [0, 0, 0, 0];
+    _radius = 0;
 
     vfunc_build_pipeline(): void {
       this.add_glsl_snippet(Cogl.SnippetHook.FRAGMENT, MASK_DECLARATIONS, MASK_CODE, false);
     }
 
     update(bounds: [number, number, number, number], radius: number): void {
+      this._bounds = bounds;
+      this._radius = radius;
+      this.queue_repaint();
+    }
+
+    vfunc_paint_target(node: Clutter.PaintNode, paintContext: Clutter.PaintContext): void {
       if (!this._uniforms) {
         this._uniforms = {
           bounds: this.get_uniform_location("anvilMaskBounds"),
@@ -51,15 +62,21 @@ export const WindowCornerMaskEffect = GObject.registerClass(
         }
       }
 
-      const width = this.actor?.get_width() ?? 0;
-      const height = this.actor?.get_height() ?? 0;
-      this.set_uniform_float(this._uniforms.bounds, 4, bounds);
-      this.set_uniform_float(this._uniforms.radius, 1, [radius]);
-      this.set_uniform_float(this._uniforms.pixelStep, 2, [
-        width > 0 ? 1 / width : 1,
-        height > 0 ? 1 / height : 1,
-      ]);
-      this.queue_repaint();
+      const actor = this.actor;
+      const [hasTarget, targetWidth, targetHeight] = this.get_target_size();
+      if (actor && hasTarget) {
+        const geometry = mapWindowMaskToOffscreen(
+          this._bounds,
+          { width: actor.get_width(), height: actor.get_height() },
+          { width: targetWidth, height: targetHeight },
+          actor.get_resource_scale()
+        );
+        this.set_uniform_float(this._uniforms.bounds, 4, geometry.bounds);
+        this.set_uniform_float(this._uniforms.radius, 1, [this._radius]);
+        this.set_uniform_float(this._uniforms.pixelStep, 2, geometry.pixelStep);
+      }
+
+      super.vfunc_paint_target(node, paintContext);
     }
   }
 );

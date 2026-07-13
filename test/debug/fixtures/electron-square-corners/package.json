@@ -1,0 +1,6 @@
+{
+  "name": "anvil-electron-square-corner-fixture",
+  "private": true,
+  "type": "module",
+  "main": "main.mjs"
+}

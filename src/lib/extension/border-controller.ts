@@ -11,7 +11,6 @@ import St from "gi://St";
 
 import { Logger } from "../shared/logger.js";
 import { NODE_TYPES, type Node, type Tree } from "./tree.js";
-import { dpi } from "./utils/version.js";
 import { WINDOW_MODES } from "./window/constants.js";
 import { WindowCornerMaskEffect } from "./window-corner-mask-effect.js";
 import {
@@ -106,8 +105,9 @@ export class BorderController {
 
       const themeNode = actor.border?.get_theme_node();
       if (!themeNode) return;
-      const scale = Math.max(1, dpi());
-      const borderRadius = themeNode.get_border_radius(St.Corner.TOPLEFT) / scale;
+      // ThemeNode measurements already include the theme scale factor and use the same
+      // physical-pixel coordinate space as Clutter actor sizes.
+      const borderRadius = themeNode.get_border_radius(St.Corner.TOPLEFT);
       const radius = deriveWindowMaskRadius(borderRadius, DEFAULT_BORDER_INSET);
       effect.update(
         getWindowMaskBounds(metaWindow.get_frame_rect(), metaWindow.get_buffer_rect()),

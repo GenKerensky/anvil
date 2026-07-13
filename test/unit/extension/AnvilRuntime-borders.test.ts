@@ -5,7 +5,9 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import St from "gi://St";
 import { Logger } from "../../../src/lib/shared/logger.js";
+import { WindowCornerMaskEffect } from "../../../src/lib/extension/window-corner-mask-effect.js";
 import { LAYOUT_TYPES, NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
@@ -79,6 +81,52 @@ describe("AnvilRuntime - Borders", () => {
       expect(
         second.get_compositor_private().get_first_child().get_effect("anvil-window-corner-mask")
       ).toBeTruthy();
+    });
+
+    it("keeps the mask radius in the theme node's actor coordinate space", () => {
+      const scale = vi.spyOn(St.ThemeContext.prototype, "scale_factor", "get").mockReturnValue(2);
+      const update = vi
+        .spyOn(WindowCornerMaskEffect.prototype, "update")
+        .mockImplementation(() => {});
+      const ctx = createAnvilRuntimeFixture({
+        settings: {
+          "focus-border-toggle": true,
+          "split-border-toggle": false,
+        },
+      });
+
+      trackTestWindow(ctx);
+
+      expect(update).toHaveBeenCalledWith(expect.any(Array), 15);
+      update.mockRestore();
+      scale.mockRestore();
+    });
+
+    it("expresses frame bounds relative to the window buffer", () => {
+      const update = vi
+        .spyOn(WindowCornerMaskEffect.prototype, "update")
+        .mockImplementation(() => {});
+      const ctx = createAnvilRuntimeFixture({
+        settings: {
+          "focus-border-toggle": true,
+          "split-border-toggle": false,
+        },
+      });
+      const window = createMockWindow({
+        rect: { x: 8, y: 40, width: 100, height: 100 },
+        workspace: ctx.workspaces[0],
+      });
+      vi.spyOn(window, "get_buffer_rect").mockReturnValue({
+        x: -2,
+        y: 30,
+        width: 120,
+        height: 120,
+      });
+
+      trackTestWindow(ctx, window);
+
+      expect(update).toHaveBeenCalledWith([10, 10, 110, 110], 15);
+      update.mockRestore();
     });
   });
 
