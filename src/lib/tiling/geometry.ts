@@ -66,12 +66,20 @@ export function deriveWindowPlans(
   policy: TilingPolicy
 ): WindowPlan[] {
   return surfaces.flatMap((surface) => {
-    const surfaceWindows = windows.filter(
-      (window) => window.participating && window.surfaceId === surface.id
-    );
+    const root = containers.find((container) => container.id === surface.rootId);
+    const surfaceWindows = (root?.childIds ?? [])
+      .map((id) => windows.find((window) => window.id === id))
+      .filter(
+        (window): window is WindowInspection =>
+          window !== undefined && window.participating && window.surfaceId === surface.id
+      );
     const availableCount = surfaceWindows.filter((window) => window.available).length;
     const gap = policy.hideGapWhenSingle && availableCount === 1 ? 0 : policy.gap;
-    const root = containers.find((container) => container.id === surface.rootId);
-    return splitFrames(surface.workArea, surfaceWindows, root?.layout ?? policy.defaultLayout, gap);
+    return splitFrames(
+      surface.workArea,
+      surfaceWindows,
+      root?.layout ?? policy.defaultLayout,
+      gap
+    ).sort((left, right) => left.id.localeCompare(right.id));
   });
 }

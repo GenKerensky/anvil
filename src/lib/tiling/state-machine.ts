@@ -59,16 +59,146 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
   return {
     dispatch(event: TilingEvent): TilingTransition {
       if (event.type === "CommandRequested") {
-        const window = inspection.windows.find(
-          (candidate) => candidate.id === event.command.windowId
-        );
+        const command = event.command;
+        if (command.type === "FocusDirection") {
+          const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
+          const containerIndex = inspection.containers.findIndex(
+            (container) => container.id === window?.parentId
+          );
+          if (!window?.participating || containerIndex < 0) {
+            return {
+              status: "rejected",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [
+                {
+                  code: "invalid-focus-command",
+                  message: "FocusDirection requires a participating window",
+                  identity: command.windowId,
+                },
+              ],
+            };
+          }
+          const container = inspection.containers[containerIndex];
+          const candidates = container.childIds.filter((id) =>
+            inspection.windows.some(
+              (candidate) => candidate.id === id && candidate.participating && candidate.available
+            )
+          );
+          const currentIndex = candidates.indexOf(window.id);
+          const delta = command.direction === "left" || command.direction === "up" ? -1 : 1;
+          const targetId = candidates[currentIndex + delta];
+          if (!targetId) {
+            return {
+              status: "ignored",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [],
+            };
+          }
+          const revision = inspection.revision + 1;
+          const containers = [...inspection.containers];
+          containers[containerIndex] = { ...container, selectedChildId: targetId };
+          inspection = {
+            ...inspection,
+            revision,
+            containers,
+            renderPlan: {
+              ...inspection.renderPlan,
+              revision,
+              containers: inspection.renderPlan.containers.map((plan) =>
+                plan.id === container.id ? { ...plan, selectedChildId: targetId } : plan
+              ),
+            },
+          };
+          return {
+            status: "committed",
+            revision,
+            intentions: [
+              { type: "FocusWindow", revision, ordinal: 0, windowId: targetId as WindowFact["id"] },
+            ],
+            diagnostics: [],
+          };
+        }
+
+        if (command.type === "MoveDirection" || command.type === "SwapDirection") {
+          const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
+          const containerIndex = inspection.containers.findIndex(
+            (container) => container.id === window?.parentId
+          );
+          if (!window?.participating || containerIndex < 0) {
+            return {
+              status: "rejected",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [
+                {
+                  code: "invalid-move-command",
+                  message: `${command.type} requires a participating window`,
+                  identity: command.windowId,
+                },
+              ],
+            };
+          }
+          const container = inspection.containers[containerIndex];
+          const horizontal = container.layout === "horizontal";
+          const compatible = horizontal
+            ? command.direction === "left" || command.direction === "right"
+            : command.direction === "up" || command.direction === "down";
+          const delta = command.direction === "left" || command.direction === "up" ? -1 : 1;
+          const currentIndex = container.childIds.indexOf(window.id);
+          const targetIndex = currentIndex + delta;
+          if (!compatible || targetIndex < 0 || targetIndex >= container.childIds.length) {
+            return {
+              status: "ignored",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [],
+            };
+          }
+          const childIds = [...container.childIds];
+          [childIds[currentIndex], childIds[targetIndex]] = [
+            childIds[targetIndex],
+            childIds[currentIndex],
+          ];
+          const containers = [...inspection.containers];
+          containers[containerIndex] = { ...container, childIds };
+          const revision = inspection.revision + 1;
+          const windowPlans = deriveWindowPlans(
+            inspection.surfaces,
+            inspection.windows,
+            containers,
+            inspection.policy
+          );
+          const intentions = changedPlacementIntentions(
+            inspection.renderPlan.windows,
+            windowPlans,
+            revision
+          );
+          inspection = {
+            ...inspection,
+            revision,
+            containers,
+            renderPlan: {
+              ...inspection.renderPlan,
+              revision,
+              windows: windowPlans,
+              containers: inspection.renderPlan.containers.map((plan) =>
+                plan.id === container.id ? { ...plan, stackingOrder: childIds } : plan
+              ),
+            },
+          };
+          return { status: "committed", revision, intentions, diagnostics: [] };
+        }
+
+        const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
         const containerIndex = inspection.containers.findIndex(
           (container) => container.id === window?.parentId
         );
         if (
           !window?.participating ||
           containerIndex < 0 ||
-          !inspection.policy.allowedLayouts.includes(event.command.layout)
+          !inspection.policy.allowedLayouts.includes(command.layout)
         ) {
           return {
             status: "rejected",
@@ -78,13 +208,13 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               {
                 code: "invalid-layout-command",
                 message: "SetLayout requires a participating window and an allowed layout",
-                identity: event.command.windowId,
+                identity: command.windowId,
               },
             ],
           };
         }
         const current = inspection.containers[containerIndex];
-        if (current.layout === event.command.layout) {
+        if (current.layout === command.layout) {
           return {
             status: "ignored",
             revision: inspection.revision,
@@ -93,7 +223,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           };
         }
         const containers = [...inspection.containers];
-        containers[containerIndex] = { ...current, layout: event.command.layout };
+        containers[containerIndex] = { ...current, layout: command.layout };
         const revision = inspection.revision + 1;
         const windowPlans = deriveWindowPlans(
           inspection.surfaces,
@@ -112,7 +242,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           ordinal: placement.length,
           containerId: current.id,
           surfaceId: current.surfaceId,
-          layout: event.command.layout,
+          layout: command.layout,
           ...(current.selectedChildId ? { selectedChildId: current.selectedChildId } : {}),
           stackingOrder: [...current.childIds],
         };
@@ -128,7 +258,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               container.id === current.id
                 ? {
                     ...container,
-                    layout: event.command.layout,
+                    layout: command.layout,
                     stackingOrder: [...current.childIds],
                   }
                 : container

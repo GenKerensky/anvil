@@ -198,11 +198,27 @@ export type PlatformFact = Readonly<{
   available: boolean;
 }>;
 
-export type TilingCommand = Readonly<{
-  type: "SetLayout";
-  windowId: WindowId;
-  layout: Layout;
-}>;
+export type TilingCommand =
+  | Readonly<{
+      type: "SetLayout";
+      windowId: WindowId;
+      layout: Layout;
+    }>
+  | Readonly<{
+      type: "FocusDirection";
+      windowId: WindowId;
+      direction: Direction;
+    }>
+  | Readonly<{
+      type: "MoveDirection";
+      windowId: WindowId;
+      direction: Direction;
+    }>
+  | Readonly<{
+      type: "SwapDirection";
+      windowId: WindowId;
+      direction: Direction;
+    }>;
 
 export type TilingEvent =
   | Readonly<{

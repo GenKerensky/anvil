@@ -90,4 +90,59 @@ describe("Tiling Commands", () => {
       containers: [{ id: "container:1", layout: "vertical", childIds: [first, second] }],
     });
   });
+
+  it("commits directional focus as selection plus one-shot intention", () => {
+    const { machine, first, second } = twoWindowMachine();
+
+    const transition = machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "FocusDirection", windowId: first, direction: "right" },
+    });
+
+    expect(transition).toEqual({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        {
+          type: "FocusWindow",
+          revision: 2,
+          ordinal: 0,
+          windowId: second,
+        },
+      ],
+      diagnostics: [],
+    });
+    expect(machine.inspect()).toMatchObject({
+      containers: [{ id: "container:1", selectedChildId: second }],
+    });
+  });
+
+  it("moves a window through structural order without a second writer", () => {
+    const { machine, first, second } = twoWindowMachine();
+
+    const transition = machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "MoveDirection", windowId: first, direction: "right" },
+    });
+
+    expect(transition).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        {
+          type: "PlaceWindow",
+          windowId: first,
+          frame: { x: 500, y: 0, width: 500, height: 800 },
+        },
+        {
+          type: "PlaceWindow",
+          windowId: second,
+          frame: { x: 0, y: 0, width: 500, height: 800 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      containers: [{ childIds: [second, first] }],
+    });
+  });
 });
