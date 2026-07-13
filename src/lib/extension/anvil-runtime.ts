@@ -64,6 +64,7 @@ import { TilingShadow } from "./tiling-shadow.js";
 import { GnomeIntentionApplier } from "./gnome-intention-applier.js";
 import { CoreTilingEffectDriver } from "./core-tiling-effect-driver.js";
 import { selectTilingEngineMode, type TilingEngineMode } from "./tiling-engine-mode.js";
+import { safeRaise } from "./mutter-safe.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -175,6 +176,12 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       },
       presentContainer: () => {
         // Identity-based container actors are wired in the next migration slice.
+      },
+      removeContainerPresentation: () => {
+        // Identity-based container actors are wired in the next migration slice.
+      },
+      raiseWindows: (metaWindows) => {
+        metaWindows.forEach((metaWindow) => safeRaise(metaWindow));
       },
       presentPreview: () => {
         // Identity-based preview actors are wired in the next migration slice.

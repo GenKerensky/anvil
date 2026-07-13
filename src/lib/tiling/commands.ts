@@ -5,7 +5,7 @@ import type {
   TilingTransition,
   WindowInspection,
 } from "./contracts.js";
-import { copyRect, deriveContainerPlans, deriveWindowPlans } from "./geometry.js";
+import { deriveContainerPlans, deriveWindowPlans } from "./geometry.js";
 import { changedContainerIntentions, changedPlacementIntentions } from "./intentions.js";
 import { effectiveParticipation } from "./participation.js";
 import { normalizeTopology, tilingSurfaceIds } from "./transition-helpers.js";
@@ -589,18 +589,12 @@ export function applyCommand(
     containers,
     inspection.policy
   );
-  const nextPlan = containerPlans.find((container) => container.id === current.id);
-  const present = {
-    type: "PresentContainer" as const,
+  const presentation = changedContainerIntentions(
+    inspection.renderPlan.containers,
+    containerPlans,
     revision,
-    ordinal: placement.length,
-    containerId: current.id,
-    surfaceId: current.surfaceId,
-    layout: command.layout,
-    ...(nextPlan?.headerRect ? { headerRect: copyRect(nextPlan.headerRect) } : {}),
-    ...(nextContainer.selectedChildId ? { selectedChildId: nextContainer.selectedChildId } : {}),
-    stackingOrder: [...current.childIds],
-  };
+    placement.length
+  );
   commitCandidate({
     ...inspection,
     revision,
@@ -618,7 +612,7 @@ export function applyCommand(
   return {
     status: "committed",
     revision,
-    intentions: [...placement, present],
+    intentions: [...placement, ...presentation],
     diagnostics: [],
   };
 }

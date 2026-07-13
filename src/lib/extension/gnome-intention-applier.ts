@@ -12,6 +12,7 @@ import type { AnvilWindowActor } from "./window/types.js";
 
 type ParticipationIntention = Extract<TilingIntention, { type: "WindowParticipationChanged" }>;
 type ContainerIntention = Extract<TilingIntention, { type: "PresentContainer" }>;
+type RemoveContainerIntention = Extract<TilingIntention, { type: "RemoveContainerPresentation" }>;
 type PreviewIntention = Extract<TilingIntention, { type: "PresentPreview" }>;
 type ClearPreviewIntention = Extract<TilingIntention, { type: "ClearPreview" }>;
 
@@ -35,6 +36,8 @@ export interface GnomeIntentionApplierHost {
     participating: ParticipationIntention["participating"]
   ): void;
   presentContainer(intention: ContainerIntention): void;
+  removeContainerPresentation(containerId: RemoveContainerIntention["containerId"]): void;
+  raiseWindows(metaWindows: readonly Meta.Window[]): void;
   presentPreview(intention: PreviewIntention): void;
   clearPreview(intention: ClearPreviewIntention): void;
 }
@@ -50,6 +53,8 @@ function identity(intention: TilingIntention): string | undefined {
     case "FocusWindow":
       return intention.windowId;
     case "PresentContainer":
+    case "RemoveContainerPresentation":
+    case "RaiseWindows":
       return intention.containerId;
     case "PresentPreview":
     case "ClearPreview":
@@ -143,6 +148,28 @@ export class GnomeIntentionApplier {
           case "PresentContainer":
             this.host.presentContainer(intention);
             break;
+          case "RemoveContainerPresentation":
+            this.host.removeContainerPresentation(intention.containerId);
+            break;
+          case "RaiseWindows": {
+            const metaWindows = intention.windowIds.flatMap((windowId) => {
+              const metaWindow = this.host.resolveWindow(windowId);
+              if (metaWindow) return [metaWindow];
+              if (!withdrawnWindows.has(windowId)) {
+                facts.push({ type: "WindowWithdrawn", windowId });
+                withdrawnWindows.add(windowId);
+              }
+              facts.push({
+                type: "EffectFailed",
+                causalToken: token(intention),
+                code: "target-withdrawn",
+                identity: windowId,
+              });
+              return [];
+            });
+            this.host.raiseWindows(metaWindows);
+            break;
+          }
           case "PresentPreview":
             this.host.presentPreview(intention);
             break;

@@ -226,7 +226,7 @@ export type ContainerPlan = Readonly<{
   headerRect?: Rect;
   layout: Layout;
   selectedChildId?: ContainerId | WindowId;
-  stackingOrder: readonly (ContainerId | WindowId)[];
+  stackingOrder: readonly WindowId[];
 }>;
 
 export type PreviewPlan = Readonly<{
@@ -429,7 +429,18 @@ export type TilingIntention =
         layout: Layout;
         headerRect?: Rect;
         selectedChildId?: ContainerId | WindowId;
-        stackingOrder: readonly (ContainerId | WindowId)[];
+        stackingOrder: readonly WindowId[];
+      }>)
+  | (IntentionToken &
+      Readonly<{
+        type: "RemoveContainerPresentation";
+        containerId: ContainerId;
+      }>)
+  | (IntentionToken &
+      Readonly<{
+        type: "RaiseWindows";
+        containerId: ContainerId;
+        windowIds: readonly WindowId[];
       }>)
   | (IntentionToken &
       Readonly<{

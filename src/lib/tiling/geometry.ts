@@ -141,6 +141,25 @@ function derivePlans(
     availability.set(id, result);
     return result;
   };
+  const stackingWindowIds = (
+    container: ContainerInspection,
+    ancestors: ReadonlySet<string>
+  ): WindowInspection["id"][] => {
+    if (ancestors.has(container.id)) return [];
+    const presented = container.layout === "stacked" || container.layout === "tabbed";
+    const childIds = [...container.childIds];
+    if (presented && container.selectedChildId) {
+      const selectedIndex = childIds.indexOf(container.selectedChildId);
+      if (selectedIndex >= 0) childIds.push(...childIds.splice(selectedIndex, 1));
+    }
+    const nextAncestors = new Set(ancestors).add(container.id);
+    return childIds.flatMap((childId) => {
+      const window = windowById.get(childId as WindowInspection["id"]);
+      if (window) return isAvailable(window.id) ? [window.id] : [];
+      const child = containerById.get(childId as ContainerInspection["id"]);
+      return child ? stackingWindowIds(child, nextAncestors) : [];
+    });
+  };
 
   const windowPlans: WindowPlan[] = [];
   const containerPlans: ContainerPlan[] = [];
@@ -159,7 +178,7 @@ function derivePlans(
         ...(headerRect ? { headerRect } : {}),
         layout: container.layout,
         ...(container.selectedChildId ? { selectedChildId: container.selectedChildId } : {}),
-        stackingOrder: [...container.childIds],
+        stackingOrder: stackingWindowIds(container, ancestors),
       });
       const contentRect = headerRect
         ? {

@@ -142,11 +142,11 @@ describe("TilingShadow", () => {
     expect(firstPlan).toMatchObject({ parentLayout: "tabbed", selected: true });
     expect(secondPlan).toMatchObject({ parentLayout: "tabbed", selected: false });
     const containerPlan = shadow.presentationPlan().containers[0];
-    expect(containerPlan.stackingOrder).toEqual([firstPlan.id, secondPlan.id]);
+    expect(containerPlan.stackingOrder).toEqual([secondPlan.id, firstPlan.id]);
     (containerPlan.stackingOrder as unknown as string[]).reverse();
     expect(shadow.presentationPlan().containers[0].stackingOrder).toEqual([
-      firstPlan.id,
       secondPlan.id,
+      firstPlan.id,
     ]);
     expect(JSON.stringify(shadow.presentationPlan())).not.toContain("nodeValue");
     globals.cleanup();

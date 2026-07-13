@@ -38,12 +38,24 @@ export function changedContainerIntentions(
   revision: TilingRevision,
   ordinalOffset = 0
 ): TilingIntention[] {
-  return next
+  const removals: TilingIntention[] = previous
+    .filter((old) => {
+      const wasPresented = old.layout === "stacked" || old.layout === "tabbed";
+      const plan = next.find((candidate) => candidate.id === old.id);
+      const presented = plan?.layout === "stacked" || plan?.layout === "tabbed";
+      return wasPresented && !presented;
+    })
+    .map((old, index) => ({
+      type: "RemoveContainerPresentation",
+      revision,
+      ordinal: ordinalOffset + index,
+      containerId: old.id,
+    }));
+  const presentations: TilingIntention[] = next
     .filter((plan) => {
       const old = previous.find((container) => container.id === plan.id);
       const presented = plan.layout === "stacked" || plan.layout === "tabbed";
-      const wasPresented = old?.layout === "stacked" || old?.layout === "tabbed";
-      if (!presented && !wasPresented) return false;
+      if (!presented) return false;
       return (
         !old ||
         old.layout !== plan.layout ||
@@ -58,7 +70,7 @@ export function changedContainerIntentions(
     .map((plan, index) => ({
       type: "PresentContainer",
       revision,
-      ordinal: ordinalOffset + index,
+      ordinal: ordinalOffset + removals.length + index,
       containerId: plan.id,
       surfaceId: plan.surfaceId,
       layout: plan.layout,
@@ -66,6 +78,20 @@ export function changedContainerIntentions(
       ...(plan.selectedChildId ? { selectedChildId: plan.selectedChildId } : {}),
       stackingOrder: [...plan.stackingOrder],
     }));
+  const raises: TilingIntention[] = next
+    .filter((plan) => {
+      if (plan.layout !== "stacked" && plan.layout !== "tabbed") return false;
+      const old = previous.find((container) => container.id === plan.id);
+      return !old || !sameOrder(old.stackingOrder, plan.stackingOrder);
+    })
+    .map((plan, index) => ({
+      type: "RaiseWindows",
+      revision,
+      ordinal: ordinalOffset + removals.length + presentations.length + index,
+      containerId: plan.id,
+      windowIds: [...plan.stackingOrder],
+    }));
+  return [...removals, ...presentations, ...raises];
 }
 
 export function changedTransitionIntentions(

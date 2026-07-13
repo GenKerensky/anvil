@@ -18,7 +18,7 @@ export type GnomePresentationPlan = Readonly<{
     rect: Rect;
     layout: Layout;
     selectedChildId?: ContainerId | WindowId;
-    stackingOrder: readonly (ContainerId | WindowId)[];
+    stackingOrder: readonly WindowId[];
   }>[];
   windows: readonly Readonly<{
     id: WindowId;

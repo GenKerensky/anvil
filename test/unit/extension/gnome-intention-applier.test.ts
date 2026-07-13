@@ -26,6 +26,8 @@ describe("GnomeIntentionApplier", () => {
       toLocalRect: (_surfaceId, rect) => ({ ...rect, x: rect.x - 100, y: rect.y - 200 }),
       participationChanged: vi.fn(),
       presentContainer: vi.fn(),
+      removeContainerPresentation: vi.fn(),
+      raiseWindows: vi.fn(),
       presentPreview: vi.fn(),
       clearPreview: vi.fn(),
     };
@@ -102,6 +104,8 @@ describe("GnomeIntentionApplier", () => {
       presentContainer: () => {
         throw new Error("actor destroyed");
       },
+      removeContainerPresentation: vi.fn(),
+      raiseWindows: vi.fn(),
       presentPreview: vi.fn(),
       clearPreview: vi.fn(),
     };
@@ -152,6 +156,8 @@ describe("GnomeIntentionApplier", () => {
       toLocalRect: (_surfaceId, rect) => ({ ...rect }),
       participationChanged: vi.fn(),
       presentContainer: vi.fn(),
+      removeContainerPresentation: vi.fn(),
+      raiseWindows: vi.fn(),
       presentPreview: vi.fn(),
       clearPreview: vi.fn(),
     });
@@ -170,6 +176,48 @@ describe("GnomeIntentionApplier", () => {
     expect(applied.facts).toEqual([]);
     expect(moveResize).not.toHaveBeenCalled();
     expect(applied.pendingFrames).toHaveLength(1);
+    globals.cleanup();
+  });
+
+  it("resolves identity-only stacking and presentation removal effects", () => {
+    const globals = installGnomeGlobals();
+    const firstId = windowId("window:1");
+    const secondId = windowId("window:2");
+    const first = createMockWindow();
+    const second = createMockWindow();
+    const raiseWindows = vi.fn();
+    const removeContainerPresentation = vi.fn();
+    const applier = new GnomeIntentionApplier({
+      resolveWindow: (id) => (id === firstId ? first : id === secondId ? second : undefined),
+      toGlobalRect: (_surfaceId, rect) => ({ ...rect }),
+      toLocalRect: (_surfaceId, rect) => ({ ...rect }),
+      participationChanged: vi.fn(),
+      presentContainer: vi.fn(),
+      removeContainerPresentation,
+      raiseWindows,
+      presentPreview: vi.fn(),
+      clearPreview: vi.fn(),
+    });
+
+    const applied = applier.apply([
+      {
+        type: "RemoveContainerPresentation",
+        revision: 3,
+        ordinal: 0,
+        containerId: "container:1" as never,
+      },
+      {
+        type: "RaiseWindows",
+        revision: 3,
+        ordinal: 1,
+        containerId: "container:1" as never,
+        windowIds: [firstId, secondId],
+      },
+    ]);
+
+    expect(applied.facts).toEqual([]);
+    expect(removeContainerPresentation).toHaveBeenCalledWith("container:1");
+    expect(raiseWindows).toHaveBeenCalledWith([first, second]);
     globals.cleanup();
   });
 });

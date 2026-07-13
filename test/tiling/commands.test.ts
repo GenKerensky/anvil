@@ -213,13 +213,6 @@ describe("Tiling Commands", () => {
           surfaceId: surface,
           frame: { x: 0, y: 400, width: 1000, height: 400 },
         },
-        {
-          type: "PresentContainer",
-          containerId: "container:1",
-          surfaceId: surface,
-          layout: "vertical",
-          stackingOrder: [first, second],
-        },
       ],
     });
     expect(machine.inspect()).toMatchObject({
@@ -255,6 +248,11 @@ describe("Tiling Commands", () => {
             containerId: "container:1",
             layout,
           },
+          {
+            type: "RaiseWindows",
+            containerId: "container:1",
+            windowIds: [second, first],
+          },
         ],
       });
       expect(machine.inspect().renderPlan).toMatchObject({
@@ -272,6 +270,53 @@ describe("Tiling Commands", () => {
       });
     }
   );
+
+  it("removes container presentation when leaving a presented layout", () => {
+    const { machine, first } = twoWindowMachine({ headerExtent: 35 });
+    machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "SetLayout", windowId: first, layout: "tabbed" },
+    });
+
+    const transition = machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "SetLayout", windowId: first, layout: "horizontal" },
+    });
+
+    expect(transition).toMatchObject({
+      status: "committed",
+      intentions: [
+        { type: "PlaceWindow", windowId: first },
+        { type: "PlaceWindow" },
+        { type: "RemoveContainerPresentation", containerId: "container:1" },
+      ],
+    });
+  });
+
+  it("flattens nested container identities into compositor stacking order", () => {
+    const { machine, first, second } = twoWindowMachine({ headerExtent: 35 });
+    machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "Split", windowId: first, layout: "vertical" },
+    });
+
+    const transition = machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "SetLayout", windowId: second, layout: "tabbed" },
+    });
+
+    const rootPlan = machine
+      .inspect()
+      .renderPlan.containers.find((container) => container.id === "container:1");
+    expect(rootPlan?.stackingOrder).toEqual([second, first]);
+    expect(transition.intentions).toContainEqual(
+      expect.objectContaining({
+        type: "RaiseWindows",
+        containerId: "container:1",
+        windowIds: [second, first],
+      })
+    );
+  });
 
   it("keeps stacked selection on an available child", () => {
     const { machine, first, second } = twoWindowMachine();
@@ -292,6 +337,11 @@ describe("Tiling Commands", () => {
           type: "PresentContainer",
           containerId: "container:1",
           selectedChildId: second,
+        },
+        {
+          type: "RaiseWindows",
+          containerId: "container:1",
+          windowIds: [second],
         },
       ],
     });
