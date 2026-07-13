@@ -1,5 +1,6 @@
 export { operationId, surfaceId, windowId } from "./contracts.js";
 export { createTilingStateMachine } from "./state-machine.js";
+export { TilingInvariantError } from "./invariants.js";
 export type {
   ContainerId,
   ContainerInspection,

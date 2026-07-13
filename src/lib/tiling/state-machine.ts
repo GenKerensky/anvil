@@ -13,6 +13,7 @@ import type {
 import { copyInspection, copyPolicy } from "./copy.js";
 import { copyRect, deriveContainerPlans, deriveWindowPlans, sameRect } from "./geometry.js";
 import { changedPlacementIntentions } from "./intentions.js";
+import { assertTilingInvariants } from "./invariants.js";
 import { applyOperation } from "./operations.js";
 import { classifyParticipation, effectiveParticipation } from "./participation.js";
 import { reconcile } from "./reconciliation.js";
@@ -73,12 +74,16 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
     },
     diagnostics: [],
   };
+  const commitCandidate = (candidate: TilingInspection): void => {
+    assertTilingInvariants(candidate);
+    inspection = candidate;
+  };
 
   return {
     dispatch(event: TilingEvent): TilingTransition {
       if (event.type === "ReconcileRequested") {
         const result = reconcile(inspection, event.surfaceId);
-        inspection = result.inspection;
+        commitCandidate(result.inspection);
         return result.transition;
       }
 
@@ -89,7 +94,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         event.type === "OperationCancelled"
       ) {
         const result = applyOperation(inspection, event);
-        inspection = result.inspection;
+        commitCandidate(result.inspection);
         return result.transition;
       }
 
@@ -186,7 +191,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             revision,
             participationIntentions.length
           );
-          inspection = {
+          commitCandidate({
             ...inspection,
             revision,
             windows,
@@ -202,7 +207,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               windows: windowPlans,
               containers: deriveContainerPlans(inspection.surfaces, containers),
             },
-          };
+          });
           return {
             status: "committed",
             revision,
@@ -250,7 +255,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           const revision = inspection.revision + 1;
           const containers = [...inspection.containers];
           containers[containerIndex] = { ...container, selectedChildId: targetId };
-          inspection = {
+          commitCandidate({
             ...inspection,
             revision,
             containers,
@@ -261,7 +266,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 plan.id === container.id ? { ...plan, selectedChildId: targetId } : plan
               ),
             },
-          };
+          });
           return {
             status: "committed",
             revision,
@@ -331,7 +336,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             windowPlans,
             revision
           );
-          inspection = {
+          commitCandidate({
             ...inspection,
             revision,
             containers,
@@ -343,7 +348,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 plan.id === container.id ? { ...plan, stackingOrder: childIds } : plan
               ),
             },
-          };
+          });
           return { status: "committed", revision, intentions, diagnostics: [] };
         }
 
@@ -402,7 +407,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           ...(current.selectedChildId ? { selectedChildId: current.selectedChildId } : {}),
           stackingOrder: [...current.childIds],
         };
-        inspection = {
+        commitCandidate({
           ...inspection,
           revision,
           containers,
@@ -420,7 +425,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 : container
             ),
           },
-        };
+        });
         return {
           status: "committed",
           revision,
@@ -514,7 +519,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             })),
         ].map((intention, ordinal) => ({ ...intention, ordinal }));
 
-        inspection = {
+        commitCandidate({
           ...inspection,
           revision,
           policy: nextPolicy,
@@ -530,7 +535,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               return { ...container, layout: stateContainer.layout };
             }),
           },
-        };
+        });
         return { status: "committed", revision, intentions, diagnostics: [] };
       }
 
@@ -835,7 +840,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           participationIntentions.length
         );
         const intentions = [...participationIntentions, ...placementIntentions];
-        inspection = {
+        commitCandidate({
           ...inspection,
           revision,
           surfaces,
@@ -854,7 +859,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             windows: windowPlans,
             containers: deriveContainerPlans(surfaces, containers),
           },
-        };
+        });
         return { status: "committed", revision, intentions, diagnostics: [] };
       }
 
@@ -935,7 +940,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           })),
         ].map((intention, ordinal) => ({ ...intention, ordinal }));
 
-        inspection = {
+        commitCandidate({
           ...inspection,
           revision,
           surfaces,
@@ -959,7 +964,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             })),
             previews: [],
           },
-        };
+        });
         return { status: "committed", revision, intentions, diagnostics: [] };
       }
       return {
