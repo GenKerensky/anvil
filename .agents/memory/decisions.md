@@ -550,3 +550,7 @@ A second audit of the refactor found remaining work; all resolved.
 - **Core commands do not fall through to legacy topology writers**: platform-owned actions such as
   `ShowTabDecorationToggle` mutate their platform setting and submit `PolicyReplaced` directly.
   They must not dispatch through CommandBus when the core writer is active.
+- **GNOME frame signals sample active portable grabs**: the core-mode tracker submits the observed
+  frame, resize delta, and pointer position through the operation adapter. Drag previews are St
+  effects owned by `GnomePreviewPresenter`; drag-end commits or cancels the operation event and
+  never asks `GrabResizeSession` or `DragDropTile` to mutate topology.

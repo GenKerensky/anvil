@@ -186,6 +186,40 @@ describe("AnvilRuntime - Resize", () => {
       expect(shadowEnd).toHaveBeenCalledWith(metaWindow, false, false);
       expect(wm()._tilingShadow.inspect().operations).toEqual([]);
     });
+
+    it("samples core resize and drag operations from portable frame signals", () => {
+      const metaWindow = setupFocusWindow(ctx);
+      wm()._tilingEngineMode = "core";
+      vi.spyOn(wm(), "allowDragDropTile").mockReturnValue(true);
+      (global as unknown as { get_pointer: ReturnType<typeof vi.fn> }).get_pointer.mockReturnValue([
+        320, 240, 0,
+      ]);
+      const observeFrame = vi.spyOn(wm()._tilingShadow, "observeFrame");
+      const observeResize = vi.spyOn(wm()._tilingShadow, "observeGrabUpdate");
+      const observeMove = vi.spyOn(wm()._tilingShadow, "observeGrabMoveUpdate");
+
+      wm()._observePortableFrame(metaWindow);
+
+      expect(observeFrame).toHaveBeenCalledWith(metaWindow);
+      expect(observeResize).toHaveBeenCalledWith(metaWindow);
+      expect(observeMove).toHaveBeenCalledWith(metaWindow, [320, 240], true);
+    });
+
+    it("commits a core pointer drag without invoking the legacy grab writer", () => {
+      const metaWindow = setupFocusWindow(ctx);
+      wm()._tilingEngineMode = "core";
+      vi.spyOn(wm(), "allowDragDropTile").mockReturnValue(true);
+      const shadowMove = vi.spyOn(wm()._tilingShadow, "observeGrabMoveUpdate");
+      const shadowEnd = vi.spyOn(wm()._tilingShadow, "observeGrabEnd");
+      const legacyEnd = vi.spyOn(wm()._grab, "end");
+
+      wm()._handleGrabOpBegin(ctx.display, metaWindow, Meta.GrabOp.MOVING);
+      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.MOVING_UNCONSTRAINED);
+
+      expect(shadowMove).toHaveBeenCalledWith(metaWindow, [0, 0], true);
+      expect(shadowEnd).toHaveBeenCalledWith(metaWindow, false, true);
+      expect(legacyEnd).not.toHaveBeenCalled();
+    });
   });
 
   describe("resize - queued event", () => {

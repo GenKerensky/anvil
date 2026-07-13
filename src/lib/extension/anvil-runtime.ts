@@ -44,7 +44,7 @@ import { FocusController } from "./focus-controller.js";
 import { BorderController } from "./border-controller.js";
 import { CommandBus } from "./command-bus.js";
 
-import { WINDOW_MODES } from "./window/constants.js";
+import { GRAB_TYPES, WINDOW_MODES } from "./window/constants.js";
 import { DragDropTile } from "./drag-drop-tile.js";
 import { SignalManager } from "./signal-manager.js";
 import { RenderScheduler } from "./render-scheduler.js";
@@ -66,6 +66,7 @@ import { CoreTilingEffectDriver } from "./core-tiling-effect-driver.js";
 import { selectTilingEngineMode, type TilingEngineMode } from "./tiling-engine-mode.js";
 import { safeRaise } from "./mutter-safe.js";
 import { GnomeContainerPresenter } from "./gnome-container-presenter.js";
+import { GnomePreviewPresenter } from "./gnome-preview-presenter.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -125,6 +126,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private _tilingShadow: TilingShadow | null = null;
   private _intentionApplier: GnomeIntentionApplier | null = null;
   private _containerPresenter: GnomeContainerPresenter | null = null;
+  private _previewPresenter: GnomePreviewPresenter | null = null;
   private _coreEffectDriver: CoreTilingEffectDriver | null = null;
   private _tilingEngineMode: TilingEngineMode = "shadow";
   private _tilingShadowFailure: string | null = null;
@@ -173,6 +175,10 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       resolveWindow: (id) => self._tilingShadow?.resolveWindow(id),
       toGlobalRect: (surface, rect) => self._tilingShadow!.toGlobalRect(surface, rect),
     });
+    this._previewPresenter = new GnomePreviewPresenter({
+      enabled: () => self.ext.settings.get_boolean("preview-hint-enabled"),
+      toGlobalRect: (surface, rect) => self._tilingShadow!.toGlobalRect(surface, rect),
+    });
     this._intentionApplier = new GnomeIntentionApplier({
       resolveWindow: (id) => self._tilingShadow?.resolveWindow(id),
       toGlobalRect: (surface, rect) => self._tilingShadow!.toGlobalRect(surface, rect),
@@ -185,12 +191,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       raiseWindows: (metaWindows) => {
         metaWindows.forEach((metaWindow) => safeRaise(metaWindow));
       },
-      presentPreview: () => {
-        // Identity-based preview actors are wired in the next migration slice.
-      },
-      clearPreview: () => {
-        // Identity-based preview actors are wired in the next migration slice.
-      },
+      presentPreview: (intention) => self._previewPresenter?.present(intention),
+      clearPreview: (intention) => self._previewPresenter?.clear(intention.operationId),
     });
     this._coreEffectDriver = new CoreTilingEffectDriver(
       this._intentionApplier,
@@ -383,8 +385,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       autoSplitFromFocus: () => self.layoutEngine.autoSplitFromFocus(),
       observePortableWindow: (w) =>
         self._withTilingShadow("window", (shadow) => shadow.observeWindow(w)),
-      observePortableFrame: (w) =>
-        self._withTilingShadow("frame", (shadow) => shadow.observeFrame(w)),
+      observePortableFrame: (w) => self._observePortableFrame(w),
       observePortableFocus: (w) =>
         self._withTilingShadow("focus", (shadow) => shadow.observeFocus(w)),
       withdrawPortableWindow: (w) =>
@@ -764,6 +765,16 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     }
   }
 
+  private _observePortableFrame(metaWindow: Meta.Window): void {
+    this._withTilingShadow("frame", (shadow) => {
+      shadow.observeFrame(metaWindow);
+      if (this._tilingEngineMode !== "core") return;
+      shadow.observeGrabUpdate(metaWindow);
+      const [x, y] = global.get_pointer() as unknown as [number, number];
+      shadow.observeGrabMoveUpdate(metaWindow, [x, y], Boolean(this.allowDragDropTile()));
+    });
+  }
+
   private _recordSettledTilingComparison(): void {
     this._withTilingShadow("comparison", (shadow) => {
       this._tilingShadowComparison = shadow.compareObservedGeometry();
@@ -805,6 +816,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     safely("event scheduler", () => this._eventScheduler?.dispose());
     safely("decorations", () => Utils._disableDecorations());
     safely("core container presentation", () => this._containerPresenter?.destroy());
+    safely("core previews", () => this._previewPresenter?.destroy());
     safely("signals", () => this._signalManager?.unbindAll());
     safely("borders", () => this._borders?.destroyAllBorderActors());
     safely("tracker", () => this._tracker?.dispose());
@@ -827,6 +839,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._coreEffectDriver = null;
     this._intentionApplier = null;
     this._containerPresenter = null;
+    this._previewPresenter = null;
     this._tilingShadow = null;
     this._tilingShadowComparison = null;
     this._tracker = null;
@@ -1174,9 +1187,18 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private _handleGrabOpEnd(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
     if (this._tilingEngineMode === "core") {
-      this._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(metaWindow));
+      const moving = Utils.grabMode(grabOp) === GRAB_TYPES.MOVING;
+      const commitDrag = moving && Boolean(this.allowDragDropTile());
+      this._withTilingShadow("grab-final-update", (shadow) => {
+        if (moving) {
+          const [x, y] = global.get_pointer() as unknown as [number, number];
+          shadow.observeGrabMoveUpdate(metaWindow, [x, y], commitDrag);
+        } else {
+          shadow.observeGrabUpdate(metaWindow);
+        }
+      });
       this._withTilingShadow("grab-end", (shadow) =>
-        shadow.observeGrabEnd(metaWindow, false, false)
+        shadow.observeGrabEnd(metaWindow, false, commitDrag)
       );
       return;
     }
@@ -1280,6 +1302,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       portableTiling: this._tilingShadow?.inspect() ?? null,
       portablePresentation: this._tilingShadow?.presentationPlan() ?? null,
       coreContainerPresentations: this._containerPresenter?.inspect() ?? [],
+      corePreviews: this._previewPresenter?.inspect() ?? [],
       portableTilingShadow: portableComparison,
       portableTilingShadowFailure: this._tilingShadowFailure,
     });
