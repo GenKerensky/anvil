@@ -12,6 +12,7 @@ import type {
 } from "./contracts.js";
 import { copyInspection, copyPolicy } from "./copy.js";
 import { copyRect, deriveWindowPlans, sameRect } from "./geometry.js";
+import { changedPlacementIntentions } from "./intentions.js";
 import { validateSurfaces } from "./validation.js";
 
 function shouldParticipate(
@@ -57,6 +58,91 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
   return {
     dispatch(event: TilingEvent): TilingTransition {
+      if (event.type === "CommandRequested") {
+        const window = inspection.windows.find(
+          (candidate) => candidate.id === event.command.windowId
+        );
+        const containerIndex = inspection.containers.findIndex(
+          (container) => container.id === window?.parentId
+        );
+        if (
+          !window?.participating ||
+          containerIndex < 0 ||
+          !inspection.policy.allowedLayouts.includes(event.command.layout)
+        ) {
+          return {
+            status: "rejected",
+            revision: inspection.revision,
+            intentions: [],
+            diagnostics: [
+              {
+                code: "invalid-layout-command",
+                message: "SetLayout requires a participating window and an allowed layout",
+                identity: event.command.windowId,
+              },
+            ],
+          };
+        }
+        const current = inspection.containers[containerIndex];
+        if (current.layout === event.command.layout) {
+          return {
+            status: "ignored",
+            revision: inspection.revision,
+            intentions: [],
+            diagnostics: [],
+          };
+        }
+        const containers = [...inspection.containers];
+        containers[containerIndex] = { ...current, layout: event.command.layout };
+        const revision = inspection.revision + 1;
+        const windowPlans = deriveWindowPlans(
+          inspection.surfaces,
+          inspection.windows,
+          containers,
+          inspection.policy
+        );
+        const placement = changedPlacementIntentions(
+          inspection.renderPlan.windows,
+          windowPlans,
+          revision
+        );
+        const present = {
+          type: "PresentContainer" as const,
+          revision,
+          ordinal: placement.length,
+          containerId: current.id,
+          surfaceId: current.surfaceId,
+          layout: event.command.layout,
+          ...(current.selectedChildId ? { selectedChildId: current.selectedChildId } : {}),
+          stackingOrder: [...current.childIds],
+        };
+        inspection = {
+          ...inspection,
+          revision,
+          containers,
+          renderPlan: {
+            ...inspection.renderPlan,
+            revision,
+            windows: windowPlans,
+            containers: inspection.renderPlan.containers.map((container) =>
+              container.id === current.id
+                ? {
+                    ...container,
+                    layout: event.command.layout,
+                    stackingOrder: [...current.childIds],
+                  }
+                : container
+            ),
+          },
+        };
+        return {
+          status: "committed",
+          revision,
+          intentions: [...placement, present],
+          diagnostics: [],
+        };
+      }
+
       if (event.type === "PolicyReplaced") {
         if (JSON.stringify(event.policy) === JSON.stringify(inspection.policy)) {
           return {

@@ -22,6 +22,7 @@ export type {
   SurfaceInspection,
   SurfacePlan,
   TilingDiagnostic,
+  TilingCommand,
   TilingEvent,
   TilingIdentity,
   TilingInspection,

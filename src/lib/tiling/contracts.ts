@@ -198,6 +198,12 @@ export type PlatformFact = Readonly<{
   available: boolean;
 }>;
 
+export type TilingCommand = Readonly<{
+  type: "SetLayout";
+  windowId: WindowId;
+  layout: Layout;
+}>;
+
 export type TilingEvent =
   | Readonly<{
       type: "PlatformSnapshotObserved";
@@ -210,6 +216,10 @@ export type TilingEvent =
   | Readonly<{
       type: "PolicyReplaced";
       policy: TilingPolicy;
+    }>
+  | Readonly<{
+      type: "CommandRequested";
+      command: TilingCommand;
     }>;
 
 type IntentionToken = Readonly<{
@@ -235,6 +245,15 @@ export type TilingIntention =
       Readonly<{
         type: "FocusWindow";
         windowId: WindowId;
+      }>)
+  | (IntentionToken &
+      Readonly<{
+        type: "PresentContainer";
+        containerId: ContainerId;
+        surfaceId: SurfaceId;
+        layout: Layout;
+        selectedChildId?: ContainerId | WindowId;
+        stackingOrder: readonly (ContainerId | WindowId)[];
       }>);
 
 export type TilingTransition =
