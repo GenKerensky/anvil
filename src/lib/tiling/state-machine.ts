@@ -382,6 +382,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         let containers = [...inspection.containers];
         let placementHints = [...inspection.placementHints];
         let evacuationHints = [...inspection.evacuationHints];
+        let operations = [...inspection.operations];
         const participationChanges: Array<{
           windowId: WindowInspection["id"];
           participating: boolean;
@@ -392,6 +393,13 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             const index = windows.findIndex((window) => window.id === fact.windowId);
             if (index < 0 || windows[index].available === fact.available) continue;
             windows[index] = { ...windows[index], available: fact.available };
+            if (!fact.available) {
+              operations = operations.filter(
+                (operation) =>
+                  operation.windowId !== fact.windowId &&
+                  operation.neighborWindowId !== fact.windowId
+              );
+            }
             changed = true;
           }
           if (fact.type === "WindowWithdrawn") {
@@ -406,6 +414,10 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 : {}),
             }));
             placementHints = placementHints.filter((hint) => hint.windowId !== fact.windowId);
+            operations = operations.filter(
+              (operation) =>
+                operation.windowId !== fact.windowId && operation.neighborWindowId !== fact.windowId
+            );
             evacuationHints = evacuationHints.map((hint) => ({
               ...hint,
               windowIds: hint.windowIds.filter((id) => id !== fact.windowId),
@@ -437,6 +449,14 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               windows[index] = { ...window, participating: false, parentId: undefined };
             }
             surfaces.splice(surfaceIndex, 1);
+            const removedContainerIds = new Set(
+              containers
+                .filter((container) => container.surfaceId === fact.surfaceId)
+                .map((container) => container.id)
+            );
+            operations = operations.filter(
+              (operation) => !removedContainerIds.has(operation.containerId)
+            );
             containers = containers.filter((container) => container.surfaceId !== fact.surfaceId);
             changed = true;
           }
@@ -457,6 +477,14 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 neighbors: { ...fact.surface.neighbors },
                 capabilities: { ...fact.surface.capabilities },
               };
+              const affectedContainerIds = new Set(
+                containers
+                  .filter((container) => container.surfaceId === fact.surface.id)
+                  .map((container) => container.id)
+              );
+              operations = operations.filter(
+                (operation) => !affectedContainerIds.has(operation.containerId)
+              );
               changed = true;
               continue;
             }
@@ -558,6 +586,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           surfaces,
           windows,
           containers,
+          operations,
           placementHints,
           evacuationHints,
           renderPlan: {

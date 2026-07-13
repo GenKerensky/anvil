@@ -123,4 +123,35 @@ describe("Tiling Operations", () => {
     });
     expect(machine.inspect().operations).toEqual([]);
   });
+
+  it("cancels an operation inside a topology-invalidating transition", () => {
+    const { machine, first, second } = resizeMachine();
+    const operation = operationId("resize-1");
+    machine.dispatch({
+      type: "OperationStarted",
+      operation: { id: operation, kind: "resize", windowId: first, direction: "right" },
+    });
+
+    const transition = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "WindowWithdrawn", windowId: second }],
+    });
+
+    expect(transition).toMatchObject({
+      status: "committed",
+      revision: 3,
+      intentions: [
+        {
+          type: "PlaceWindow",
+          windowId: first,
+          frame: { x: 0, y: 0, width: 1000, height: 800 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      operations: [],
+      windows: [{ id: first }],
+      containers: [{ childIds: [first] }],
+    });
+  });
 });
