@@ -150,4 +150,54 @@ describe("Tiling Reconciliation", () => {
       windows: [{ id: terminal, participating: true }],
     });
   });
+
+  it("records reconcile exhaustion once after bounded placement retries", () => {
+    const machine = createTilingStateMachine({ ...policy, reconcileAttempts: 2 });
+    const surface = surfaceId("surface");
+    const terminal = windowId("terminal");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: surface,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [
+          {
+            id: terminal,
+            surfaceId: surface,
+            frame: { x: 100, y: 100, width: 600, height: 400 },
+            available: true,
+            capabilities,
+          },
+        ],
+      },
+    });
+
+    expect(machine.dispatch({ type: "ReconcileRequested" }).status).toBe("committed");
+    expect(machine.dispatch({ type: "ReconcileRequested" }).status).toBe("committed");
+
+    expect(machine.dispatch({ type: "ReconcileRequested" })).toMatchObject({
+      status: "committed",
+      revision: 4,
+      intentions: [],
+      diagnostics: [{ code: "reconcile-exhausted", identity: terminal }],
+    });
+    expect(machine.inspect()).toMatchObject({
+      revision: 4,
+      diagnostics: [{ code: "reconcile-exhausted", identity: terminal }],
+      windows: [{ id: terminal, reconcileAttempts: 2 }],
+    });
+    expect(machine.dispatch({ type: "ReconcileRequested" })).toEqual({
+      status: "ignored",
+      revision: 4,
+      intentions: [],
+      diagnostics: [],
+    });
+  });
 });

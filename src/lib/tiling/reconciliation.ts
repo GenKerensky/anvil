@@ -7,18 +7,37 @@ export type ReconciliationResult = Readonly<{
 }>;
 
 export function reconcile(inspection: TilingInspection, surfaceId?: string): ReconciliationResult {
-  const mismatches = inspection.renderPlan.windows.filter((plan) => {
+  const divergent = inspection.renderPlan.windows.filter((plan) => {
     if (surfaceId !== undefined && plan.surfaceId !== surfaceId) return false;
     const window = inspection.windows.find((candidate) => candidate.id === plan.id);
     return (
       window !== undefined &&
       window.participating &&
       window.available &&
-      !sameRect(window.frame, plan.frame) &&
-      window.reconcileAttempts < inspection.policy.reconcileAttempts
+      !sameRect(window.frame, plan.frame)
     );
   });
-  if (mismatches.length === 0) {
+  const mismatches = divergent.filter((plan) => {
+    const window = inspection.windows.find((candidate) => candidate.id === plan.id)!;
+    return window.reconcileAttempts < inspection.policy.reconcileAttempts;
+  });
+  const exhaustionDiagnostics = divergent
+    .filter((plan) => {
+      const window = inspection.windows.find((candidate) => candidate.id === plan.id)!;
+      return (
+        window.reconcileAttempts >= inspection.policy.reconcileAttempts &&
+        !inspection.diagnostics.some(
+          (diagnostic) =>
+            diagnostic.code === "reconcile-exhausted" && diagnostic.identity === plan.id
+        )
+      );
+    })
+    .map((plan) => ({
+      code: "reconcile-exhausted",
+      message: `Platform frame did not settle after ${inspection.policy.reconcileAttempts} attempts`,
+      identity: plan.id,
+    }));
+  if (mismatches.length === 0 && exhaustionDiagnostics.length === 0) {
     return {
       inspection,
       transition: {
@@ -49,10 +68,11 @@ export function reconcile(inspection: TilingInspection, surfaceId?: string): Rec
     ...inspection,
     revision,
     windows,
+    diagnostics: [...inspection.diagnostics, ...exhaustionDiagnostics].slice(-50),
     renderPlan: { ...inspection.renderPlan, revision },
   };
   return {
     inspection: next,
-    transition: { status: "committed", revision, intentions, diagnostics: [] },
+    transition: { status: "committed", revision, intentions, diagnostics: exhaustionDiagnostics },
   };
 }
