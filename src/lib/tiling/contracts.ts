@@ -197,11 +197,30 @@ export type TilingEvent = Readonly<{
   snapshot: PlatformSnapshot;
 }>;
 
-export type TilingIntention = Readonly<{
-  type: string;
+type IntentionToken = Readonly<{
   revision: TilingRevision;
   ordinal: number;
 }>;
+
+export type TilingIntention =
+  | (IntentionToken &
+      Readonly<{
+        type: "WindowParticipationChanged";
+        windowId: WindowId;
+        participating: boolean;
+      }>)
+  | (IntentionToken &
+      Readonly<{
+        type: "PlaceWindow";
+        windowId: WindowId;
+        surfaceId: SurfaceId;
+        frame: Rect;
+      }>)
+  | (IntentionToken &
+      Readonly<{
+        type: "FocusWindow";
+        windowId: WindowId;
+      }>);
 
 export type TilingTransition =
   | Readonly<{

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   createTilingStateMachine,
   surfaceId,
+  windowId,
   type TilingPolicy,
 } from "../../src/lib/tiling/index.js";
 
@@ -93,6 +94,110 @@ describe("TilingStateMachine", () => {
         revision: 1,
         surfaces: [{ id: primary, workArea: { x: 0, y: 0, width: 1920, height: 1080 } }],
         windows: [],
+      },
+    });
+  });
+
+  it("admits available windows and derives split geometry", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const left = windowId("left");
+    const right = windowId("right");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+
+    const transition = machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [
+          {
+            id: left,
+            surfaceId: primary,
+            frame: { x: 100, y: 100, width: 600, height: 400 },
+            available: true,
+            capabilities,
+          },
+          {
+            id: right,
+            surfaceId: primary,
+            frame: { x: 200, y: 100, width: 600, height: 400 },
+            available: true,
+            capabilities,
+          },
+        ],
+      },
+    });
+
+    expect(transition.intentions).toEqual([
+      {
+        type: "WindowParticipationChanged",
+        revision: 1,
+        ordinal: 0,
+        windowId: left,
+        participating: true,
+      },
+      {
+        type: "WindowParticipationChanged",
+        revision: 1,
+        ordinal: 1,
+        windowId: right,
+        participating: true,
+      },
+      {
+        type: "PlaceWindow",
+        revision: 1,
+        ordinal: 2,
+        windowId: left,
+        surfaceId: primary,
+        frame: { x: 0, y: 0, width: 960, height: 1080 },
+      },
+      {
+        type: "PlaceWindow",
+        revision: 1,
+        ordinal: 3,
+        windowId: right,
+        surfaceId: primary,
+        frame: { x: 960, y: 0, width: 960, height: 1080 },
+      },
+    ]);
+    expect(machine.inspect()).toMatchObject({
+      windows: [
+        {
+          id: left,
+          surfaceId: primary,
+          parentId: "container:1",
+          participating: true,
+          available: true,
+        },
+        {
+          id: right,
+          surfaceId: primary,
+          parentId: "container:1",
+          participating: true,
+          available: true,
+        },
+      ],
+      containers: [{ id: "container:1", childIds: [left, right] }],
+      renderPlan: {
+        windows: [
+          {
+            id: left,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 960, height: 1080 },
+          },
+          {
+            id: right,
+            surfaceId: primary,
+            frame: { x: 960, y: 0, width: 960, height: 1080 },
+          },
+        ],
       },
     });
   });

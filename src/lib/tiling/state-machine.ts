@@ -8,6 +8,9 @@ import type {
   TilingPolicy,
   TilingStateMachine,
   TilingTransition,
+  WindowFact,
+  WindowInspection,
+  WindowPlan,
 } from "./contracts.js";
 
 function copyRect(rect: Readonly<{ x: number; y: number; width: number; height: number }>) {
@@ -58,6 +61,57 @@ function validateSurfaces(surfaces: readonly SurfaceFact[]): string | null {
     }
   }
   return null;
+}
+
+function shouldParticipate(
+  window: WindowFact,
+  policy: TilingPolicy,
+  availableSurfaces: ReadonlySet<string>
+): boolean {
+  if (!policy.enabled || !availableSurfaces.has(window.surfaceId)) return false;
+  return policy.surfaceTiling[window.surfaceId] !== false;
+}
+
+function inset(
+  rect: Readonly<{ x: number; y: number; width: number; height: number }>,
+  gap: number
+) {
+  if (gap <= 0 || rect.width <= gap * 2 || rect.height <= gap * 2) return copyRect(rect);
+  return {
+    x: rect.x + gap,
+    y: rect.y + gap,
+    width: rect.width - gap * 2,
+    height: rect.height - gap * 2,
+  };
+}
+
+function splitFrames(
+  workArea: Readonly<{ x: number; y: number; width: number; height: number }>,
+  windows: readonly WindowInspection[],
+  layout: TilingPolicy["defaultLayout"],
+  gap: number
+): WindowPlan[] {
+  const available = windows.filter((window) => window.available);
+  if (available.length === 0) return [];
+  if (layout === "stacked" || layout === "tabbed") {
+    return available.map((window) => ({
+      id: window.id,
+      surfaceId: window.surfaceId,
+      frame: inset(workArea, gap),
+    }));
+  }
+  const horizontal = layout === "horizontal";
+  const total = horizontal ? workArea.width : workArea.height;
+  const base = Math.floor(total / available.length);
+  let cursor = horizontal ? workArea.x : workArea.y;
+  return available.map((window, index) => {
+    const size = index === available.length - 1 ? total - base * index : base;
+    const frame = horizontal
+      ? { x: cursor, y: workArea.y, width: size, height: workArea.height }
+      : { x: workArea.x, y: cursor, width: workArea.width, height: size };
+    cursor += size;
+    return { id: window.id, surfaceId: window.surfaceId, frame: inset(frame, gap) };
+  });
 }
 
 function copyPolicy(policy: TilingPolicy): TilingPolicy {
@@ -114,6 +168,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         const revision = inspection.revision + 1;
         const surfaces: SurfaceInspection[] = [];
         const containers: ContainerInspection[] = [];
+        const surfaceRoots = new Map<string, ContainerId>();
         for (const surface of [...event.snapshot.surfaces].sort((a, b) =>
           a.id.localeCompare(b.id)
         )) {
@@ -131,12 +186,67 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             childIds: [],
             weights: {},
           });
+          surfaceRoots.set(surface.id, rootId);
         }
+
+        const surfaceIds = new Set(surfaces.map((surface) => surface.id));
+        const windows: WindowInspection[] = [...event.snapshot.windows]
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map((window) => {
+            const participating = shouldParticipate(window, policy, surfaceIds);
+            const parentId = participating ? surfaceRoots.get(window.surfaceId) : undefined;
+            if (parentId) {
+              const parentIndex = containers.findIndex((container) => container.id === parentId);
+              const parent = containers[parentIndex];
+              containers[parentIndex] = { ...parent, childIds: [...parent.childIds, window.id] };
+            }
+            return {
+              id: window.id,
+              surfaceId: window.surfaceId,
+              ...(parentId ? { parentId } : {}),
+              participating,
+              available: window.available,
+              frame: copyRect(window.frame),
+            };
+          });
+
+        const windowPlans = surfaces.flatMap((surface) => {
+          const surfaceWindows = windows.filter(
+            (window) => window.participating && window.surfaceId === surface.id
+          );
+          const gap =
+            policy.hideGapWhenSingle &&
+            surfaceWindows.filter((window) => window.available).length === 1
+              ? 0
+              : policy.gap;
+          return splitFrames(surface.workArea, surfaceWindows, policy.defaultLayout, gap);
+        });
+
+        const intentions = [
+          ...windows
+            .filter((window) => window.participating)
+            .map((window) => ({
+              type: "WindowParticipationChanged" as const,
+              revision,
+              ordinal: 0,
+              windowId: window.id,
+              participating: true,
+            })),
+          ...windowPlans.map((window) => ({
+            type: "PlaceWindow" as const,
+            revision,
+            ordinal: 0,
+            windowId: window.id,
+            surfaceId: window.surfaceId,
+            frame: copyRect(window.frame),
+          })),
+        ].map((intention, ordinal) => ({ ...intention, ordinal }));
 
         inspection = {
           ...inspection,
           revision,
           surfaces,
+          windows,
           containers,
           renderPlan: {
             revision,
@@ -144,7 +254,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               id: surface.id,
               workArea: copyRect(surface.workArea),
             })),
-            windows: [],
+            windows: windowPlans,
             containers: containers.map((container) => ({
               id: container.id,
               surfaceId: container.surfaceId,
@@ -157,7 +267,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             previews: [],
           },
         };
-        return { status: "committed", revision, intentions: [], diagnostics: [] };
+        return { status: "committed", revision, intentions, diagnostics: [] };
       }
       return {
         status: "ignored",
