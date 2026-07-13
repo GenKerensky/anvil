@@ -10,6 +10,7 @@ import {
   launchApp,
   getWindowGeometries,
   getWindowCount,
+  getAnvilRuntime,
   closeAllWindows,
   sleep,
   waitForWindowCount,
@@ -100,5 +101,39 @@ describe("Minimize Behavior", function () {
       expect(g.width).toBeGreaterThan(0);
       expect(g.height).toBeGreaterThan(0);
     });
+  });
+
+  it("survives rapid repeated minimize and restore churn", async function () {
+    await launchApp("org.gnome.Nautilus.desktop");
+    await launchApp("org.gnome.Nautilus.desktop");
+    await launchApp("org.gnome.Nautilus.desktop");
+    await waitForWindowCount(3, 5000);
+
+    const window = getFocusedWindow();
+    expect(window).not.toBeNull();
+    if (!window) return;
+    for (let iteration = 0; iteration < 5; iteration++) {
+      window.minimize();
+      await sleep(80);
+      window.unminimize();
+      await sleep(120);
+    }
+    await sleep(800);
+
+    expect(getWindowCount()).toBe(3);
+    const state = JSON.parse(getAnvilRuntime().getStateJson());
+    if (state.tilingEngineMode === "core") {
+      expect(state.portableTilingShadowFailure).toBeNull();
+      expect(
+        state.portableTiling.diagnostics.some(function (/** @type {any} */ diagnostic) {
+          return diagnostic.code === "reconcile-exhausted";
+        })
+      ).toBe(false);
+      expect(
+        state.portableTiling.windows.filter(function (/** @type {any} */ candidate) {
+          return candidate.available;
+        }).length
+      ).toBe(3);
+    }
   });
 });

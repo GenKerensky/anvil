@@ -10,6 +10,7 @@ import {
   launchApp,
   getWindowGeometries,
   sendAnvilCommand,
+  getAnvilRuntime,
   closeAllWindows,
   sleep,
   waitForWindowCount,
@@ -69,5 +70,38 @@ describe("Workspace", function () {
     // Windows should be tiling again
     const wins = getWindowGeometries();
     expect(wins.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("reconciles surfaces when a dynamic workspace is created and removed", async function () {
+    const manager = global.display.get_workspace_manager();
+    const originalIndex = manager.get_active_workspace_index();
+    const initialCount = manager.get_n_workspaces();
+    const timestamp = global.display.get_current_time();
+    const created = manager.append_new_workspace(true, timestamp);
+    await sleep(500);
+
+    expect(manager.get_active_workspace_index()).toBe(created.index());
+    await launchApp("org.gnome.Nautilus.desktop");
+    await launchApp("org.gnome.Nautilus.desktop");
+    await waitForWindowCount(2, 5000);
+
+    manager.remove_workspace(created, global.display.get_current_time());
+    await sleep(1000);
+
+    expect(manager.get_n_workspaces()).toBe(initialCount);
+    expect(manager.get_active_workspace_index()).toBe(originalIndex);
+    const state = JSON.parse(getAnvilRuntime().getStateJson());
+    if (state.tilingEngineMode === "core") {
+      expect(state.portableTilingShadowFailure).toBeNull();
+      expect(state.portableTiling.surfaces.length).toBeGreaterThan(0);
+      expect(state.portableTiling.windows.length).toBe(2);
+      expect(
+        state.portableTiling.windows.every(function (/** @type {any} */ candidate) {
+          return state.portableTiling.surfaces.some(function (/** @type {any} */ surface) {
+            return surface.id === candidate.surfaceId;
+          });
+        })
+      ).toBe(true);
+    }
   });
 });
