@@ -1,4 +1,5 @@
 import type { TilingInspection } from "./contracts.js";
+import { axisForDirection, compareDirections } from "./directions.js";
 
 export class TilingInvariantError extends Error {
   constructor(message: string) {
@@ -188,53 +189,77 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
     return { windows: windowClosure, containers: containerClosure };
   };
   for (const operation of inspection.operations) {
-    const operationContainer = containers.get(operation.containerId);
-    invariant(operationContainer !== undefined, "Operation Container must resolve");
+    invariant(operation.boundaries.length > 0, "Resize Operation must have a boundary");
     invariant(
-      operation.primaryChildId !== operation.neighborChildId &&
-        operationContainer.childIds.includes(operation.primaryChildId) &&
-        operationContainer.childIds.includes(operation.neighborChildId),
-      "Operation boundary children must be distinct direct children"
+      operation.boundaries.every(
+        (boundary, index) =>
+          index === 0 ||
+          compareDirections(operation.boundaries[index - 1].direction, boundary.direction) <= 0
+      ),
+      "Resize Operation boundaries must be canonically sorted"
     );
-    const horizontal = operation.direction === "left" || operation.direction === "right";
-    invariant(
-      (horizontal && operationContainer.layout === "horizontal") ||
-        (!horizontal && operationContainer.layout === "vertical"),
-      "Operation direction must match its split Container"
-    );
+    const operationAxes = new Set<string>();
+    const expectedContainers = new Set<string>();
+    const expectedWindows = new Set<string>();
+    for (const boundary of operation.boundaries) {
+      const operationContainer = containers.get(boundary.containerId);
+      invariant(operationContainer !== undefined, "Operation Container must resolve");
+      invariant(
+        boundary.primaryChildId !== boundary.neighborChildId &&
+          operationContainer.childIds.includes(boundary.primaryChildId) &&
+          operationContainer.childIds.includes(boundary.neighborChildId),
+        "Operation boundary children must be distinct direct children"
+      );
+      const axis = axisForDirection(boundary.direction);
+      const horizontal = axis === "horizontal";
+      invariant(
+        !operationAxes.has(axis),
+        "Resize Operation must have at most one boundary per axis"
+      );
+      operationAxes.add(axis);
+      invariant(
+        (horizontal && operationContainer.layout === "horizontal") ||
+          (!horizontal && operationContainer.layout === "vertical"),
+        "Operation direction must match its split Container"
+      );
+      const closure = descendantClosure([boundary.primaryChildId, boundary.neighborChildId]);
+      closure.containers.add(boundary.containerId);
+      for (const id of closure.containers) expectedContainers.add(id);
+      for (const id of closure.windows) expectedWindows.add(id);
+      const neighborClosure = descendantClosure([boundary.neighborChildId]);
+      invariant(
+        boundary.neighborWindowId === undefined ||
+          neighborClosure.windows.has(boundary.neighborWindowId),
+        "Operation neighbor Window must descend from its boundary child"
+      );
+      for (const weights of [boundary.baseWeights, boundary.overlayWeights]) {
+        invariant(
+          Number.isFinite(weights[boundary.primaryChildId]) &&
+            weights[boundary.primaryChildId] > 0 &&
+            Number.isFinite(weights[boundary.neighborChildId]) &&
+            weights[boundary.neighborChildId] > 0,
+          "Operation boundary weights must be positive and finite"
+        );
+      }
+    }
     invariant(
       new Set(operation.affectedContainerIds).size === operation.affectedContainerIds.length &&
         new Set(operation.affectedWindowIds).size === operation.affectedWindowIds.length,
       "Operation affected identities must be unique"
     );
-    const expectedClosure = descendantClosure([
-      operation.primaryChildId,
-      operation.neighborChildId,
-    ]);
-    expectedClosure.containers.add(operation.containerId);
     invariant(
-      operation.affectedContainerIds.length === expectedClosure.containers.size &&
-        operation.affectedContainerIds.every((id) => expectedClosure.containers.has(id)),
+      operation.affectedContainerIds.length === expectedContainers.size &&
+        operation.affectedContainerIds.every((id) => expectedContainers.has(id)),
       "Operation affected Containers must equal its boundary closure"
     );
     invariant(
-      operation.affectedWindowIds.length === expectedClosure.windows.size &&
-        operation.affectedWindowIds.every((id) => expectedClosure.windows.has(id)),
+      operation.affectedWindowIds.length === expectedWindows.size &&
+        operation.affectedWindowIds.every((id) => expectedWindows.has(id)),
       "Operation affected Windows must equal its boundary closure"
-    );
-    const neighborClosure = descendantClosure([operation.neighborChildId]);
-    invariant(
-      operation.affectedContainerIds.includes(operation.containerId),
-      "Operation boundary must be included in affected Containers"
     );
     invariant(
       operation.affectedWindowIds.includes(operation.windowId),
       "Operation Window must be included in affected Windows"
-    );
-    invariant(
-      operation.neighborWindowId === undefined ||
-        neighborClosure.windows.has(operation.neighborWindowId),
-      "Operation neighbor Window must descend from its boundary child"
     );
     invariant(
       operation.topologyRevision <= inspection.revision,
@@ -255,15 +280,6 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
       operation.topologySignature === expectedTopologySignature,
       "Operation topology signature must match its affected Containers"
     );
-    for (const weights of [operation.baseWeights, operation.overlayWeights]) {
-      invariant(
-        Number.isFinite(weights[operation.primaryChildId]) &&
-          weights[operation.primaryChildId] > 0 &&
-          Number.isFinite(weights[operation.neighborChildId]) &&
-          weights[operation.neighborChildId] > 0,
-        "Operation boundary weights must be positive and finite"
-      );
-    }
     invariant(
       operation.affectedContainerIds.every((id) => containerIds.has(id)),
       "Operation affected Containers must resolve"

@@ -322,14 +322,13 @@ describe("TilingShadow", () => {
         id: "operation:1",
         kind: "resize",
         windowId: firstId,
-        neighborWindowId: secondId,
-        direction: "right",
+        boundaries: [expect.objectContaining({ neighborWindowId: secondId, direction: "right" })],
       }),
     ]);
 
     first._rect.width = 1152;
     shadow.observeGrabUpdate(first);
-    expect(shadow.inspect().operations[0].overlayWeights).toEqual({
+    expect(shadow.inspect().operations[0].boundaries[0].overlayWeights).toEqual({
       [firstId]: 0.6,
       [secondId]: 0.4,
     });
@@ -339,6 +338,60 @@ describe("TilingShadow", () => {
       operations: [],
       containers: [{ weights: { [firstId]: 0.6, [secondId]: 0.4 } }],
     });
+    globals.cleanup();
+  });
+
+  it("translates a keyboard resize grab through the same portable operation seam", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.KEYBOARD_RESIZING_E);
+
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({
+        windowId: shadow.inspect().windows[0].id,
+        boundaries: [expect.objectContaining({ direction: "right" })],
+      }),
+    ]);
+    globals.cleanup();
+  });
+
+  it("keeps at most one GNOME grab operation active across disjoint surfaces", () => {
+    const globals = installGnomeGlobals({
+      display: {
+        monitorCount: 2,
+        monitorGeometries: [
+          { x: 0, y: 0, width: 1000, height: 800 },
+          { x: 1000, y: 0, width: 1000, height: 800 },
+        ],
+      },
+    });
+    const [first, second, third, fourth] = [
+      createMockWindow({ monitor: 0, rect: { x: 0, y: 0, width: 500, height: 800 } }),
+      createMockWindow({ monitor: 0, rect: { x: 500, y: 0, width: 500, height: 800 } }),
+      createMockWindow({ monitor: 1, rect: { x: 1000, y: 0, width: 500, height: 800 } }),
+      createMockWindow({ monitor: 1, rect: { x: 1500, y: 0, width: 500, height: 800 } }),
+    ];
+    for (const window of [first, second, third, fourth]) {
+      window._workspace = globals.workspaces[0];
+    }
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second, third, fourth], () => true);
+    const thirdId = shadow.inspect().windows[2].id;
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.RESIZING_E);
+    expect(shadow.inspect().operations).toHaveLength(1);
+
+    shadow.observeGrabBegin(third, Meta.GrabOp.RESIZING_E);
+
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({ id: "operation:2", windowId: thirdId }),
+    ]);
     globals.cleanup();
   });
 
@@ -357,8 +410,7 @@ describe("TilingShadow", () => {
     expect(shadow.inspect().operations).toEqual([
       expect.objectContaining({
         windowId: secondId,
-        neighborWindowId: firstId,
-        direction: "left",
+        boundaries: [expect.objectContaining({ neighborWindowId: firstId, direction: "left" })],
       }),
     ]);
     globals.cleanup();
@@ -382,18 +434,77 @@ describe("TilingShadow", () => {
     expect(shadow.inspect().operations).toEqual([
       expect.objectContaining({
         windowId: thirdId,
-        containerId: "container:1",
-        primaryChildId: "container:2",
-        neighborChildId: secondId,
+        boundaries: [
+          expect.objectContaining({
+            containerId: "container:1",
+            primaryChildId: "container:2",
+            neighborChildId: secondId,
+          }),
+        ],
       }),
     ]);
 
     third._rect.width = 300;
     shadow.observeGrabUpdate(third);
-    expect(shadow.inspect().operations[0].overlayWeights).toEqual({
+    expect(shadow.inspect().operations[0].boundaries[0].overlayWeights).toEqual({
       "container:2": 0.6,
       [secondId]: 0.4,
     });
+    globals.cleanup();
+  });
+
+  it("translates a diagonal grab into one two-axis portable operation", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 540 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const third = createMockWindow({ rect: { x: 0, y: 540, width: 960, height: 540 } });
+    const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    third._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    shadow.observeCommand({ name: "Split", orientation: "vertical" }, first);
+    shadow.observeWindow(third);
+    const [firstId, secondId, thirdId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.RESIZING_SE);
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({
+        id: "operation:1",
+        windowId: firstId,
+        boundaries: expect.arrayContaining([
+          expect.objectContaining({
+            direction: "right",
+            containerId: "container:1",
+            primaryChildId: "container:2",
+            neighborChildId: secondId,
+          }),
+          expect.objectContaining({
+            direction: "down",
+            containerId: "container:2",
+            primaryChildId: firstId,
+            neighborChildId: thirdId,
+          }),
+        ]),
+      }),
+    ]);
+
+    first._rect.width = 1152;
+    first._rect.height = 648;
+    shadow.observeGrabUpdate(first);
+    const boundaries = shadow.inspect().operations[0].boundaries;
+    expect(boundaries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          containerId: "container:1",
+          overlayWeights: { "container:2": 0.6, [secondId]: 0.4 },
+        }),
+        expect.objectContaining({
+          containerId: "container:2",
+          overlayWeights: { [firstId]: 0.6, [thirdId]: 0.4 },
+        }),
+      ])
+    );
     globals.cleanup();
   });
 

@@ -1,4 +1,5 @@
 export { operationId, surfaceId, windowId } from "./contracts.js";
+export { axisForDirection, compareDirections, isDirection } from "./directions.js";
 export { createTilingStateMachine } from "./state-machine.js";
 export { TilingInvariantError } from "./invariants.js";
 export type {
@@ -8,6 +9,7 @@ export type {
   Direction,
   IntentionToken,
   Layout,
+  NonEmptyDirections,
   OperationId,
   OperationInspection,
   OperationStart,
@@ -19,6 +21,7 @@ export type {
   PlatformSnapshot,
   PreviewPlan,
   Rect,
+  ResizeBoundaryInspection,
   SurfaceConstraint,
   SurfaceEvacuationInspection,
   SurfaceFact,
@@ -42,3 +45,4 @@ export type {
   WindowInspection,
   WindowPlan,
 } from "./contracts.js";
+export type { DirectionAxis } from "./directions.js";

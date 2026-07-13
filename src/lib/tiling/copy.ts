@@ -52,10 +52,13 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
     containers: inspection.containers.map(copyContainer),
     operations: inspection.operations.map((operation) => ({
       ...operation,
+      boundaries: operation.boundaries.map((boundary) => ({
+        ...boundary,
+        baseWeights: { ...boundary.baseWeights },
+        overlayWeights: { ...boundary.overlayWeights },
+      })),
       affectedWindowIds: [...operation.affectedWindowIds],
       affectedContainerIds: [...operation.affectedContainerIds],
-      baseWeights: { ...operation.baseWeights },
-      overlayWeights: { ...operation.overlayWeights },
     })),
     placementHints: inspection.placementHints.map((hint) => ({ ...hint })),
     evacuationHints: inspection.evacuationHints.map((hint) => ({

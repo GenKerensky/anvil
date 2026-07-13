@@ -18,6 +18,7 @@ export const operationId = (value: string): OperationId => identity("operation",
 export type TilingRevision = number;
 export type Layout = "horizontal" | "vertical" | "stacked" | "tabbed";
 export type Direction = "left" | "right" | "up" | "down";
+export type NonEmptyDirections = readonly [Direction, ...Direction[]];
 
 export type Rect = Readonly<{
   x: number;
@@ -132,19 +133,23 @@ export type ContainerInspection = Readonly<{
   selectedChildId?: ContainerId | WindowId;
 }>;
 
-export type OperationInspection = Readonly<{
-  id: OperationId;
-  kind: "resize" | "drag";
-  windowId: WindowId;
+export type ResizeBoundaryInspection = Readonly<{
   neighborWindowId?: WindowId;
   containerId: ContainerId;
   primaryChildId: TilingChildId;
   neighborChildId: TilingChildId;
-  affectedWindowIds: readonly WindowId[];
-  affectedContainerIds: readonly ContainerId[];
   direction: Direction;
   baseWeights: Readonly<Record<string, number>>;
   overlayWeights: Readonly<Record<string, number>>;
+}>;
+
+export type OperationInspection = Readonly<{
+  id: OperationId;
+  kind: "resize";
+  windowId: WindowId;
+  boundaries: readonly ResizeBoundaryInspection[];
+  affectedWindowIds: readonly WindowId[];
+  affectedContainerIds: readonly ContainerId[];
   topologyRevision: TilingRevision;
   topologySignature: string;
 }>;
@@ -306,11 +311,11 @@ export type OperationStart = Readonly<{
   id: OperationId;
   kind: "resize";
   windowId: WindowId;
-  direction: Direction;
+  directions: NonEmptyDirections;
 }>;
 
 export type OperationUpdate = Readonly<{
-  shareDelta: number;
+  shareDeltas: Readonly<Partial<Record<Direction, number>>>;
 }>;
 
 export type TilingEvent =
