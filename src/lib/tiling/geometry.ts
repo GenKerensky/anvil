@@ -31,6 +31,24 @@ function inset(rect: Rect, gap: number): Rect {
   };
 }
 
+function constrain(rect: Rect, constraint: TilingPolicy["constraints"][string] | undefined): Rect {
+  if (!constraint) return rect;
+  let { x, y, width, height } = rect;
+  if (constraint.maxWidth !== undefined && constraint.maxWidth > 0 && width > constraint.maxWidth) {
+    x += Math.floor((width - constraint.maxWidth) / 2);
+    width = constraint.maxWidth;
+  }
+  if (
+    constraint.maxHeight !== undefined &&
+    constraint.maxHeight > 0 &&
+    height > constraint.maxHeight
+  ) {
+    y += Math.floor((height - constraint.maxHeight) / 2);
+    height = constraint.maxHeight;
+  }
+  return { x, y, width, height };
+}
+
 function splitFrames(
   workArea: Rect,
   windows: readonly WindowInspection[],
@@ -88,7 +106,12 @@ export function deriveWindowPlans(
       root?.layout ?? policy.defaultLayout,
       gap,
       root?.weights ?? {}
-    ).sort((left, right) => left.id.localeCompare(right.id));
+    )
+      .map((plan) => ({
+        ...plan,
+        frame: constrain(plan.frame, policy.constraints[surface.id]),
+      }))
+      .sort((left, right) => left.id.localeCompare(right.id));
   });
 }
 

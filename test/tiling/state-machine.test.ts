@@ -560,4 +560,51 @@ describe("TilingStateMachine", () => {
       ],
     });
   });
+
+  it("applies gaps and Surface constraints only to derived frames", () => {
+    const primary = surfaceId("primary");
+    const constrainedPolicy: TilingPolicy = {
+      ...policy,
+      gap: 10,
+      constraints: { [primary]: { maxWidth: 600, maxHeight: 0 } },
+    };
+    const machine = createTilingStateMachine(constrainedPolicy);
+    const terminal = windowId("terminal");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [
+          {
+            id: terminal,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 500, height: 500 },
+            available: true,
+            capabilities,
+          },
+        ],
+      },
+    });
+
+    expect(machine.inspect()).toMatchObject({
+      containers: [{ weights: {} }],
+      renderPlan: {
+        windows: [
+          {
+            id: terminal,
+            frame: { x: 200, y: 10, width: 600, height: 780 },
+          },
+        ],
+      },
+    });
+  });
 });
