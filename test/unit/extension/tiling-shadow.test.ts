@@ -32,6 +32,23 @@ describe("GnomeTilingIdentityRegistry", () => {
 });
 
 describe("TilingShadow", () => {
+  it("reports transitions to a runtime-owned sink", () => {
+    const globals = installGnomeGlobals();
+    const transitionObserved = vi.fn();
+    const window = createMockWindow({ workspace: globals.workspaces[0] });
+    const shadow = new TilingShadow(createMockSettings() as never, () => [], transitionObserved);
+
+    shadow.bootstrap([], () => true);
+    shadow.observeWindow(window);
+
+    expect(transitionObserved).toHaveBeenCalledTimes(2);
+    expect(transitionObserved.mock.calls.map(([transition]) => transition.status)).toEqual([
+      "committed",
+      "committed",
+    ]);
+    globals.cleanup();
+  });
+
   it("translates GNOME geometry into surface-local facts", () => {
     const globals = installGnomeGlobals({
       display: {

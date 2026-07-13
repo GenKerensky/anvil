@@ -21,6 +21,7 @@ import {
   type Layout,
   type OperationId,
   type Point,
+  type PlatformFact,
   type PlatformSnapshot,
   type ParticipationRule,
   type SurfaceFact,
@@ -190,10 +191,16 @@ export class TilingShadow {
     }>
   > = [];
   private readonly windowOverrides: () => readonly WindowOverride[];
+  private readonly transitionObserved: (transition: TilingTransition) => void;
 
-  constructor(settings: Gio.Settings, windowOverrides: () => readonly WindowOverride[] = () => []) {
+  constructor(
+    settings: Gio.Settings,
+    windowOverrides: () => readonly WindowOverride[] = () => [],
+    transitionObserved: (transition: TilingTransition) => void = () => {}
+  ) {
     this.settings = settings;
     this.windowOverrides = windowOverrides;
+    this.transitionObserved = transitionObserved;
     this.machine = createTilingStateMachine(this.policy());
     this.grabOperations = new GnomeGrabOperationAdapter({
       knownWindowId: (metaWindow) => this.identities.knownWindow(metaWindow),
@@ -435,7 +442,13 @@ export class TilingShadow {
       });
       if (this.rejectedEvents.length > 20) this.rejectedEvents.shift();
     }
+    this.transitionObserved(transition);
     return transition;
+  }
+
+  observeFacts(facts: readonly PlatformFact[]): void {
+    if (facts.length === 0) return;
+    this.submit({ type: "FactsObserved", facts });
   }
 
   bootstrap(windows: readonly Meta.Window[], validWindow: (window: Meta.Window) => boolean): void {
