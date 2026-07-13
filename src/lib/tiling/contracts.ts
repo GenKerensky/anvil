@@ -146,6 +146,7 @@ export type OperationInspection = Readonly<{
   baseWeights: Readonly<Record<string, number>>;
   overlayWeights: Readonly<Record<string, number>>;
   topologyRevision: TilingRevision;
+  topologySignature: string;
 }>;
 
 export type PlacementHintInspection = Readonly<{
@@ -160,11 +161,9 @@ export type PlacementHintInspection = Readonly<{
 
 export type SurfaceEvacuationInspection = Readonly<{
   surfaceId: SurfaceId;
+  rootId: ContainerId;
   windowIds: readonly WindowId[];
-  layout: Layout;
-  childIds: readonly (ContainerId | WindowId)[];
-  weights: Readonly<Record<string, number>>;
-  selectedChildId?: ContainerId | WindowId;
+  containers: readonly ContainerInspection[];
 }>;
 
 export type SurfacePlan = Readonly<{

@@ -136,6 +136,23 @@ function descendants(
   };
 }
 
+function topologySignature(
+  inspection: TilingInspection,
+  affectedContainerIds: readonly ContainerId[]
+): string {
+  return [...affectedContainerIds]
+    .sort((left, right) => left.localeCompare(right))
+    .map((id) => {
+      const container = inspection.containers.find((candidate) => candidate.id === id);
+      return container
+        ? `${container.id}:${container.surfaceId}:${container.layout}:${container.childIds.join(
+            ","
+          )}`
+        : `${id}:missing`;
+    })
+    .join("|");
+}
+
 function withRender(
   inspection: TilingInspection,
   revision: number,
@@ -261,6 +278,7 @@ export function applyOperation(
       baseWeights,
       overlayWeights: { ...baseWeights },
       topologyRevision: inspection.revision,
+      topologySignature: topologySignature(inspection, affectedContainerIds),
     };
     const revision = inspection.revision + 1;
     const next = {
@@ -281,6 +299,15 @@ export function applyOperation(
     (candidate) => candidate.id === operation.containerId
   );
   if (!container) return ignored(inspection);
+  if (
+    operation.topologySignature !== topologySignature(inspection, operation.affectedContainerIds)
+  ) {
+    return rejected(
+      inspection,
+      "stale-operation-topology",
+      "Resize operation topology changed after it started"
+    );
+  }
 
   if (event.type === "OperationUpdated") {
     if (!Number.isFinite(event.update.shareDelta)) {

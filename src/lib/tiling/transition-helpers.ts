@@ -95,6 +95,15 @@ export function normalizeTopology(
         };
       });
   }
+  normalized = normalized.map((container) => {
+    const childIds = new Set<string>(container.childIds);
+    return {
+      ...container,
+      weights: Object.fromEntries(
+        Object.entries(container.weights).filter(([id]) => childIds.has(id))
+      ),
+    };
+  });
   return normalizeSelections(normalized, windows);
 }
 

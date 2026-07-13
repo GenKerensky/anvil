@@ -61,8 +61,7 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
     evacuationHints: inspection.evacuationHints.map((hint) => ({
       ...hint,
       windowIds: [...hint.windowIds],
-      childIds: [...hint.childIds],
-      weights: { ...hint.weights },
+      containers: hint.containers.map(copyContainer),
     })),
     renderPlan: {
       ...inspection.renderPlan,

@@ -24,6 +24,7 @@ type ResizeObservation = Readonly<{
   direction: Direction;
   startSize: number;
   containerExtent: number;
+  primaryToWindowScale: number;
   lastShareDelta: number;
 }>;
 
@@ -83,15 +84,33 @@ export class GnomeGrabOperationAdapter {
     const effectiveDirection = active?.direction ?? direction;
     const horizontal = effectiveDirection === "left" || effectiveDirection === "right";
     const containerExtent = horizontal ? container?.rect.width : container?.rect.height;
-    if (!containerExtent || containerExtent <= 0) {
+    const startSize = horizontal ? fact.frame.width : fact.frame.height;
+    const primaryWindow = inspection.renderPlan.windows.find(
+      (candidate) => candidate.id === active?.primaryChildId
+    );
+    const primaryContainer = inspection.renderPlan.containers.find(
+      (candidate) => candidate.id === active?.primaryChildId
+    );
+    const primaryExtent = horizontal
+      ? primaryWindow?.frame.width ?? primaryContainer?.rect.width
+      : primaryWindow?.frame.height ?? primaryContainer?.rect.height;
+    if (
+      !containerExtent ||
+      containerExtent <= 0 ||
+      !startSize ||
+      startSize <= 0 ||
+      !primaryExtent ||
+      primaryExtent <= 0
+    ) {
       this.port.dispatch({ type: "OperationCancelled", operationId });
       return;
     }
     this.resizeObservations.set(id, {
       operationId,
       direction: effectiveDirection,
-      startSize: horizontal ? fact.frame.width : fact.frame.height,
+      startSize,
       containerExtent,
+      primaryToWindowScale: primaryExtent / startSize,
       lastShareDelta: 0,
     });
   }
@@ -103,7 +122,8 @@ export class GnomeGrabOperationAdapter {
     if (!id || !active || !fact) return;
     const horizontal = active.direction === "left" || active.direction === "right";
     const currentSize = horizontal ? fact.frame.width : fact.frame.height;
-    const shareDelta = (currentSize - active.startSize) / active.containerExtent;
+    const shareDelta =
+      ((currentSize - active.startSize) * active.primaryToWindowScale) / active.containerExtent;
     if (shareDelta === active.lastShareDelta) return;
     const transition = this.port.dispatch({
       type: "OperationUpdated",

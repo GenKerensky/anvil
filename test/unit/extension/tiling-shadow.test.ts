@@ -364,6 +364,39 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("scales a leaf frame delta to its ancestor resize boundary", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 250, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 500, y: 0, width: 500, height: 1080 } });
+    const third = createMockWindow({ rect: { x: 250, y: 0, width: 250, height: 1080 } });
+    const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    third._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    shadow.observeCommand({ name: "Split", orientation: "horizontal" }, first);
+    shadow.observeWindow(third);
+    const [, secondId, thirdId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeGrabBegin(third, Meta.GrabOp.RESIZING_E);
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({
+        windowId: thirdId,
+        containerId: "container:1",
+        primaryChildId: "container:2",
+        neighborChildId: secondId,
+      }),
+    ]);
+
+    third._rect.width = 300;
+    shadow.observeGrabUpdate(third);
+    expect(shadow.inspect().operations[0].overlayWeights).toEqual({
+      "container:2": 0.6,
+      [secondId]: 0.4,
+    });
+    globals.cleanup();
+  });
+
   it("cancels a resize overlay and ignores late frame updates", () => {
     const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
     const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });

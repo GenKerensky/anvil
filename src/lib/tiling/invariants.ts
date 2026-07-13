@@ -97,6 +97,11 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
         `Container ${container.id} weights are positive`
       );
     }
+    const directChildIds = new Set<string>(container.childIds);
+    invariant(
+      Object.keys(container.weights).every((id) => directChildIds.has(id)),
+      `Container ${container.id} weights must belong to direct children`
+    );
     if (container.layout === "stacked" || container.layout === "tabbed") {
       const available = (id: string, ancestors = new Set<string>()): boolean => {
         const window = windows.get(id as TilingInspection["windows"][number]["id"]);
@@ -166,6 +171,22 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
 
   const operatedContainers = new Set<string>();
   const operatedWindows = new Set<string>();
+  const descendantClosure = (childIds: readonly string[]) => {
+    const windowClosure = new Set<string>();
+    const containerClosure = new Set<string>();
+    const visitChild = (id: string): void => {
+      if (windowIds.has(id)) {
+        windowClosure.add(id);
+        return;
+      }
+      const container = containers.get(id as TilingInspection["containers"][number]["id"]);
+      if (!container || containerClosure.has(id)) return;
+      containerClosure.add(id);
+      for (const childId of container.childIds) visitChild(childId);
+    };
+    for (const childId of childIds) visitChild(childId);
+    return { windows: windowClosure, containers: containerClosure };
+  };
   for (const operation of inspection.operations) {
     const operationContainer = containers.get(operation.containerId);
     invariant(operationContainer !== undefined, "Operation Container must resolve");
@@ -186,6 +207,22 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
         new Set(operation.affectedWindowIds).size === operation.affectedWindowIds.length,
       "Operation affected identities must be unique"
     );
+    const expectedClosure = descendantClosure([
+      operation.primaryChildId,
+      operation.neighborChildId,
+    ]);
+    expectedClosure.containers.add(operation.containerId);
+    invariant(
+      operation.affectedContainerIds.length === expectedClosure.containers.size &&
+        operation.affectedContainerIds.every((id) => expectedClosure.containers.has(id)),
+      "Operation affected Containers must equal its boundary closure"
+    );
+    invariant(
+      operation.affectedWindowIds.length === expectedClosure.windows.size &&
+        operation.affectedWindowIds.every((id) => expectedClosure.windows.has(id)),
+      "Operation affected Windows must equal its boundary closure"
+    );
+    const neighborClosure = descendantClosure([operation.neighborChildId]);
     invariant(
       operation.affectedContainerIds.includes(operation.containerId),
       "Operation boundary must be included in affected Containers"
@@ -196,12 +233,27 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
     );
     invariant(
       operation.neighborWindowId === undefined ||
-        operation.affectedWindowIds.includes(operation.neighborWindowId),
-      "Operation neighbor must be included in affected Windows"
+        neighborClosure.windows.has(operation.neighborWindowId),
+      "Operation neighbor Window must descend from its boundary child"
     );
     invariant(
       operation.topologyRevision <= inspection.revision,
       "Operation topology revision must not be in the future"
+    );
+    const expectedTopologySignature = [...operation.affectedContainerIds]
+      .sort((left, right) => left.localeCompare(right))
+      .map((id) => {
+        const container = containers.get(id);
+        return container
+          ? `${container.id}:${container.surfaceId}:${container.layout}:${container.childIds.join(
+              ","
+            )}`
+          : `${id}:missing`;
+      })
+      .join("|");
+    invariant(
+      operation.topologySignature === expectedTopologySignature,
+      "Operation topology signature must match its affected Containers"
     );
     for (const weights of [operation.baseWeights, operation.overlayWeights]) {
       invariant(

@@ -122,6 +122,60 @@ describe("Tiling Commands", () => {
       },
     });
 
+    expect(
+      machine.dispatch({ type: "PolicyReplaced", policy: { ...policy, gap: 5 } })
+    ).toMatchObject({ status: "committed" });
+    expect(machine.inspect().containers).toMatchObject([
+      { id: "container:1", childIds: ["container:2", second] },
+      { id: "container:2", childIds: [first, third] },
+    ]);
+
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "SurfaceWithdrawn", surfaceId: surface }],
+    });
+    expect(machine.inspect()).toMatchObject({
+      surfaces: [],
+      containers: [],
+      evacuationHints: [
+        {
+          surfaceId: surface,
+          rootId: "container:1",
+          containers: [
+            { id: "container:1", childIds: ["container:2", second] },
+            { id: "container:2", childIds: [first, third] },
+          ],
+        },
+      ],
+    });
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "SurfaceObserved",
+          surface: {
+            id: surface,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities: { focus: true, raise: true, move: true, resize: true },
+          },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      surfaces: [{ id: surface, rootId: "container:1" }],
+      containers: [
+        { id: "container:1", childIds: ["container:2", second] },
+        { id: "container:2", parentId: "container:1", childIds: [first, third] },
+      ],
+      windows: [
+        { id: first, parentId: "container:2" },
+        { id: second, parentId: "container:1" },
+        { id: third, parentId: "container:2" },
+      ],
+      evacuationHints: [],
+    });
+
     machine.dispatch({
       type: "FactsObserved",
       facts: [

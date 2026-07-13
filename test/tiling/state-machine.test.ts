@@ -604,9 +604,15 @@ describe("TilingStateMachine", () => {
       evacuationHints: [
         {
           surfaceId: primary,
+          rootId: "container:1",
           windowIds: [terminal],
-          layout: "horizontal",
-          childIds: [terminal],
+          containers: [
+            {
+              id: "container:1",
+              layout: "horizontal",
+              childIds: [terminal],
+            },
+          ],
         },
       ],
       renderPlan: { surfaces: [], windows: [], containers: [] },
@@ -634,9 +640,9 @@ describe("TilingStateMachine", () => {
       ],
     });
     expect(machine.inspect()).toMatchObject({
-      surfaces: [{ id: primary, rootId: "container:2" }],
-      containers: [{ id: "container:2", childIds: [terminal], layout: "horizontal" }],
-      windows: [{ id: terminal, participating: true, parentId: "container:2" }],
+      surfaces: [{ id: primary, rootId: "container:1" }],
+      containers: [{ id: "container:1", childIds: [terminal], layout: "horizontal" }],
+      windows: [{ id: terminal, participating: true, parentId: "container:1" }],
       evacuationHints: [],
     });
   });

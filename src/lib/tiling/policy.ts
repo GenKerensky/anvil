@@ -59,19 +59,41 @@ export function applyPolicy(
       return { ...classifiedWindow, participating: false, parentId: undefined };
     }
     const surface = inspection.surfaces.find((candidate) => candidate.id === window.surfaceId);
-    return { ...classifiedWindow, participating: true, parentId: surface?.rootId };
+    const hintedParent = [...placementHints]
+      .reverse()
+      .find(
+        (hint) =>
+          hint.windowId === window.id &&
+          hint.surfaceId === window.surfaceId &&
+          inspection.containers.some(
+            (container) =>
+              container.id === hint.parentId && container.surfaceId === window.surfaceId
+          )
+      )?.parentId;
+    return {
+      ...classifiedWindow,
+      participating: true,
+      parentId: hintedParent ?? surface?.rootId,
+    };
   });
   const containers = normalizeTopology(
     inspection.containers.map((container) => {
       const desired = windows
         .filter((window) => window.participating && window.parentId === container.id)
         .map((window) => window.id);
-      const desiredSet = new Set<string>(desired);
+      const nested = inspection.containers
+        .filter((candidate) => candidate.parentId === container.id)
+        .map((candidate) => candidate.id);
+      const desiredSet = new Set<string>([...desired, ...nested]);
       const retained = container.childIds.filter((id) => desiredSet.has(id));
       const retainedSet = new Set<string>(retained);
       return {
         ...container,
-        childIds: [...retained, ...desired.filter((id) => !retainedSet.has(id))],
+        childIds: [
+          ...retained,
+          ...nested.filter((id) => !retainedSet.has(id)),
+          ...desired.filter((id) => !retainedSet.has(id)),
+        ],
       };
     }),
     windows
