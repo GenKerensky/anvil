@@ -126,7 +126,7 @@ export function applyBootstrap(
       frame: copyRect(window.frame),
     })),
   ].map((intention, ordinal) => ({ ...intention, ordinal }));
-  const containerPlans = deriveContainerPlans(surfaces, normalizedContainers);
+  const containerPlans = deriveContainerPlans(surfaces, windows, normalizedContainers);
   intentions.push(...changedContainerIntentions([], containerPlans, revision, intentions.length));
 
   commitCandidate({

@@ -450,8 +450,20 @@ export class TilingShadow {
           participating: !window.participating,
         };
       }
+    } else if (action.name === "Split") {
+      const inspection = this.machine.inspect();
+      const window = inspection.windows.find((item) => item.id === focusedWindowId);
+      const container = inspection.containers.find((item) => item.id === window?.parentId);
+      if (!container) return;
+      const layout = action.orientation
+        ? action.orientation.toLowerCase().startsWith("v")
+          ? "vertical"
+          : "horizontal"
+        : container.layout === "horizontal"
+        ? "vertical"
+        : "horizontal";
+      command = { type: "Split", windowId: focusedWindowId, layout };
     } else if (
-      action.name === "Split" ||
       action.name === "LayoutToggle" ||
       action.name === "LayoutStackedToggle" ||
       action.name === "LayoutTabbedToggle"
@@ -465,8 +477,6 @@ export class TilingShadow {
         layout = container.layout === "stacked" ? "horizontal" : "stacked";
       } else if (action.name === "LayoutTabbedToggle") {
         layout = container.layout === "tabbed" ? "horizontal" : "tabbed";
-      } else if (action.name === "Split" && action.orientation) {
-        layout = action.orientation.toLowerCase().startsWith("v") ? "vertical" : "horizontal";
       } else {
         layout = container.layout === "horizontal" ? "vertical" : "horizontal";
       }

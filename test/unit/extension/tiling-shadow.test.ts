@@ -280,6 +280,32 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("translates split actions into portable nested topology", () => {
+    const first = createMockWindow();
+    const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
+    const second = createMockWindow();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    const [firstId, secondId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeCommand({ name: "Split", orientation: "vertical" }, first);
+
+    expect(shadow.inspect()).toMatchObject({
+      containers: [
+        { id: "container:1", childIds: ["container:2", secondId] },
+        {
+          id: "container:2",
+          parentId: "container:1",
+          layout: "vertical",
+          childIds: [firstId],
+        },
+      ],
+    });
+    globals.cleanup();
+  });
+
   it("translates a cardinal GNOME resize grab into one portable operation", () => {
     const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
     const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });

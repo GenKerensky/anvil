@@ -4,6 +4,7 @@ export type WindowId = TilingIdentity<"window">;
 export type SurfaceId = TilingIdentity<"surface">;
 export type ContainerId = TilingIdentity<"container">;
 export type OperationId = TilingIdentity<"operation">;
+export type TilingChildId = ContainerId | WindowId;
 
 function identity<Kind extends string>(kind: Kind, value: string): TilingIdentity<Kind> {
   if (value.length === 0) throw new TypeError(`${kind} identity must not be empty`);
@@ -137,6 +138,10 @@ export type OperationInspection = Readonly<{
   windowId: WindowId;
   neighborWindowId?: WindowId;
   containerId: ContainerId;
+  primaryChildId: TilingChildId;
+  neighborChildId: TilingChildId;
+  affectedWindowIds: readonly WindowId[];
+  affectedContainerIds: readonly ContainerId[];
   direction: Direction;
   baseWeights: Readonly<Record<string, number>>;
   overlayWeights: Readonly<Record<string, number>>;
@@ -271,6 +276,11 @@ export type TilingCommand =
       type: "SetLayout";
       windowId: WindowId;
       layout: Layout;
+    }>
+  | Readonly<{
+      type: "Split";
+      windowId: WindowId;
+      layout: "horizontal" | "vertical";
     }>
   | Readonly<{
       type: "FocusDirection";

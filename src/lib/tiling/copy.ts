@@ -52,6 +52,8 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
     containers: inspection.containers.map(copyContainer),
     operations: inspection.operations.map((operation) => ({
       ...operation,
+      affectedWindowIds: [...operation.affectedWindowIds],
+      affectedContainerIds: [...operation.affectedContainerIds],
       baseWeights: { ...operation.baseWeights },
       overlayWeights: { ...operation.overlayWeights },
     })),

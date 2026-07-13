@@ -49,39 +49,123 @@ function constrain(rect: Rect, constraint: TilingPolicy["constraints"][string] |
   return { x, y, width, height };
 }
 
-function splitFrames(
-  workArea: Rect,
-  windows: readonly WindowInspection[],
-  layout: TilingPolicy["defaultLayout"],
-  gap: number,
-  weights: Readonly<Record<string, number>>
-): WindowPlan[] {
-  const available = windows.filter((window) => window.available);
-  if (available.length === 0) return [];
-  if (layout === "stacked" || layout === "tabbed") {
-    return available.map((window) => ({
-      id: window.id,
-      surfaceId: window.surfaceId,
-      frame: inset(workArea, gap),
-    }));
+type ChildId = ContainerInspection["childIds"][number];
+
+type DerivedPlans = Readonly<{
+  windows: WindowPlan[];
+  containers: ContainerPlan[];
+}>;
+
+function allocateChildRects(
+  container: ContainerInspection,
+  rect: Rect,
+  available: (id: ChildId) => boolean
+): Map<ChildId, Rect> {
+  const result = new Map<ChildId, Rect>();
+  const active = container.childIds.filter(available);
+  for (const childId of container.childIds) result.set(childId, copyRect(rect));
+  if (active.length === 0 || container.layout === "stacked" || container.layout === "tabbed") {
+    return result;
   }
-  const horizontal = layout === "horizontal";
-  const total = horizontal ? workArea.width : workArea.height;
-  const rawWeights = available.map((window) => weights[window.id] ?? 1);
+
+  const horizontal = container.layout === "horizontal";
+  const total = horizontal ? rect.width : rect.height;
+  const rawWeights = active.map((id) => container.weights[id] ?? 1);
   const totalWeight = rawWeights.reduce((sum, weight) => sum + weight, 0);
-  let cursor = horizontal ? workArea.x : workArea.y;
-  return available.map((window, index) => {
-    const consumed = cursor - (horizontal ? workArea.x : workArea.y);
+  let cursor = horizontal ? rect.x : rect.y;
+  for (const [index, childId] of active.entries()) {
+    const consumed = cursor - (horizontal ? rect.x : rect.y);
     const size =
-      index === available.length - 1
+      index === active.length - 1
         ? total - consumed
         : Math.floor((total * rawWeights[index]) / totalWeight);
-    const frame = horizontal
-      ? { x: cursor, y: workArea.y, width: size, height: workArea.height }
-      : { x: workArea.x, y: cursor, width: workArea.width, height: size };
+    const childRect = horizontal
+      ? { x: cursor, y: rect.y, width: size, height: rect.height }
+      : { x: rect.x, y: cursor, width: rect.width, height: size };
+    result.set(childId, childRect);
     cursor += size;
-    return { id: window.id, surfaceId: window.surfaceId, frame: inset(frame, gap) };
-  });
+  }
+  return result;
+}
+
+function derivePlans(
+  surfaces: readonly SurfaceInspection[],
+  windows: readonly WindowInspection[],
+  containers: readonly ContainerInspection[],
+  policy?: TilingPolicy
+): DerivedPlans {
+  const windowById = new Map(windows.map((window) => [window.id, window]));
+  const containerById = new Map(containers.map((container) => [container.id, container]));
+  const availability = new Map<string, boolean>();
+  const visiting = new Set<string>();
+  const isAvailable = (id: ChildId): boolean => {
+    const cached = availability.get(id);
+    if (cached !== undefined) return cached;
+    const window = windowById.get(id as WindowInspection["id"]);
+    if (window) {
+      const result = window.participating && window.available;
+      availability.set(id, result);
+      return result;
+    }
+    const container = containerById.get(id as ContainerInspection["id"]);
+    if (!container || visiting.has(id)) return false;
+    visiting.add(id);
+    const result = container.childIds.some(isAvailable);
+    visiting.delete(id);
+    availability.set(id, result);
+    return result;
+  };
+
+  const windowPlans: WindowPlan[] = [];
+  const containerPlans: ContainerPlan[] = [];
+  for (const surface of surfaces) {
+    const availableCount = windows.filter(
+      (window) => window.surfaceId === surface.id && window.participating && window.available
+    ).length;
+    const gap = policy ? (policy.hideGapWhenSingle && availableCount === 1 ? 0 : policy.gap) : 0;
+    const visit = (container: ContainerInspection, rect: Rect, ancestors: Set<string>): void => {
+      if (ancestors.has(container.id)) return;
+      containerPlans.push({
+        id: container.id,
+        surfaceId: container.surfaceId,
+        rect: copyRect(rect),
+        layout: container.layout,
+        ...(container.selectedChildId ? { selectedChildId: container.selectedChildId } : {}),
+        stackingOrder: [...container.childIds],
+      });
+      const childRects = allocateChildRects(container, rect, isAvailable);
+      const nextAncestors = new Set(ancestors).add(container.id);
+      for (const childId of container.childIds) {
+        const childRect = childRects.get(childId) ?? rect;
+        const window = windowById.get(childId as WindowInspection["id"]);
+        if (window) {
+          if (
+            policy &&
+            window.participating &&
+            window.available &&
+            window.surfaceId === surface.id
+          ) {
+            windowPlans.push({
+              id: window.id,
+              surfaceId: window.surfaceId,
+              frame: constrain(inset(childRect, gap), policy.constraints[surface.id]),
+            });
+          }
+          continue;
+        }
+        const childContainer = containerById.get(childId as ContainerInspection["id"]);
+        if (childContainer && childContainer.surfaceId === surface.id) {
+          visit(childContainer, childRect, nextAncestors);
+        }
+      }
+    };
+    const root = containerById.get(surface.rootId);
+    if (root) visit(root, surface.workArea, new Set());
+  }
+  return {
+    windows: windowPlans.sort((left, right) => left.id.localeCompare(right.id)),
+    containers: containerPlans.sort((left, right) => left.id.localeCompare(right.id)),
+  };
 }
 
 export function deriveWindowPlans(
@@ -90,48 +174,13 @@ export function deriveWindowPlans(
   containers: readonly ContainerInspection[],
   policy: TilingPolicy
 ): WindowPlan[] {
-  return surfaces.flatMap((surface) => {
-    const root = containers.find((container) => container.id === surface.rootId);
-    const surfaceWindows = (root?.childIds ?? [])
-      .map((id) => windows.find((window) => window.id === id))
-      .filter(
-        (window): window is WindowInspection =>
-          window !== undefined && window.participating && window.surfaceId === surface.id
-      );
-    const availableCount = surfaceWindows.filter((window) => window.available).length;
-    const gap = policy.hideGapWhenSingle && availableCount === 1 ? 0 : policy.gap;
-    return splitFrames(
-      surface.workArea,
-      surfaceWindows,
-      root?.layout ?? policy.defaultLayout,
-      gap,
-      root?.weights ?? {}
-    )
-      .map((plan) => ({
-        ...plan,
-        frame: constrain(plan.frame, policy.constraints[surface.id]),
-      }))
-      .sort((left, right) => left.id.localeCompare(right.id));
-  });
+  return derivePlans(surfaces, windows, containers, policy).windows;
 }
 
 export function deriveContainerPlans(
   surfaces: readonly SurfaceInspection[],
+  windows: readonly WindowInspection[],
   containers: readonly ContainerInspection[]
 ): ContainerPlan[] {
-  return containers
-    .map((container) => {
-      const surface = surfaces.find((candidate) => candidate.id === container.surfaceId);
-      if (!surface) return null;
-      return {
-        id: container.id,
-        surfaceId: container.surfaceId,
-        rect: copyRect(surface.workArea),
-        layout: container.layout,
-        ...(container.selectedChildId ? { selectedChildId: container.selectedChildId } : {}),
-        stackingOrder: [...container.childIds],
-      } as ContainerPlan;
-    })
-    .filter((container): container is ContainerPlan => container !== null)
-    .sort((left, right) => left.id.localeCompare(right.id));
+  return derivePlans(surfaces, windows, containers).containers;
 }

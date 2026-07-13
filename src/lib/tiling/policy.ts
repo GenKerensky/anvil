@@ -9,7 +9,7 @@ import { copyPolicy } from "./copy.js";
 import { copyRect, deriveContainerPlans, deriveWindowPlans, sameRect } from "./geometry.js";
 import { changedContainerIntentions } from "./intentions.js";
 import { classifyParticipation, effectiveParticipation } from "./participation.js";
-import { normalizeSelections, tilingSurfaceIds } from "./transition-helpers.js";
+import { normalizeTopology, tilingSurfaceIds } from "./transition-helpers.js";
 
 type PolicyEvent = Extract<TilingEvent, { type: "PolicyReplaced" }>;
 type CommitCandidate = (candidate: TilingInspection) => void;
@@ -61,7 +61,7 @@ export function applyPolicy(
     const surface = inspection.surfaces.find((candidate) => candidate.id === window.surfaceId);
     return { ...classifiedWindow, participating: true, parentId: surface?.rootId };
   });
-  const containers = normalizeSelections(
+  const containers = normalizeTopology(
     inspection.containers.map((container) => {
       const desired = windows
         .filter((window) => window.participating && window.parentId === container.id)
@@ -103,7 +103,7 @@ export function applyPolicy(
         frame: copyRect(plan.frame),
       })),
   ].map((intention, ordinal) => ({ ...intention, ordinal }));
-  const containerPlans = deriveContainerPlans(inspection.surfaces, containers);
+  const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers);
   intentions.push(
     ...changedContainerIntentions(
       inspection.renderPlan.containers,
@@ -121,9 +121,8 @@ export function applyPolicy(
     containers,
     operations: inspection.operations.filter(
       (operation) =>
-        !participationChanges.some(
-          (change) =>
-            change.windowId === operation.windowId || change.windowId === operation.neighborWindowId
+        !participationChanges.some((change) =>
+          operation.affectedWindowIds.includes(change.windowId)
         )
     ),
     placementHints,

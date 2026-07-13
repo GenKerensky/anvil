@@ -20,11 +20,35 @@ import { applyPolicy } from "./policy.js";
 import {
   cancelOperationsForChangedTopology,
   createInitialInspection,
-  normalizeSelections,
+  normalizeTopology,
   tilingSurfaceIds,
 } from "./transition-helpers.js";
 import { applyBootstrap } from "./bootstrap.js";
 import { inspectWindowFact } from "./window-facts.js";
+
+function attachmentParent(
+  windowId: WindowInspection["id"],
+  surfaceId: WindowInspection["surfaceId"],
+  focusedWindowId: WindowInspection["id"] | undefined,
+  surfaces: TilingInspection["surfaces"],
+  containers: TilingInspection["containers"],
+  windows: readonly WindowInspection[],
+  placementHints: TilingInspection["placementHints"]
+): ContainerId | undefined {
+  const belongsToSurface = (containerId: ContainerId | undefined): containerId is ContainerId =>
+    containerId !== undefined &&
+    containers.some(
+      (container) => container.id === containerId && container.surfaceId === surfaceId
+    );
+  const hint = placementHints.find((candidate) => candidate.windowId === windowId);
+  if (hint?.surfaceId === surfaceId && belongsToSurface(hint.parentId)) return hint.parentId;
+  const focused = windows.find(
+    (window) =>
+      window.id === focusedWindowId && window.participating && window.surfaceId === surfaceId
+  );
+  if (belongsToSurface(focused?.parentId)) return focused.parentId;
+  return surfaces.find((surface) => surface.id === surfaceId)?.rootId;
+}
 
 export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingStateMachine {
   const policy = copyPolicy(initialPolicy);
@@ -55,7 +79,15 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
       }
 
       if (event.type === "CommandRequested") {
-        return applyCommand(inspection, event, commitCandidate);
+        return applyCommand(
+          inspection,
+          event,
+          nextContainer,
+          (candidate) => {
+            nextContainer = candidate;
+          },
+          commitCandidate
+        );
       }
 
       if (event.type === "PolicyReplaced") {
@@ -117,9 +149,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             windows[index] = { ...windows[index], available: fact.available };
             if (!fact.available) {
               operations = operations.filter(
-                (operation) =>
-                  operation.windowId !== fact.windowId &&
-                  operation.neighborWindowId !== fact.windowId
+                (operation) => !operation.affectedWindowIds.includes(fact.windowId)
               );
             }
             changed = true;
@@ -147,10 +177,30 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               previous
             );
             const surface = surfaces.find((candidate) => candidate.id === observed.surfaceId);
+            const retainedParent =
+              previous?.participating &&
+              previous.surfaceId === observed.surfaceId &&
+              containers.some(
+                (container) =>
+                  container.id === previous.parentId && container.surfaceId === observed.surfaceId
+              )
+                ? previous.parentId
+                : undefined;
+            const parentId =
+              retainedParent ??
+              attachmentParent(
+                observed.id,
+                observed.surfaceId,
+                focusedWindowId,
+                surfaces,
+                containers,
+                windows,
+                placementHints
+              );
             const next: WindowInspection = {
               ...observed,
               ...(observed.participating && surface
-                ? { parentId: surface.rootId }
+                ? { parentId: parentId ?? surface.rootId }
                 : { parentId: undefined }),
             };
             if (previous && JSON.stringify(previous) === JSON.stringify(next)) continue;
@@ -175,8 +225,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             if (index >= 0) windows[index] = next;
             else windows.push(next);
             operations = operations.filter(
-              (operation) =>
-                operation.windowId !== next.id && operation.neighborWindowId !== next.id
+              (operation) => !operation.affectedWindowIds.includes(next.id)
             );
             changed = true;
           }
@@ -219,8 +268,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 : { ...container, childIds };
             });
             operations = operations.filter(
-              (operation) =>
-                operation.windowId !== next.id && operation.neighborWindowId !== next.id
+              (operation) => !operation.affectedWindowIds.includes(next.id)
             );
             changed = true;
           }
@@ -238,8 +286,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             }));
             placementHints = placementHints.filter((hint) => hint.windowId !== fact.windowId);
             operations = operations.filter(
-              (operation) =>
-                operation.windowId !== fact.windowId && operation.neighborWindowId !== fact.windowId
+              (operation) => !operation.affectedWindowIds.includes(fact.windowId)
             );
             evacuationHints = evacuationHints.map((hint) => ({
               ...hint,
@@ -278,7 +325,8 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 .map((container) => container.id)
             );
             operations = operations.filter(
-              (operation) => !removedContainerIds.has(operation.containerId)
+              (operation) =>
+                !operation.affectedContainerIds.some((id) => removedContainerIds.has(id))
             );
             containers = containers.filter((container) => container.surfaceId !== fact.surfaceId);
             changed = true;
@@ -315,19 +363,36 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 windows[windowIndex] = {
                   ...window,
                   participating,
-                  ...(participating ? { parentId: current.rootId } : { parentId: undefined }),
+                  ...(participating
+                    ? {
+                        parentId: containers.some(
+                          (container) =>
+                            container.id === window.parentId &&
+                            container.surfaceId === fact.surface.id
+                        )
+                          ? window.parentId
+                          : current.rootId,
+                      }
+                    : { parentId: undefined }),
                 };
               }
               containers = containers.map((container) => {
                 const assigned = windows
                   .filter((window) => window.participating && window.parentId === container.id)
                   .map((window) => window.id);
-                const assignedSet = new Set<string>(assigned);
+                const nested = containers
+                  .filter((candidate) => candidate.parentId === container.id)
+                  .map((candidate) => candidate.id);
+                const assignedSet = new Set<string>([...assigned, ...nested]);
                 const retained = container.childIds.filter((id) => assignedSet.has(id));
                 const retainedSet = new Set<string>(retained);
                 return {
                   ...container,
-                  childIds: [...retained, ...assigned.filter((id) => !retainedSet.has(id))],
+                  childIds: [
+                    ...retained,
+                    ...nested.filter((id) => !retainedSet.has(id)),
+                    ...assigned.filter((id) => !retainedSet.has(id)),
+                  ],
                 };
               });
               const affectedContainerIds = new Set(
@@ -336,7 +401,8 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                   .map((container) => container.id)
               );
               operations = operations.filter(
-                (operation) => !affectedContainerIds.has(operation.containerId)
+                (operation) =>
+                  !operation.affectedContainerIds.some((id) => affectedContainerIds.has(id))
               );
               changed = true;
               continue;
@@ -415,7 +481,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         }
 
         surfaces = surfaces.sort((left, right) => left.id.localeCompare(right.id));
-        containers = normalizeSelections(containers, windows).sort((left, right) =>
+        containers = normalizeTopology(containers, windows).sort((left, right) =>
           left.id.localeCompare(right.id)
         );
         operations = cancelOperationsForChangedTopology(
@@ -427,7 +493,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         evacuationHints.sort((left, right) => left.surfaceId.localeCompare(right.surfaceId));
         const revision = inspection.revision + 1;
         const windowPlans = deriveWindowPlans(surfaces, windows, containers, inspection.policy);
-        const containerPlans = deriveContainerPlans(surfaces, containers);
+        const containerPlans = deriveContainerPlans(surfaces, windows, containers);
         const intentions = changedTransitionIntentions(
           inspection.renderPlan.windows,
           windowPlans,

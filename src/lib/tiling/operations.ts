@@ -1,11 +1,15 @@
 import type {
+  ContainerId,
   ContainerInspection,
+  Direction,
   OperationInspection,
+  TilingChildId,
   TilingEvent,
   TilingInspection,
   TilingTransition,
+  WindowId,
 } from "./contracts.js";
-import { deriveWindowPlans } from "./geometry.js";
+import { deriveContainerPlans, deriveWindowPlans } from "./geometry.js";
 import { changedPlacementIntentions } from "./intentions.js";
 
 type OperationEvent = Extract<
@@ -56,6 +60,82 @@ function oppositeDirection(direction: "left" | "right" | "up" | "down") {
   return { left: "right", right: "left", up: "down", down: "up" }[direction] as typeof direction;
 }
 
+function resizeBoundary(
+  inspection: TilingInspection,
+  windowId: WindowId,
+  requestedDirection: Direction
+):
+  | Readonly<{
+      container: ContainerInspection;
+      primaryChildId: TilingChildId;
+      neighborChildId: TilingChildId;
+      direction: Direction;
+    }>
+  | undefined {
+  const containerById = new Map(
+    inspection.containers.map((container) => [container.id, container])
+  );
+  const windowById = new Map(inspection.windows.map((window) => [window.id, window]));
+  const available = (id: TilingChildId, ancestors = new Set<string>()): boolean => {
+    const window = windowById.get(id as WindowId);
+    if (window) return window.participating && window.available;
+    const container = containerById.get(id as ContainerId);
+    if (!container || ancestors.has(id)) return false;
+    const nextAncestors = new Set(ancestors).add(id);
+    return container.childIds.some((childId) => available(childId, nextAncestors));
+  };
+  const find = (direction: Direction) => {
+    let primaryChildId: TilingChildId = windowId;
+    let parentId = windowById.get(windowId)?.parentId;
+    while (parentId) {
+      const container = containerById.get(parentId);
+      if (!container) return undefined;
+      const horizontal = direction === "left" || direction === "right";
+      if (
+        (horizontal && container.layout === "horizontal") ||
+        (!horizontal && container.layout === "vertical")
+      ) {
+        const activeChildren = container.childIds.filter((childId) => available(childId));
+        const index = activeChildren.indexOf(primaryChildId);
+        const delta = direction === "left" || direction === "up" ? -1 : 1;
+        const neighborChildId = activeChildren[index + delta];
+        if (neighborChildId) {
+          return { container, primaryChildId, neighborChildId, direction };
+        }
+      }
+      primaryChildId = container.id;
+      parentId = container.parentId;
+    }
+    return undefined;
+  };
+  return find(requestedDirection) ?? find(oppositeDirection(requestedDirection));
+}
+
+function descendants(
+  inspection: TilingInspection,
+  childIds: readonly TilingChildId[]
+): Readonly<{ windowIds: WindowId[]; containerIds: ContainerId[] }> {
+  const windowIds = new Set<WindowId>();
+  const containerIds = new Set<ContainerId>();
+  const containers = new Map(inspection.containers.map((container) => [container.id, container]));
+  const windows = new Set(inspection.windows.map((window) => window.id));
+  const visit = (id: TilingChildId): void => {
+    if (windows.has(id as WindowId)) {
+      windowIds.add(id as WindowId);
+      return;
+    }
+    const container = containers.get(id as ContainerId);
+    if (!container || containerIds.has(container.id)) return;
+    containerIds.add(container.id);
+    for (const childId of container.childIds) visit(childId);
+  };
+  for (const childId of childIds) visit(childId);
+  return {
+    windowIds: [...windowIds].sort((left, right) => left.localeCompare(right)),
+    containerIds: [...containerIds].sort((left, right) => left.localeCompare(right)),
+  };
+}
+
 function withRender(
   inspection: TilingInspection,
   revision: number,
@@ -69,13 +149,18 @@ function withRender(
     renderContainers,
     inspection.policy
   );
+  const containerPlans = deriveContainerPlans(
+    inspection.surfaces,
+    inspection.windows,
+    renderContainers
+  );
   const intentions = changedPlacementIntentions(inspection.renderPlan.windows, windows, revision);
   const next: TilingInspection = {
     ...inspection,
     revision,
     containers,
     operations,
-    renderPlan: { ...inspection.renderPlan, revision, windows },
+    renderPlan: { ...inspection.renderPlan, revision, windows, containers: containerPlans },
   };
   return {
     inspection: next,
@@ -94,7 +179,6 @@ export function applyOperation(
     const window = inspection.windows.find(
       (candidate) => candidate.id === event.operation.windowId
     );
-    const container = inspection.containers.find((candidate) => candidate.id === window?.parentId);
     if (window && (!window.capabilities.move || !window.capabilities.resize)) {
       return rejected(
         inspection,
@@ -102,30 +186,44 @@ export function applyOperation(
         "Resize operation requires move and resize capabilities"
       );
     }
-    if (!window?.participating || !container) {
+    if (!window?.participating || !window.available || !window.parentId) {
       return rejected(
         inspection,
         "invalid-operation-target",
         "Resize operation requires a participating window"
       );
     }
-    if (inspection.operations.some((operation) => operation.containerId === container.id)) {
+    const boundary = resizeBoundary(inspection, window.id, event.operation.direction);
+    if (!boundary) {
+      return rejected(
+        inspection,
+        "missing-resize-neighbor",
+        "Resize operation requires an adjacent participating window"
+      );
+    }
+    const affected = descendants(inspection, [boundary.primaryChildId, boundary.neighborChildId]);
+    const affectedContainerIds = [boundary.container.id, ...affected.containerIds].filter(
+      (id, index, ids) => ids.indexOf(id) === index
+    );
+    const conflicts = inspection.operations.some(
+      (operation) =>
+        operation.affectedContainerIds.some((id) => affectedContainerIds.includes(id)) ||
+        operation.affectedWindowIds.some((id) => affected.windowIds.includes(id))
+    );
+    if (conflicts) {
       return rejected(
         inspection,
         "operation-conflict",
         "Concurrent operations must affect disjoint containers"
       );
     }
-    const index = container.childIds.indexOf(window.id);
-    let direction = event.operation.direction;
-    let delta = event.operation.direction === "left" || event.operation.direction === "up" ? -1 : 1;
-    let neighborId = container.childIds[index + delta];
-    if (!neighborId) {
-      direction = oppositeDirection(direction);
-      delta *= -1;
-      neighborId = container.childIds[index + delta];
-    }
-    const neighbor = inspection.windows.find((candidate) => candidate.id === neighborId);
+    const neighborDescendants = descendants(inspection, [boundary.neighborChildId]);
+    const neighbor = inspection.windows.find(
+      (candidate) =>
+        neighborDescendants.windowIds.includes(candidate.id) &&
+        candidate.participating &&
+        candidate.available
+    );
     if (!neighbor) {
       return rejected(
         inspection,
@@ -134,28 +232,32 @@ export function applyOperation(
       );
     }
     const surface = inspection.surfaces.find((candidate) => candidate.id === window.surfaceId);
-    if (
-      !window.capabilities.move ||
-      !window.capabilities.resize ||
-      !neighbor.capabilities.move ||
-      !neighbor.capabilities.resize ||
-      !surface?.capabilities.move ||
-      !surface.capabilities.resize
-    ) {
+    const unsupported = inspection.windows.some(
+      (candidate) =>
+        affected.windowIds.includes(candidate.id) &&
+        candidate.participating &&
+        candidate.available &&
+        (!candidate.capabilities.move || !candidate.capabilities.resize)
+    );
+    if (unsupported || !surface?.capabilities.move || !surface.capabilities.resize) {
       return rejected(
         inspection,
         "capability-unsupported",
         "Resize operation requires move and resize capabilities"
       );
     }
-    const baseWeights = normalizedWeights(container);
+    const baseWeights = normalizedWeights(boundary.container);
     const operation: OperationInspection = {
       id: event.operation.id,
       kind: event.operation.kind,
       windowId: window.id,
       neighborWindowId: neighbor.id,
-      containerId: container.id,
-      direction,
+      containerId: boundary.container.id,
+      primaryChildId: boundary.primaryChildId,
+      neighborChildId: boundary.neighborChildId,
+      affectedWindowIds: affected.windowIds,
+      affectedContainerIds,
+      direction: boundary.direction,
       baseWeights,
       overlayWeights: { ...baseWeights },
       topologyRevision: inspection.revision,
@@ -178,7 +280,7 @@ export function applyOperation(
   const container = inspection.containers.find(
     (candidate) => candidate.id === operation.containerId
   );
-  if (!container || !operation.neighborWindowId) return ignored(inspection);
+  if (!container) return ignored(inspection);
 
   if (event.type === "OperationUpdated") {
     if (!Number.isFinite(event.update.shareDelta)) {
@@ -186,13 +288,14 @@ export function applyOperation(
     }
     const minimum = 0.01;
     const pairTotal =
-      operation.baseWeights[operation.windowId] + operation.baseWeights[operation.neighborWindowId];
-    const requested = operation.baseWeights[operation.windowId] + event.update.shareDelta;
+      operation.baseWeights[operation.primaryChildId] +
+      operation.baseWeights[operation.neighborChildId];
+    const requested = operation.baseWeights[operation.primaryChildId] + event.update.shareDelta;
     const primary = Math.max(minimum, Math.min(pairTotal - minimum, requested));
     const overlayWeights = {
       ...operation.baseWeights,
-      [operation.windowId]: primary,
-      [operation.neighborWindowId]: pairTotal - primary,
+      [operation.primaryChildId]: primary,
+      [operation.neighborChildId]: pairTotal - primary,
     };
     const operations = inspection.operations.map((candidate) =>
       candidate.id === operation.id ? { ...candidate, overlayWeights } : candidate

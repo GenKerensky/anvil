@@ -53,6 +53,63 @@ function resizeMachine() {
 }
 
 describe("Tiling Operations", () => {
+  it("resizes the nearest compatible ancestor boundary for a nested window", () => {
+    const { machine, surface, first, second } = resizeMachine();
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "FocusObserved", windowId: first }],
+    });
+    machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "Split", windowId: first, layout: "vertical" },
+    });
+    const third = windowId("third");
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "WindowObserved",
+          window: {
+            id: third,
+            surfaceId: surface,
+            frame: { x: 0, y: 0, width: 500, height: 400 },
+            available: true,
+            capabilities: { focus: true, raise: true, move: true, resize: true },
+          },
+        },
+      ],
+    });
+
+    const operation = operationId("nested-ancestor");
+    expect(
+      machine.dispatch({
+        type: "OperationStarted",
+        operation: { id: operation, kind: "resize", windowId: first, direction: "right" },
+      })
+    ).toMatchObject({ status: "committed" });
+    expect(machine.inspect().operations).toEqual([
+      expect.objectContaining({
+        id: operation,
+        windowId: first,
+        neighborWindowId: second,
+        containerId: "container:1",
+        primaryChildId: "container:2",
+        neighborChildId: second,
+      }),
+    ]);
+
+    machine.dispatch({
+      type: "OperationUpdated",
+      operationId: operation,
+      update: { shareDelta: 0.1 },
+    });
+    expect(machine.inspect().renderPlan.windows).toEqual([
+      expect.objectContaining({ id: first, frame: { x: 0, y: 0, width: 600, height: 400 } }),
+      expect.objectContaining({ id: second, frame: { x: 600, y: 0, width: 400, height: 800 } }),
+      expect.objectContaining({ id: third, frame: { x: 0, y: 400, width: 600, height: 400 } }),
+    ]);
+  });
+
   it("previews resize weights and cancels back to current base state", () => {
     const { machine, first, second } = resizeMachine();
     const operation = operationId("resize-1");

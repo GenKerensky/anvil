@@ -1,4 +1,5 @@
 import type {
+  ContainerId,
   TilingEvent,
   TilingInspection,
   TilingTransition,
@@ -7,7 +8,7 @@ import type {
 import { deriveContainerPlans, deriveWindowPlans } from "./geometry.js";
 import { changedContainerIntentions, changedPlacementIntentions } from "./intentions.js";
 import { effectiveParticipation } from "./participation.js";
-import { normalizeSelections, tilingSurfaceIds } from "./transition-helpers.js";
+import { normalizeTopology, tilingSurfaceIds } from "./transition-helpers.js";
 
 type CommandEvent = Extract<TilingEvent, { type: "CommandRequested" }>;
 type CommitCandidate = (candidate: TilingInspection) => void;
@@ -15,6 +16,8 @@ type CommitCandidate = (candidate: TilingInspection) => void;
 export function applyCommand(
   inspection: TilingInspection,
   event: CommandEvent,
+  currentNextContainer: number,
+  commitNextContainer: (nextContainer: number) => void,
   commitCandidate: CommitCandidate
 ): TilingTransition {
   const command = event.command;
@@ -95,7 +98,7 @@ export function applyCommand(
     };
     const windows = [...inspection.windows];
     windows[windowIndex] = nextWindow;
-    const containers = normalizeSelections(
+    const containers = normalizeTopology(
       inspection.containers.map((container) => {
         const childIds = container.childIds.filter((id) => id !== current.id);
         return container.id === nextWindow.parentId
@@ -129,7 +132,7 @@ export function applyCommand(
       revision,
       participationIntentions.length
     );
-    const containerPlans = deriveContainerPlans(inspection.surfaces, containers);
+    const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers);
     const containerIntentions = changedContainerIntentions(
       inspection.renderPlan.containers,
       containerPlans,
@@ -142,8 +145,7 @@ export function applyCommand(
       windows,
       containers,
       operations: inspection.operations.filter(
-        (operation) =>
-          operation.windowId !== current.id && operation.neighborWindowId !== current.id
+        (operation) => !operation.affectedWindowIds.includes(current.id)
       ),
       placementHints,
       renderPlan: {
@@ -157,6 +159,143 @@ export function applyCommand(
       status: "committed",
       revision,
       intentions: [...participationIntentions, ...placementIntentions, ...containerIntentions],
+      diagnostics: [],
+    };
+  }
+
+  if (command.type === "Split") {
+    const windowIndex = inspection.windows.findIndex(
+      (candidate) => candidate.id === command.windowId
+    );
+    const window = inspection.windows[windowIndex];
+    const parentIndex = inspection.containers.findIndex(
+      (container) => container.id === window?.parentId
+    );
+    const parent = inspection.containers[parentIndex];
+    const surface = inspection.surfaces.find((candidate) => candidate.id === parent?.surfaceId);
+    if (
+      !window?.participating ||
+      !parent ||
+      parent.layout === "stacked" ||
+      parent.layout === "tabbed" ||
+      !inspection.policy.allowedLayouts.includes(command.layout)
+    ) {
+      return {
+        status: "rejected",
+        revision: inspection.revision,
+        intentions: [],
+        diagnostics: [
+          {
+            code: "invalid-split-command",
+            message: "Split requires a participating window in a split container",
+            identity: command.windowId,
+          },
+        ],
+      };
+    }
+    if (
+      !window.capabilities.move ||
+      !window.capabilities.resize ||
+      !surface?.capabilities.move ||
+      !surface.capabilities.resize
+    ) {
+      return {
+        status: "rejected",
+        revision: inspection.revision,
+        intentions: [],
+        diagnostics: [
+          {
+            code: "capability-unsupported",
+            message: "Split requires move and resize capabilities",
+            identity: command.windowId,
+          },
+        ],
+      };
+    }
+
+    let candidateNextContainer = currentNextContainer;
+    let containers = [...inspection.containers];
+    let windows = [...inspection.windows];
+    if (parent.childIds.length === 1) {
+      if (parent.layout === command.layout) {
+        return {
+          status: "ignored",
+          revision: inspection.revision,
+          intentions: [],
+          diagnostics: [],
+        };
+      }
+      containers[parentIndex] = { ...parent, layout: command.layout };
+    } else {
+      const nestedId = `container:${candidateNextContainer++}` as ContainerId;
+      const childIndex = parent.childIds.indexOf(window.id);
+      const childIds = [...parent.childIds];
+      childIds[childIndex] = nestedId;
+      const weights = { ...parent.weights };
+      const inheritedWeight = weights[window.id];
+      delete weights[window.id];
+      if (inheritedWeight !== undefined) weights[nestedId] = inheritedWeight;
+      containers[parentIndex] = {
+        ...parent,
+        childIds,
+        weights,
+        ...(parent.selectedChildId === window.id ? { selectedChildId: nestedId } : {}),
+      };
+      containers.push({
+        id: nestedId,
+        surfaceId: parent.surfaceId,
+        parentId: parent.id,
+        layout: command.layout,
+        childIds: [window.id],
+        weights: {},
+        selectedChildId: window.id,
+      });
+      windows[windowIndex] = { ...window, parentId: nestedId };
+    }
+
+    containers = containers.sort((left, right) => left.id.localeCompare(right.id));
+    windows = windows.sort((left, right) => left.id.localeCompare(right.id));
+    const revision = inspection.revision + 1;
+    const windowPlans = deriveWindowPlans(
+      inspection.surfaces,
+      windows,
+      containers,
+      inspection.policy
+    );
+    const placement = changedPlacementIntentions(
+      inspection.renderPlan.windows,
+      windowPlans,
+      revision
+    );
+    const containerPlans = deriveContainerPlans(inspection.surfaces, windows, containers);
+    const presentation = changedContainerIntentions(
+      inspection.renderPlan.containers,
+      containerPlans,
+      revision,
+      placement.length
+    );
+    commitCandidate({
+      ...inspection,
+      revision,
+      windows,
+      containers,
+      operations: inspection.operations.filter(
+        (operation) =>
+          !operation.affectedContainerIds.includes(parent.id) &&
+          !operation.affectedWindowIds.includes(command.windowId)
+      ),
+      renderPlan: {
+        ...inspection.renderPlan,
+        revision,
+        windows: windowPlans,
+        containers: containerPlans,
+      },
+    });
+    commitNextContainer(candidateNextContainer);
+    return {
+      status: "committed",
+      revision,
+      intentions: [...placement, ...presentation],
       diagnostics: [],
     };
   }
@@ -216,7 +355,11 @@ export function applyCommand(
     const revision = inspection.revision + 1;
     const containers = [...inspection.containers];
     containers[containerIndex] = { ...container, selectedChildId: targetId };
-    const containerPlans = deriveContainerPlans(inspection.surfaces, containers);
+    const containerPlans = deriveContainerPlans(
+      inspection.surfaces,
+      inspection.windows,
+      containers
+    );
     const presentation = changedContainerIntentions(
       inspection.renderPlan.containers,
       containerPlans,
@@ -322,7 +465,11 @@ export function applyCommand(
       windowPlans,
       revision
     );
-    const containerPlans = deriveContainerPlans(inspection.surfaces, containers);
+    const containerPlans = deriveContainerPlans(
+      inspection.surfaces,
+      inspection.windows,
+      containers
+    );
     intentions.push(
       ...changedContainerIntentions(
         inspection.renderPlan.containers,
@@ -336,7 +483,7 @@ export function applyCommand(
       revision,
       containers,
       operations: inspection.operations.filter(
-        (operation) => operation.containerId !== container.id
+        (operation) => !operation.affectedContainerIds.includes(container.id)
       ),
       renderPlan: {
         ...inspection.renderPlan,
@@ -438,7 +585,9 @@ export function applyCommand(
     ...inspection,
     revision,
     containers,
-    operations: inspection.operations.filter((operation) => operation.containerId !== current.id),
+    operations: inspection.operations.filter(
+      (operation) => !operation.affectedContainerIds.includes(current.id)
+    ),
     renderPlan: {
       ...inspection.renderPlan,
       revision,

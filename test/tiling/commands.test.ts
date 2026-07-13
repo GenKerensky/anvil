@@ -52,7 +52,89 @@ function twoWindowMachine() {
   return { machine, surface, first, second };
 }
 
+function observedWindow(id: ReturnType<typeof windowId>, surface: ReturnType<typeof surfaceId>) {
+  return {
+    id,
+    surfaceId: surface,
+    frame: { x: 0, y: 0, width: 500, height: 800 },
+    available: true,
+    capabilities: { focus: true, raise: true, move: true, resize: true },
+  };
+}
+
 describe("Tiling Commands", () => {
+  it("creates a nested split and admits the next window beside the focused window", () => {
+    const { machine, surface, first, second } = twoWindowMachine();
+
+    expect(
+      machine.dispatch({
+        type: "CommandRequested",
+        command: { type: "Split", windowId: first, layout: "vertical" },
+      })
+    ).toMatchObject({ status: "committed", revision: 2 });
+    expect(machine.inspect()).toMatchObject({
+      containers: [
+        {
+          id: "container:1",
+          childIds: ["container:2", second],
+        },
+        {
+          id: "container:2",
+          parentId: "container:1",
+          layout: "vertical",
+          childIds: [first],
+        },
+      ],
+      windows: [
+        { id: first, parentId: "container:2" },
+        { id: second, parentId: "container:1" },
+      ],
+      renderPlan: {
+        containers: [
+          { id: "container:1", rect: { x: 0, y: 0, width: 1000, height: 800 } },
+          { id: "container:2", rect: { x: 0, y: 0, width: 500, height: 800 } },
+        ],
+      },
+    });
+
+    const third = windowId("third");
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "WindowObserved", window: observedWindow(third, surface) }],
+    });
+
+    expect(machine.inspect()).toMatchObject({
+      containers: [
+        { id: "container:1", childIds: ["container:2", second] },
+        { id: "container:2", childIds: [first, third] },
+      ],
+      windows: [
+        { id: first, parentId: "container:2" },
+        { id: second, parentId: "container:1" },
+        { id: third, parentId: "container:2" },
+      ],
+      renderPlan: {
+        windows: [
+          { id: first, frame: { x: 0, y: 0, width: 500, height: 400 } },
+          { id: second, frame: { x: 500, y: 0, width: 500, height: 800 } },
+          { id: third, frame: { x: 0, y: 400, width: 500, height: 400 } },
+        ],
+      },
+    });
+
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        { type: "WindowWithdrawn", windowId: first },
+        { type: "WindowWithdrawn", windowId: third },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      containers: [{ id: "container:1", childIds: [second] }],
+      windows: [{ id: second, parentId: "container:1" }],
+    });
+  });
+
   it("changes a window container layout and emits the resulting plan delta", () => {
     const { machine, surface, first, second } = twoWindowMachine();
 
