@@ -205,6 +205,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       get scheduler() {
         return self._eventScheduler!;
       },
+      observePortableTopology: () => self._tilingShadow!.observeTopology(),
     });
     this._tree = new Tree({
       get settings() {
@@ -339,6 +340,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       cleanupAlwaysFloat: () => self.cleanupAlwaysFloat(),
       restoreAlwaysFloat: () => self.restoreAlwaysFloat(),
       clearResizedWindows: () => self._grab!.clearResizedWindows(),
+      observePortablePolicy: () => self._tilingShadow!.observePolicy(),
     });
     this._focus = new FocusController({
       get layoutEngine() {

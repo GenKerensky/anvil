@@ -57,6 +57,7 @@ export interface SignalManagerHost {
   handleGrabOpEnd(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp): void;
 
   readonly scheduler: EventSchedulerPort;
+  observePortableTopology(): void;
 }
 
 export class SignalManager {
@@ -112,6 +113,7 @@ export class SignalManager {
           Logger.debug(`workareas-changed: no monitors, ignoring signal`);
           return;
         }
+        host.observePortableTopology();
         if (host.tree.getNodeByType("WINDOW").length > 0) {
           const workspaceReload = this._workspaceAdded || this._workspaceRemoved;
           if (workspaceReload) {
@@ -172,12 +174,14 @@ export class SignalManager {
         host.updateDecorationLayout();
       }),
       extWsm.connect("workspace-added", (_wsm, wsIndex) => {
+        host.observePortableTopology();
         host.tree.addWorkspace(wsIndex);
         host.trackCurrentMonWs();
         this._workspaceAdded = true;
         host.renderTree("workspace-added");
       }),
       extWsm.connect("workspace-removed", (_wsm, wsIndex) => {
+        host.observePortableTopology();
         host.tree.removeWorkspace(wsIndex);
         host.trackCurrentMonWs();
         this._workspaceRemoved = true;

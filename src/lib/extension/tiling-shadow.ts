@@ -6,6 +6,7 @@ import {
   surfaceId,
   windowId,
   type Direction,
+  type Layout,
   type PlatformSnapshot,
   type SurfaceFact,
   type SurfaceId,
@@ -74,6 +75,7 @@ export class TilingShadow {
   private readonly settings: Gio.Settings;
   private readonly identities = new GnomeTilingIdentityRegistry();
   private machine: TilingStateMachine;
+  private activeSurfaces = new Set<SurfaceId>();
 
   constructor(settings: Gio.Settings) {
     this.settings = settings;
@@ -84,15 +86,22 @@ export class TilingShadow {
     const gap =
       uintSetting(this.settings, "window-gap-size", 0) *
       uintSetting(this.settings, "window-gap-size-increment", 1);
+    const allowedLayouts: Layout[] = ["horizontal", "vertical"];
+    if (booleanSetting(this.settings, "stacked-tiling-mode-enabled", true)) {
+      allowedLayouts.push("stacked");
+    }
+    if (booleanSetting(this.settings, "tabbed-tiling-mode-enabled", true)) {
+      allowedLayouts.push("tabbed");
+    }
     return {
       enabled: booleanSetting(this.settings, "tiling-mode-enabled", true),
       surfaceTiling: {},
-      allowedLayouts: ["horizontal", "vertical", "stacked", "tabbed"],
+      allowedLayouts,
       defaultLayout: "horizontal",
       gap,
       hideGapWhenSingle: booleanSetting(this.settings, "window-gap-hidden-on-single", false),
       autoSplit: booleanSetting(this.settings, "auto-split-enabled", false),
-      singleTabExit: "preserve",
+      singleTabExit: booleanSetting(this.settings, "auto-exit-tabbed", true) ? "split" : "preserve",
       headerExtent: 0,
       constraints: {},
       participationRules: [],
@@ -135,6 +144,23 @@ export class TilingShadow {
     };
   }
 
+  private surfaceFacts(): SurfaceFact[] {
+    const surfaces: SurfaceFact[] = [];
+    const workspaceManager = global.workspace_manager;
+    for (
+      let workspaceIndex = 0;
+      workspaceIndex < workspaceManager.get_n_workspaces();
+      workspaceIndex += 1
+    ) {
+      const workspace = workspaceManager.get_workspace_by_index(workspaceIndex);
+      if (!workspace) continue;
+      for (let monitor = 0; monitor < global.display.get_n_monitors(); monitor += 1) {
+        surfaces.push(this.surfaceFact(workspace, monitor));
+      }
+    }
+    return surfaces;
+  }
+
   private windowFact(metaWindow: Meta.Window): WindowFact | null {
     const workspace = metaWindow.get_workspace();
     if (!workspace) return null;
@@ -169,19 +195,8 @@ export class TilingShadow {
 
   bootstrap(windows: readonly Meta.Window[], validWindow: (window: Meta.Window) => boolean): void {
     this.machine = createTilingStateMachine(this.policy());
-    const surfaces: SurfaceFact[] = [];
-    const workspaceManager = global.workspace_manager;
-    for (
-      let workspaceIndex = 0;
-      workspaceIndex < workspaceManager.get_n_workspaces();
-      workspaceIndex += 1
-    ) {
-      const workspace = workspaceManager.get_workspace_by_index(workspaceIndex);
-      if (!workspace) continue;
-      for (let monitor = 0; monitor < global.display.get_n_monitors(); monitor += 1) {
-        surfaces.push(this.surfaceFact(workspace, monitor));
-      }
-    }
+    const surfaces = this.surfaceFacts();
+    this.activeSurfaces = new Set(surfaces.map((surface) => surface.id));
     const observedWindows = windows
       .filter(validWindow)
       .map((window) => this.windowFact(window))
@@ -220,6 +235,25 @@ export class TilingShadow {
       type: "FactsObserved",
       facts: [{ type: "FocusObserved", windowId: focusedWindowId }],
     });
+  }
+
+  observePolicy(): void {
+    this.machine.dispatch({ type: "PolicyReplaced", policy: this.policy() });
+  }
+
+  observeTopology(): void {
+    const surfaces = this.surfaceFacts();
+    const nextSurfaces = new Set(surfaces.map((surface) => surface.id));
+    this.machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        ...surfaces.map((surface) => ({ type: "SurfaceObserved" as const, surface })),
+        ...[...this.activeSurfaces]
+          .filter((surfaceId) => !nextSurfaces.has(surfaceId))
+          .map((surfaceId) => ({ type: "SurfaceWithdrawn" as const, surfaceId })),
+      ],
+    });
+    this.activeSurfaces = nextSurfaces;
   }
 
   withdrawWindow(metaWindow: Meta.Window): void {

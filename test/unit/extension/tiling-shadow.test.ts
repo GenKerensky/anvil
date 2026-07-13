@@ -115,4 +115,39 @@ describe("TilingShadow", () => {
     expect(shadow.inspect().focusedWindowId).toBeUndefined();
     globals.cleanup();
   });
+
+  it("replaces portable policy as one complete value", () => {
+    const globals = installGnomeGlobals();
+    const settings = createMockSettings({
+      "window-gap-size": 4,
+      "window-gap-size-increment": 2,
+      "stacked-tiling-mode-enabled": false,
+      "tabbed-tiling-mode-enabled": true,
+    });
+    const shadow = new TilingShadow(settings as never);
+    shadow.bootstrap([], () => true);
+    expect(shadow.inspect().policy).toMatchObject({
+      gap: 8,
+      allowedLayouts: ["horizontal", "vertical", "tabbed"],
+    });
+
+    settings.set_boolean("tabbed-tiling-mode-enabled", false);
+    shadow.observePolicy();
+
+    expect(shadow.inspect().policy.allowedLayouts).toEqual(["horizontal", "vertical"]);
+    globals.cleanup();
+  });
+
+  it("withdraws surfaces missing from a later topology observation", () => {
+    const globals = installGnomeGlobals();
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([], () => true);
+    expect(shadow.inspect().surfaces).toHaveLength(1);
+
+    globals.workspaceManager.get_n_workspaces.mockReturnValue(0);
+    shadow.observeTopology();
+
+    expect(shadow.inspect().surfaces).toHaveLength(0);
+    globals.cleanup();
+  });
 });

@@ -409,6 +409,10 @@ export class WindowTracker {
               host.observePortableWindow(metaWindow);
               host.renderTree("title-notify", true);
             }),
+            metaWindow.connect("notify::minimized", () => {
+              host.observePortableWindow(metaWindow);
+              host.renderTree("minimized-notify", true);
+            }),
             metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
               host.withdrawPortableWindow(_metaWindow);
               host.hideActorBorder(windowActor);

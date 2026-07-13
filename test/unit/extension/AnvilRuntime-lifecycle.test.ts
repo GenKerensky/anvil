@@ -278,6 +278,21 @@ describe("AnvilRuntime - Lifecycle", () => {
       expect(observe.mock.invocationCallOrder[0]).toBeLessThan(legacy.mock.invocationCallOrder[0]);
     });
 
+    it("observes minimized availability before legacy rendering", () => {
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const observe = vi.spyOn(wm()._tilingShadow, "observeWindow");
+      const legacy = vi.spyOn(wm(), "renderTree");
+      wm()._tracker.trackWindow(ctx.display, window);
+      observe.mockClear();
+      legacy.mockClear();
+      window.minimized = true;
+
+      window.emit("notify::minimized", window);
+
+      expect(observe).toHaveBeenCalledWith(window);
+      expect(observe.mock.invocationCallOrder[0]).toBeLessThan(legacy.mock.invocationCallOrder[0]);
+    });
+
     it("should not add invalid window types to tree", () => {
       const window = createMockWindow({
         window_type: Meta.WindowType.UTILITY,

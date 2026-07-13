@@ -39,9 +39,25 @@ export interface SettingsBridgeHost {
   cleanupAlwaysFloat(): void;
   restoreAlwaysFloat(): void;
   clearResizedWindows(): void;
+  observePortablePolicy(): void;
 }
 
 type SettingHandler = (host: SettingsBridgeHost, key: string) => void;
+
+const PORTABLE_POLICY_KEYS = new Set([
+  "window-overrides-reload-trigger",
+  "tiling-mode-enabled",
+  "window-gap-size-increment",
+  "window-gap-size",
+  "window-gap-hidden-on-single",
+  "workspace-skip-tile",
+  "stacked-tiling-mode-enabled",
+  "tabbed-tiling-mode-enabled",
+  "auto-split-enabled",
+  "auto-exit-tabbed",
+  "showtab-decoration-enabled",
+  "monitor-constraints",
+]);
 
 function handleBorderToggles(host: SettingsBridgeHost, _key: string): void {
   if (host.bordersEnabled()) {
@@ -164,6 +180,7 @@ export class SettingsBridge {
   }
 
   private _onChanged(settingName: string): void {
+    if (PORTABLE_POLICY_KEYS.has(settingName)) this._host.observePortablePolicy();
     const handler = SETTINGS_HANDLERS[settingName];
     handler?.(this._host, settingName);
   }

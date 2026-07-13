@@ -34,6 +34,7 @@ describe("SettingsBridge", () => {
       cleanupAlwaysFloat: vi.fn(),
       restoreAlwaysFloat: vi.fn(),
       clearResizedWindows: vi.fn(),
+      observePortablePolicy: vi.fn(),
     };
     bridge = new SettingsBridge(host);
   });
@@ -54,6 +55,15 @@ describe("SettingsBridge", () => {
     bridge.handleChanged("monitor-constraints");
     expect(host.clearResizedWindows).toHaveBeenCalled();
     expect(host.renderTree).toHaveBeenCalledWith("monitor-constraints", true);
+  });
+
+  it("observes a complete portable policy before legacy settings effects", () => {
+    bridge.handleChanged("tiling-mode-enabled");
+
+    expect(host.observePortablePolicy).toHaveBeenCalledOnce();
+    expect(host.observePortablePolicy.mock.invocationCallOrder[0]).toBeLessThan(
+      host.renderTree.mock.invocationCallOrder[0]
+    );
   });
 
   it("window-overrides-reload-trigger reloads overrides", () => {
