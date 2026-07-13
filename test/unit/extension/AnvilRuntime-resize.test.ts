@@ -9,6 +9,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import St from "gi://St";
 import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
   createMockWindow,
   createAnvilRuntimeFixture,
@@ -129,7 +130,7 @@ describe("AnvilRuntime - Resize", () => {
         legacyBegin.mock.invocationCallOrder[0]
       );
       expect(shadowUpdate).toHaveBeenCalledWith(metaWindow);
-      expect(shadowEnd).toHaveBeenCalledWith(metaWindow, false);
+      expect(shadowEnd).toHaveBeenCalledWith(metaWindow, false, false);
       expect(shadowEnd.mock.invocationCallOrder[0]).toBeLessThan(
         legacyEnd.mock.invocationCallOrder[0]
       );
@@ -143,6 +144,47 @@ describe("AnvilRuntime - Resize", () => {
       wm()._grab.handleResizing(null);
 
       expect(shadowUpdate).toHaveBeenCalledWith(metaWindow);
+    });
+
+    it("mirrors moving pointer observations and the final sample before legacy commit", () => {
+      const metaWindow = setupFocusWindow(ctx);
+      const node = wm().findNodeWindow(metaWindow);
+      node.mode = WINDOW_MODES.GRAB_TILE;
+      (global as unknown as { get_pointer: ReturnType<typeof vi.fn> }).get_pointer.mockReturnValue([
+        320, 240, 0,
+      ]);
+      const shadowMove = vi.spyOn(wm()._tilingShadow, "observeGrabMoveUpdate");
+      const shadowEnd = vi.spyOn(wm()._tilingShadow, "observeGrabEnd");
+      const legacyEnd = vi.spyOn(wm()._grab, "end");
+      vi.spyOn(wm(), "allowDragDropTile").mockReturnValue(true);
+
+      wm()._handleGrabOpBegin(ctx.display, metaWindow, Meta.GrabOp.MOVING);
+      wm()._grab.handleMoving(node);
+      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.MOVING_UNCONSTRAINED);
+
+      expect(shadowMove).toHaveBeenNthCalledWith(1, metaWindow, [320, 240], true);
+      expect(shadowMove).toHaveBeenNthCalledWith(2, metaWindow, [320, 240], true);
+      expect(shadowEnd).toHaveBeenCalledWith(metaWindow, false, true);
+      expect(shadowEnd.mock.invocationCallOrder[0]).toBeLessThan(
+        legacyEnd.mock.invocationCallOrder[0]
+      );
+    });
+
+    it("cancels portable drag placement when the tile modifier is not held", () => {
+      const metaWindow = setupFocusWindow(ctx);
+      const node = wm().findNodeWindow(metaWindow);
+      node.mode = WINDOW_MODES.GRAB_TILE;
+      vi.spyOn(wm(), "allowDragDropTile").mockReturnValue(false);
+      const shadowMove = vi.spyOn(wm()._tilingShadow, "observeGrabMoveUpdate");
+      const shadowEnd = vi.spyOn(wm()._tilingShadow, "observeGrabEnd");
+
+      wm()._handleGrabOpBegin(ctx.display, metaWindow, Meta.GrabOp.MOVING);
+      wm()._grab.handleMoving(node);
+      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.MOVING_UNCONSTRAINED);
+
+      expect(shadowMove).toHaveBeenCalledWith(metaWindow, [0, 0], false);
+      expect(shadowEnd).toHaveBeenCalledWith(metaWindow, false, false);
+      expect(wm()._tilingShadow.inspect().operations).toEqual([]);
     });
   });
 

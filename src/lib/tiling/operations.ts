@@ -387,6 +387,15 @@ export function applyOperation(
   const operation = inspection.operations.find((candidate) => candidate.id === event.operationId);
   if (!operation) return ignored(inspection);
   if (operation.kind !== "resize") return ignored(inspection);
+  if (event.type === "OperationCancelled") {
+    return withRender(
+      inspection,
+      inspection.revision + 1,
+      inspection.containers,
+      inspection.operations.filter((candidate) => candidate.id !== operation.id),
+      inspection.containers
+    );
+  }
   if (
     operation.boundaries.some(
       (boundary) =>
@@ -466,16 +475,6 @@ export function applyOperation(
       inspection.containers,
       operations,
       renderContainers
-    );
-  }
-
-  if (event.type === "OperationCancelled") {
-    return withRender(
-      inspection,
-      inspection.revision + 1,
-      inspection.containers,
-      inspection.operations.filter((candidate) => candidate.id !== operation.id),
-      inspection.containers
     );
   }
 

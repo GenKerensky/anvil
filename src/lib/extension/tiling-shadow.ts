@@ -3,7 +3,9 @@ import Meta from "gi://Meta";
 
 import type { WindowOverride } from "../shared/settings.js";
 import { GnomeGrabOperationAdapter } from "./gnome-grab-operation-adapter.js";
+import * as Utils from "./utils.js";
 import type { AnvilAction } from "./window/actions.js";
+import { GRAB_TYPES } from "./window/constants.js";
 
 import {
   createTilingStateMachine,
@@ -11,8 +13,10 @@ import {
   surfaceId,
   windowId,
   type Direction,
+  type DragCenterAction,
   type Layout,
   type OperationId,
+  type Point,
   type PlatformSnapshot,
   type ParticipationRule,
   type SurfaceFact,
@@ -84,6 +88,25 @@ function stringSetting(settings: Gio.Settings, key: string, fallback: string): s
   } catch {
     return fallback;
   }
+}
+
+function dragCenterAction(settings: Gio.Settings): DragCenterAction {
+  const value = stringSetting(settings, "dnd-center-layout", "tabbed").toLowerCase();
+  return value === "swap" ||
+    value === "horizontal" ||
+    value === "vertical" ||
+    value === "stacked" ||
+    value === "tabbed"
+    ? value
+    : "tabbed";
+}
+
+function isPointerDragGrab(grabOp: Meta.GrabOp): boolean {
+  return (
+    grabOp === Meta.GrabOp.MOVING ||
+    grabOp === Meta.GrabOp.MOVING_UNCONSTRAINED ||
+    grabOp === Meta.GrabOp.WINDOW_BASE
+  );
 }
 
 export class GnomeTilingIdentityRegistry {
@@ -260,6 +283,32 @@ export class TilingShadow {
       neighbors,
       capabilities: { focus: true, raise: true, move: true, resize: true },
     };
+  }
+
+  private pointOnSurface(
+    workspace: Meta.Workspace,
+    pointer: readonly [number, number]
+  ): Point | null {
+    const [x, y] = pointer;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+    for (let monitor = 0; monitor < global.display.get_n_monitors(); monitor += 1) {
+      const geometry = global.display.get_monitor_geometry(monitor);
+      if (
+        x < geometry.x ||
+        y < geometry.y ||
+        x >= geometry.x + geometry.width ||
+        y >= geometry.y + geometry.height
+      ) {
+        continue;
+      }
+      const workArea = workspace.get_work_area_for_monitor(monitor);
+      return {
+        surfaceId: this.surfaceIdentity(workspace, monitor),
+        x: x - workArea.x,
+        y: y - workArea.y,
+      };
+    }
+    return null;
   }
 
   private surfaceFacts(): SurfaceFact[] {
@@ -487,15 +536,39 @@ export class TilingShadow {
 
   observeGrabBegin(metaWindow: Meta.Window, grabOp: Meta.GrabOp): void {
     if (!this.bootstrapped) return;
-    this.grabOperations.beginResize(metaWindow, grabOp);
+    if (!this.grabOperations.cancelActive()) return;
+    const mode = Utils.grabMode(grabOp);
+    if (mode === GRAB_TYPES.RESIZING) {
+      this.grabOperations.beginResize(metaWindow, grabOp);
+    } else if (isPointerDragGrab(grabOp)) {
+      this.grabOperations.prepareDrag(metaWindow, dragCenterAction(this.settings));
+    }
   }
 
   observeGrabUpdate(metaWindow: Meta.Window): void {
     this.grabOperations.updateResize(metaWindow);
   }
 
-  observeGrabEnd(metaWindow: Meta.Window, cancelled: boolean): void {
-    this.grabOperations.endResize(metaWindow, cancelled);
+  observeGrabMoveUpdate(
+    metaWindow: Meta.Window,
+    pointer: readonly [number, number],
+    eligible: boolean
+  ): void {
+    const workspace = metaWindow.get_workspace();
+    if (!workspace) {
+      this.grabOperations.suspendDrag(metaWindow);
+      return;
+    }
+    const point = this.pointOnSurface(workspace, pointer);
+    if (point) {
+      this.grabOperations.updateDrag(metaWindow, point, eligible);
+    } else {
+      this.grabOperations.suspendDrag(metaWindow);
+    }
+  }
+
+  observeGrabEnd(metaWindow: Meta.Window, cancelled: boolean, commitDrag = false): void {
+    this.grabOperations.end(metaWindow, cancelled, commitDrag);
   }
 
   withdrawWindow(metaWindow: Meta.Window): void {

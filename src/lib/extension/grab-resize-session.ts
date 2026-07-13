@@ -64,6 +64,11 @@ export interface GrabResizeHost {
   updateStackedFocus(node: Node<any> | null | undefined): void;
   updateTabbedFocus(node: Node<any> | null | undefined): void;
   observeGrabResizeUpdate(metaWindow: Meta.Window): void;
+  observeGrabMoveUpdate(
+    metaWindow: Meta.Window,
+    pointer: readonly [number, number],
+    eligible: boolean
+  ): void;
 }
 
 /**
@@ -600,6 +605,14 @@ export class GrabResizeSession {
     const host = this._host;
     if (!focusNodeWindow || focusNodeWindow.mode !== WINDOW_MODES.GRAB_TILE) return;
 
+    const [pointerX, pointerY] = global.get_pointer() as unknown as [number, number];
+    const dragDropAllowed = host.allowDragDropTile();
+    host.observeGrabMoveUpdate(
+      focusNodeWindow.nodeValue as Meta.Window,
+      [pointerX, pointerY],
+      dragDropAllowed
+    );
+
     const nodeWinAtPointer = host.findNodeWindowAtPointer(focusNodeWindow);
     host.nodeWinAtPointer = nodeWinAtPointer ?? null;
 
@@ -616,7 +629,7 @@ export class GrabResizeSession {
         focusNodeWindow.previewHint = previewHint;
       }
 
-      if (host.allowDragDropTile()) {
+      if (dragDropAllowed) {
         host.moveWindowToPointer(focusNodeWindow, true);
       } else {
         hidePreview();

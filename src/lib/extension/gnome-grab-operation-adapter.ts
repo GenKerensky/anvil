@@ -1,9 +1,11 @@
 import Meta from "gi://Meta";
 
 import type {
+  DragCenterAction,
   Direction,
   NonEmptyDirections,
   OperationId,
+  Point,
   ResizeOperationInspection,
   TilingEvent,
   TilingInspection,
@@ -36,6 +38,12 @@ type ResizeObservation = Readonly<{
   axes: readonly ResizeAxisObservation[];
 }>;
 
+type DragObservation = Readonly<{
+  windowId: WindowId;
+  centerAction: DragCenterAction;
+  operationId?: OperationId;
+}>;
+
 function portableDirections(grabOp: Meta.GrabOp): NonEmptyDirections | undefined {
   const decomposed = Utils.decomposeGrabOp(grabOp);
   const directions = decomposed
@@ -61,6 +69,7 @@ function portableDirections(grabOp: Meta.GrabOp): NonEmptyDirections | undefined
 export class GnomeGrabOperationAdapter {
   private readonly port: GnomeGrabOperationPort;
   private activeResize?: ResizeObservation;
+  private dragSession?: DragObservation;
 
   constructor(port: GnomeGrabOperationPort) {
     this.port = port;
@@ -68,6 +77,20 @@ export class GnomeGrabOperationAdapter {
 
   reset(): void {
     this.activeResize = undefined;
+    this.dragSession = undefined;
+  }
+
+  cancelActive(): boolean {
+    const operationId = this.activeResize?.operationId ?? this.dragSession?.operationId;
+    if (operationId) {
+      this.port.dispatch({ type: "OperationCancelled", operationId });
+      if (this.port.inspect().operations.some((operation) => operation.id === operationId)) {
+        return false;
+      }
+    }
+    this.activeResize = undefined;
+    this.dragSession = undefined;
+    return true;
   }
 
   beginResize(metaWindow: Meta.Window, grabOp: Meta.GrabOp): void {
@@ -76,11 +99,7 @@ export class GnomeGrabOperationAdapter {
     const fact = this.port.windowFact(metaWindow);
     if (!id || !directions || !fact) return;
 
-    const existing = this.activeResize;
-    if (existing) {
-      this.port.dispatch({ type: "OperationCancelled", operationId: existing.operationId });
-      this.activeResize = undefined;
-    }
+    if (!this.cancelActive()) return;
 
     const operationId = this.port.allocateOperationId();
     const transition = this.port.dispatch({
@@ -141,6 +160,13 @@ export class GnomeGrabOperationAdapter {
     this.activeResize = { windowId: id, operationId, axes };
   }
 
+  prepareDrag(metaWindow: Meta.Window, centerAction: DragCenterAction): void {
+    const id = this.port.knownWindowId(metaWindow);
+    if (!id) return;
+    if (!this.cancelActive()) return;
+    this.dragSession = { windowId: id, centerAction };
+  }
+
   updateResize(metaWindow: Meta.Window): void {
     const id = this.port.knownWindowId(metaWindow);
     const active = id === this.activeResize?.windowId ? this.activeResize : undefined;
@@ -167,19 +193,73 @@ export class GnomeGrabOperationAdapter {
     this.activeResize = { ...active, axes };
   }
 
-  endResize(metaWindow: Meta.Window, cancelled: boolean): void {
+  updateDrag(metaWindow: Meta.Window, pointer: Point, eligible: boolean): void {
     const id = this.port.knownWindowId(metaWindow);
-    const active = id === this.activeResize?.windowId ? this.activeResize : undefined;
-    if (!id || !active) return;
+    let session = id === this.dragSession?.windowId ? this.dragSession : undefined;
+    if (!id || !session) return;
+    if (!eligible) {
+      this.suspendDrag(metaWindow);
+      return;
+    }
+    if (!session.operationId) {
+      const operationId = this.port.allocateOperationId();
+      const transition = this.port.dispatch({
+        type: "OperationStarted",
+        operation: {
+          id: operationId,
+          kind: "drag",
+          windowId: id,
+          centerAction: session.centerAction,
+        },
+      });
+      if (transition.status !== "committed") return;
+      session = { ...session, operationId };
+      this.dragSession = session;
+    }
+    const operationId = session.operationId;
+    if (!operationId) return;
     this.port.dispatch({
-      type: cancelled ? "OperationCancelled" : "OperationCommitted",
-      operationId: active.operationId,
+      type: "OperationUpdated",
+      operationId,
+      update: { pointer },
     });
-    this.activeResize = undefined;
+  }
+
+  suspendDrag(metaWindow: Meta.Window): void {
+    const id = this.port.knownWindowId(metaWindow);
+    const session = id === this.dragSession?.windowId ? this.dragSession : undefined;
+    if (!id || !session?.operationId) return;
+    this.port.dispatch({ type: "OperationCancelled", operationId: session.operationId });
+    if (this.port.inspect().operations.some((operation) => operation.id === session.operationId)) {
+      return;
+    }
+    this.dragSession = { windowId: id, centerAction: session.centerAction };
+  }
+
+  end(metaWindow: Meta.Window, cancelled: boolean, commitDrag: boolean): void {
+    const id = this.port.knownWindowId(metaWindow);
+    if (!id) return;
+    const resize = id === this.activeResize?.windowId ? this.activeResize : undefined;
+    const drag = id === this.dragSession?.windowId ? this.dragSession : undefined;
+    const operationId = resize?.operationId ?? drag?.operationId;
+    if (operationId) {
+      const shouldCancel = cancelled || (drag !== undefined && !commitDrag);
+      const transition = this.port.dispatch({
+        type: shouldCancel ? "OperationCancelled" : "OperationCommitted",
+        operationId,
+      });
+      if (transition.status === "rejected" && !shouldCancel) {
+        this.port.dispatch({ type: "OperationCancelled", operationId });
+      }
+      if (this.port.inspect().operations.some((operation) => operation.id === operationId)) return;
+    }
+    if (resize) this.activeResize = undefined;
+    if (drag) this.dragSession = undefined;
   }
 
   withdrawWindow(metaWindow: Meta.Window): void {
     const id = this.port.knownWindowId(metaWindow);
     if (id === this.activeResize?.windowId) this.activeResize = undefined;
+    if (id === this.dragSession?.windowId) this.dragSession = undefined;
   }
 }

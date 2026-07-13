@@ -286,6 +286,10 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       updateTabbedFocus: (n) => self.updateTabbedFocus(n),
       observeGrabResizeUpdate: (window) =>
         self._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(window)),
+      observeGrabMoveUpdate: (window, pointer, eligible) =>
+        self._withTilingShadow("grab-move-update", (shadow) =>
+          shadow.observeGrabMoveUpdate(window, pointer, eligible)
+        ),
     });
     this._tracker = new WindowTracker({
       get tree() {
@@ -1084,9 +1088,27 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private _handleGrabOpEnd(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
-    this._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(metaWindow));
+    const beganPointerDrag =
+      this._grab!.grabOp === Meta.GrabOp.MOVING ||
+      this._grab!.grabOp === Meta.GrabOp.MOVING_UNCONSTRAINED ||
+      this._grab!.grabOp === Meta.GrabOp.WINDOW_BASE;
+    const dragEndKind =
+      grabOp === Meta.GrabOp.MOVING_UNCONSTRAINED || grabOp === Meta.GrabOp.WINDOW_BASE;
+    const commitDrag =
+      beganPointerDrag &&
+      dragEndKind &&
+      !this._grab!.cancelGrab &&
+      Boolean(this.allowDragDropTile());
+    if (beganPointerDrag) {
+      const [x, y] = global.get_pointer() as unknown as [number, number];
+      this._withTilingShadow("grab-move-update", (shadow) =>
+        shadow.observeGrabMoveUpdate(metaWindow, [x, y], commitDrag)
+      );
+    } else {
+      this._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(metaWindow));
+    }
     this._withTilingShadow("grab-end", (shadow) =>
-      shadow.observeGrabEnd(metaWindow, this._grab!.cancelGrab)
+      shadow.observeGrabEnd(metaWindow, this._grab!.cancelGrab, commitDrag)
     );
     this._grab!.end(display, metaWindow, grabOp);
   }

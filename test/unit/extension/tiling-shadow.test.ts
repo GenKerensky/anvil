@@ -364,6 +364,83 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("translates a moving GNOME grab into a portable drag preview and commit", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings({ "dnd-center-layout": "SWAP" }) as never);
+    shadow.bootstrap([first, second], () => true);
+    const [firstId, secondId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.MOVING);
+    expect(shadow.inspect().operations).toEqual([]);
+
+    shadow.observeGrabMoveUpdate(first, [1440, 540], true);
+    expect(shadow.inspect()).toMatchObject({
+      operations: [
+        {
+          id: "operation:1",
+          kind: "drag",
+          windowId: firstId,
+          centerAction: "swap",
+          placement: { kind: "swap", targetWindowId: secondId, region: "center" },
+        },
+      ],
+      renderPlan: {
+        previews: [
+          {
+            operationId: "operation:1",
+            surfaceId: shadow.inspect().surfaces[0].id,
+            rect: { x: 960, y: 0, width: 960, height: 1080 },
+          },
+        ],
+      },
+    });
+
+    shadow.observeGrabEnd(first, false, true);
+    expect(shadow.inspect()).toMatchObject({
+      operations: [],
+      renderPlan: { previews: [] },
+      containers: [{ childIds: [secondId, firstId] }],
+    });
+    globals.cleanup();
+  });
+
+  it("translates global drag coordinates into the target Surface coordinate space", () => {
+    const globals = installGnomeGlobals({
+      display: {
+        monitorCount: 2,
+        monitorGeometries: [
+          { x: 0, y: 0, width: 1920, height: 1080 },
+          { x: 1920, y: 0, width: 1920, height: 1080 },
+        ],
+      },
+    });
+    const first = createMockWindow({ monitor: 0, rect: { x: 0, y: 0, width: 1920, height: 1080 } });
+    const second = createMockWindow({
+      monitor: 1,
+      rect: { x: 1920, y: 0, width: 1920, height: 1080 },
+    });
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings({ "dnd-center-layout": "SWAP" }) as never);
+    shadow.bootstrap([first, second], () => true);
+    const targetSurface = shadow.inspect().surfaces[1].id;
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.MOVING);
+    shadow.observeGrabMoveUpdate(first, [2880, 540], true);
+
+    expect(shadow.inspect().renderPlan.previews).toEqual([
+      expect.objectContaining({
+        surfaceId: targetSurface,
+        rect: { x: 0, y: 0, width: 1920, height: 1080 },
+      }),
+    ]);
+    globals.cleanup();
+  });
+
   it("keeps at most one GNOME grab operation active across disjoint surfaces", () => {
     const globals = installGnomeGlobals({
       display: {
@@ -395,6 +472,105 @@ describe("TilingShadow", () => {
     expect(shadow.inspect().operations).toEqual([
       expect.objectContaining({ id: "operation:2", windowId: thirdId }),
     ]);
+    globals.cleanup();
+  });
+
+  it("cancels an active resize when a moving grab begins", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    const secondId = shadow.inspect().windows[1].id;
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.RESIZING_E);
+    shadow.observeGrabBegin(second, Meta.GrabOp.MOVING);
+    shadow.observeGrabMoveUpdate(second, [480, 540], true);
+
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({ id: "operation:2", kind: "drag", windowId: secondId }),
+    ]);
+    globals.cleanup();
+  });
+
+  it("does not create drag operations for keyboard moving grabs", () => {
+    const window = createMockWindow();
+    const globals = installGnomeGlobals();
+    window._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([window], () => true);
+
+    shadow.observeGrabBegin(window, Meta.GrabOp.KEYBOARD_MOVING);
+    shadow.observeGrabMoveUpdate(window, [100, 100], true);
+
+    expect(shadow.inspect().operations).toEqual([]);
+    globals.cleanup();
+  });
+
+  it("clears and can recreate a drag preview as modifier eligibility changes", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.MOVING);
+    shadow.observeGrabMoveUpdate(first, [1440, 540], true);
+    expect(shadow.inspect().renderPlan.previews).toHaveLength(1);
+
+    shadow.observeGrabMoveUpdate(first, [1440, 540], false);
+    expect(shadow.inspect()).toMatchObject({ operations: [], renderPlan: { previews: [] } });
+
+    shadow.observeGrabMoveUpdate(first, [1440, 540], true);
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({ id: "operation:2", kind: "drag" }),
+    ]);
+    expect(shadow.inspect().renderPlan.previews).toHaveLength(1);
+    globals.cleanup();
+  });
+
+  it("clears a previous drag target when the pointer leaves every Surface", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    const [firstId, secondId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.MOVING);
+    shadow.observeGrabMoveUpdate(first, [1440, 540], true);
+    shadow.observeGrabMoveUpdate(first, [5000, 5000], true);
+    shadow.observeGrabEnd(first, false, true);
+
+    expect(shadow.inspect()).toMatchObject({
+      operations: [],
+      containers: [{ childIds: [firstId, secondId] }],
+      renderPlan: { previews: [] },
+    });
+    globals.cleanup();
+  });
+
+  it("cancels an active operation when any compositor grab supersedes it", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const unknown = createMockWindow();
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    unknown._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.RESIZING_E);
+    shadow.observeGrabBegin(unknown, Meta.GrabOp.MOVING);
+
+    expect(shadow.inspect().operations).toEqual([]);
     globals.cleanup();
   });
 

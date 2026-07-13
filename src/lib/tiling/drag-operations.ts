@@ -239,16 +239,6 @@ export function applyDragOperation(
       candidate.id === event.operationId && candidate.kind === "drag"
   );
   if (!operation) return ignored(inspection);
-  if (
-    operation.topologySignature !== topologySignature(inspection, operation.affectedContainerIds)
-  ) {
-    return rejected(
-      inspection,
-      "stale-operation-topology",
-      "Drag operation topology changed after its last update"
-    );
-  }
-
   if (event.type === "OperationCancelled") {
     const hasPreview = inspection.renderPlan.previews.some(
       (preview) => preview.operationId === operation.id
@@ -266,6 +256,16 @@ export function applyDragOperation(
         : undefined
     );
   }
+  if (
+    operation.topologySignature !== topologySignature(inspection, operation.affectedContainerIds)
+  ) {
+    return rejected(
+      inspection,
+      "stale-operation-topology",
+      "Drag operation topology changed after its last update"
+    );
+  }
+
   if (event.type === "OperationCommitted") {
     return commitDragPlacement(inspection, operation, currentNextContainer);
   }
