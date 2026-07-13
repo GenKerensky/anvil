@@ -31,6 +31,7 @@ import type { PointerFocusSource } from "./pointer-policy.js";
 import type { EventSchedulerPort } from "./event-scheduler.js";
 
 export interface WindowTrackerHost {
+  readonly coreTilingEngine: boolean;
   readonly tree: Tree;
   readonly focusMetaWindow: Meta.Window | null;
   readonly prefsTitle: string;
@@ -76,6 +77,7 @@ const RECONCILE_STABLE_TICKS = 2;
 export class WindowTracker {
   private _host: WindowTrackerHost;
   private _windowReconcileSrcId = 0;
+  private readonly _trackedWindows = new WeakSet<Meta.Window>();
 
   constructor(host: WindowTrackerHost) {
     this._host = host;
@@ -180,7 +182,7 @@ export class WindowTracker {
 
   trackWhenReady(display: Meta.Display, metaWindow: Meta.Window, afterTrack?: () => void) {
     const host = this._host;
-    if (host.tree.findNode(metaWindow)) {
+    if (this._trackedWindows.has(metaWindow) || host.tree.findNode(metaWindow)) {
       this.clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
       return;
     }
@@ -311,7 +313,12 @@ export class WindowTracker {
     const host = this._host;
     let admitted = 0;
     for (const metaWindow of this._currentWindowCandidates()) {
-      if (host.tree.findNode(metaWindow) || !this.validWindow(metaWindow)) continue;
+      if (
+        this._trackedWindows.has(metaWindow) ||
+        host.tree.findNode(metaWindow) ||
+        !this.validWindow(metaWindow)
+      )
+        continue;
 
       this.trackWindow(global.display, metaWindow);
       host.updateMetaWorkspaceMonitor(from, metaWindow.get_monitor(), metaWindow);
@@ -330,6 +337,10 @@ export class WindowTracker {
     // Make window types configurable
     if (this.validWindow(metaWindow)) {
       host.observePortableWindow(metaWindow);
+      if (host.coreTilingEngine) {
+        this.trackCoreWindow(metaWindow);
+        return;
+      }
       host.autoSplitFromFocus();
       const existNodeWindow = host.tree.findNode(metaWindow);
       Logger.debug(`Meta Window ${metaWindow.get_title()} ${metaWindow.get_window_type()}`);
@@ -380,6 +391,7 @@ export class WindowTracker {
           metaWindow,
           initialMode
         );
+        this._trackedWindows.add(metaWindow);
 
         const anvilMetaWin = metaWindow as AnvilMetaWindow;
         this.clearPendingWindowSignals(anvilMetaWin);
@@ -495,6 +507,50 @@ export class WindowTracker {
     }
   }
 
+  private trackCoreWindow(metaWindow: Meta.Window): void {
+    if (this._trackedWindows.has(metaWindow)) return;
+    const host = this._host;
+    const anvilMetaWin = metaWindow as AnvilMetaWindow;
+    this.clearPendingWindowSignals(anvilMetaWin);
+    this._trackedWindows.add(metaWindow);
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+
+    if (!anvilMetaWin.windowSignals) {
+      anvilMetaWin.windowSignals = [
+        metaWindow.connect("position-changed", (_metaWindow: Meta.Window) => {
+          host.observePortableFrame(_metaWindow);
+        }),
+        metaWindow.connect("size-changed", (_metaWindow: Meta.Window) => {
+          host.observePortableFrame(_metaWindow);
+        }),
+        metaWindow.connect("notify::wm-class", () => host.observePortableWindow(metaWindow)),
+        metaWindow.connect("notify::title", () => host.observePortableWindow(metaWindow)),
+        metaWindow.connect("notify::minimized", () => host.observePortableWindow(metaWindow)),
+        metaWindow.connect("notify::fullscreen", () => host.observePortableWindow(metaWindow)),
+        metaWindow.connect("focus", (_metaWindow: Meta.Window) => {
+          host.observePortableFocus(_metaWindow);
+        }),
+        metaWindow.connect("workspace-changed", (_metaWindow: Meta.Window) => {
+          host.observePortableWindow(_metaWindow);
+        }),
+        metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
+          this._trackedWindows.delete(_metaWindow);
+          host.withdrawPortableWindow(_metaWindow);
+        }),
+      ];
+    }
+
+    if (windowActor && !windowActor.actorSignals) {
+      windowActor.actorSignals = [
+        windowActor.connect("destroy", () => {
+          this._trackedWindows.delete(metaWindow);
+          host.withdrawPortableWindow(metaWindow);
+        }),
+      ];
+      windowActor.connect("first-frame", () => host.observePortableWindow(metaWindow));
+    }
+  }
+
   postProcessWindow(nodeWindow: Node<any> | null) {
     if (!nodeWindow) return;
     const host = this._host;
@@ -538,6 +594,14 @@ export class WindowTracker {
    */
   windowDestroy(actor: AnvilWindowActor) {
     const host = this._host;
+    if (host.coreTilingEngine) {
+      const metaWindow = actor.meta_window ?? actor.get_meta_window?.();
+      if (metaWindow) {
+        this._trackedWindows.delete(metaWindow);
+        host.withdrawPortableWindow(metaWindow);
+      }
+      return;
+    }
     const nodeWindow = host.tree.findNodeByActor(actor) as unknown as Node<any> | null;
     const metaWindow = (nodeWindow?.nodeValue ?? actor.meta_window ?? actor.get_meta_window?.()) as
       | Meta.Window

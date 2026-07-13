@@ -91,6 +91,19 @@ describe("TilingShadow", () => {
       selected: true,
     });
     expect(shadow.resolveWindow(inspection.windows[0].id)).toBe(window);
+    const nativeRect = {} as { x: number; y: number; width: number; height: number };
+    Object.defineProperties(nativeRect, {
+      x: { value: 2020, enumerable: true },
+      y: { value: 50, enumerable: true },
+      width: { value: 800, enumerable: false },
+      height: { value: 600, enumerable: false },
+    });
+    expect(shadow.toLocalRect(inspection.surfaces[1].id, nativeRect)).toEqual({
+      x: 100,
+      y: 50,
+      width: 800,
+      height: 600,
+    });
     globals.cleanup();
   });
 
@@ -378,7 +391,8 @@ describe("TilingShadow", () => {
     shadow.bootstrap([first, second], () => true);
     const secondId = shadow.inspect().windows[1].id;
 
-    shadow.observeCommand({ name: "Focus", direction: "RIGHT" }, first);
+    expect(shadow.observeCommand({ name: "Focus", direction: "RIGHT" }, first)).toBe(true);
+    expect(shadow.observeCommand({ name: "PrefsOpen" }, first)).toBe(false);
 
     expect(shadow.inspect()).toMatchObject({
       containers: [{ selectedChildId: secondId }],

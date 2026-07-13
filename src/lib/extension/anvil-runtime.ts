@@ -17,6 +17,7 @@
  */
 
 import GObject from "gi://GObject";
+import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 
 // Gnome Shell imports
@@ -60,6 +61,9 @@ import type { AnvilAction, FloatAction } from "./window/actions.js";
 import { createSessionFlags, type SessionFlagsState } from "./window/session-flags.js";
 import { EventScheduler } from "./event-scheduler.js";
 import { TilingShadow } from "./tiling-shadow.js";
+import { GnomeIntentionApplier } from "./gnome-intention-applier.js";
+import { CoreTilingEffectDriver } from "./core-tiling-effect-driver.js";
+import { selectTilingEngineMode, type TilingEngineMode } from "./tiling-engine-mode.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -117,6 +121,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private _pointerPolicy: PointerPolicy | null = null;
   private _tilingRender: TilingRender | null = null;
   private _tilingShadow: TilingShadow | null = null;
+  private _intentionApplier: GnomeIntentionApplier | null = null;
+  private _coreEffectDriver: CoreTilingEffectDriver | null = null;
+  private _tilingEngineMode: TilingEngineMode = "shadow";
   private _tilingShadowFailure: string | null = null;
   private _tilingShadowComparison: ReturnType<TilingShadow["compareObservedGeometry"]> | null =
     null;
@@ -144,18 +151,48 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private _initializeGraph(): void {
+    this._tilingEngineMode = selectTilingEngineMode(
+      GLib.environ_getenv(GLib.get_environ(), "ANVIL_TILING_ENGINE")
+    );
+    this._eventScheduler = new EventScheduler();
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
     this._rules = new RulesEngine();
     this.reloadWindowOverrides();
     this._tilingShadow = new TilingShadow(
       this.ext.settings,
-      () => this._rules?.windowProps.overrides ?? []
+      () => this._rules?.windowProps.overrides ?? [],
+      (transition) => {
+        if (self._tilingEngineMode === "core") self._coreEffectDriver?.consume(transition);
+      }
+    );
+    this._intentionApplier = new GnomeIntentionApplier({
+      resolveWindow: (id) => self._tilingShadow?.resolveWindow(id),
+      toGlobalRect: (surface, rect) => self._tilingShadow!.toGlobalRect(surface, rect),
+      toLocalRect: (surface, rect) => self._tilingShadow!.toLocalRect(surface, rect),
+      participationChanged: () => {
+        // Core participation is authoritative; non-participant platform policy is Runtime-owned.
+      },
+      presentContainer: () => {
+        // Identity-based container actors are wired in the next migration slice.
+      },
+      presentPreview: () => {
+        // Identity-based preview actors are wired in the next migration slice.
+      },
+      clearPreview: () => {
+        // Identity-based preview actors are wired in the next migration slice.
+      },
+    });
+    this._coreEffectDriver = new CoreTilingEffectDriver(
+      this._intentionApplier,
+      this._eventScheduler,
+      (facts) => self._tilingShadow?.observeFacts(facts),
+      () => self._tilingShadow?.requestReconcile()
     );
     this._tilingShadowFailure = null;
     this._tilingShadowComparison = null;
     this._session = createSessionFlags();
     // Keybindings are wired separately; host getters remain valid across graph activation.
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
     // LayoutEngine precedes Tree so workspace activation can determine monitor layouts.
     this._layout = new LayoutEngine({
       get tree() {
@@ -178,6 +215,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     });
     // SignalManager owns workspace signal binding; host getters resolve after the graph is complete.
     this._signalManager = new SignalManager({
+      get coreTilingEngine() {
+        return self._tilingEngineMode === "core";
+      },
       get tracker() {
         return self._tracker!;
       },
@@ -233,7 +273,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       floatingWindow: (n) => self.floatingWindow(n),
       bindWorkspaceSignals: (ws) => self.bindWorkspaceSignals(ws),
     });
-    this._eventScheduler = new EventScheduler();
     this.theme = this.ext.theme;
     // Always construct PointerPolicy; enable/disable behavior via settings (B9-2).
     this._ensurePointerPolicy();
@@ -292,6 +331,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         ),
     });
     this._tracker = new WindowTracker({
+      get coreTilingEngine() {
+        return self._tilingEngineMode === "core";
+      },
       get tree() {
         return self.tree;
       },
@@ -558,7 +600,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private notifyWorkspaceSettled() {
     this._pointerPolicy?.onWorkspaceSettled();
-    this._recordSettledTilingComparison();
+    if (this._tilingEngineMode === "shadow") this._recordSettledTilingComparison();
   }
 
   private addFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
@@ -596,6 +638,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private trackCurrentMonWs() {
+    if (this._tilingEngineMode === "core") return;
     this._wsMutations!.trackCurrentMonWs();
   }
 
@@ -670,9 +713,11 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   /** Dispatch a typed user action via CommandBus (B3-1). */
   command(action: AnvilAction) {
     this._assertEnabled("command");
-    this._withTilingShadow("command", (shadow) =>
-      shadow.observeCommand(action, this.focusMetaWindow)
-    );
+    let handledByCore = false;
+    this._withTilingShadow("command", (shadow) => {
+      handledByCore = shadow.observeCommand(action, this.focusMetaWindow);
+    });
+    if (this._tilingEngineMode === "core" && handledByCore) return;
     this._commandBus!.dispatch(action);
   }
 
@@ -748,6 +793,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._tree = null;
     this._eventScheduler = null;
     this._tilingRender = null;
+    this._coreEffectDriver = null;
+    this._intentionApplier = null;
     this._tilingShadow = null;
     this._tilingShadowComparison = null;
     this._tracker = null;
@@ -775,7 +822,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       this._withTilingShadow("bootstrap", (shadow) =>
         shadow.bootstrap(this.windowsAllWorkspaces, (window) => this._tracker!.validWindow(window))
       );
-      this.reloadTree("enable");
+      if (this._tilingEngineMode === "shadow") this.reloadTree("enable");
       rollback.push(() => this._renderScheduler?.dispose());
       this._state = "enabled";
       Logger.debug(`runtime:enable`);
@@ -973,6 +1020,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private renderTree(from: string, force: boolean = false) {
+    if (this._tilingEngineMode === "core") return;
     this._renderScheduler!.renderTree(from, force);
   }
 
@@ -988,6 +1036,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
    * TODO: move this to tree.js
    */
   private reloadTree(from: string) {
+    if (this._tilingEngineMode === "core") return;
     this._renderScheduler!.reloadTree(from);
   }
 
@@ -1034,6 +1083,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     _monitor: number | null,
     metaWindow: Meta.Window
   ) {
+    if (this._tilingEngineMode === "core") return;
     this._wsMutations!.updateMetaWorkspaceMonitor(from, _monitor, metaWindow);
   }
 
@@ -1042,10 +1092,12 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
    * Useful for updating the active window border, etc.
    */
   private updateMetaPositionSize(_metaWindow: Meta.Window, from: string) {
+    if (this._tilingEngineMode === "core") return;
     this._wsMutations!.updateMetaPositionSize(_metaWindow, from);
   }
 
   private updateDecorationLayout() {
+    if (this._tilingEngineMode === "core") return;
     this._decorationLayout!.updateDecorationLayout();
   }
 
@@ -1084,10 +1136,18 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private _handleGrabOpBegin(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
     this._withTilingShadow("grab-begin", (shadow) => shadow.observeGrabBegin(metaWindow, grabOp));
+    if (this._tilingEngineMode === "core") return;
     this._grab!.begin(display, metaWindow, grabOp);
   }
 
   private _handleGrabOpEnd(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
+    if (this._tilingEngineMode === "core") {
+      this._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(metaWindow));
+      this._withTilingShadow("grab-end", (shadow) =>
+        shadow.observeGrabEnd(metaWindow, false, false)
+      );
+      return;
+    }
     const beganPointerDrag =
       this._grab!.grabOp === Meta.GrabOp.MOVING ||
       this._grab!.grabOp === Meta.GrabOp.MOVING_UNCONSTRAINED ||
@@ -1174,15 +1234,20 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
    * Does not expose private fields to callers.
    */
   getTestStateJson(): string {
+    const portableComparison =
+      this._tilingEngineMode === "core" && this._tilingShadow
+        ? this._tilingShadow.compareObservedGeometry()
+        : this._tilingShadowComparison;
     return JSON.stringify({
       treeExists: !!this._tree!,
+      tilingEngineMode: this._tilingEngineMode,
       tilingEnabled: this.ext.settings.get_boolean("tiling-mode-enabled"),
       stackedEnabled: this.ext.settings.get_boolean("stacked-tiling-mode-enabled"),
       tabbedEnabled: this.ext.settings.get_boolean("tabbed-tiling-mode-enabled"),
       tree: this._tree ? this._tree!.serializeForTest() : null,
       portableTiling: this._tilingShadow?.inspect() ?? null,
       portablePresentation: this._tilingShadow?.presentationPlan() ?? null,
-      portableTilingShadow: this._tilingShadowComparison,
+      portableTilingShadow: portableComparison,
       portableTilingShadowFailure: this._tilingShadowFailure,
     });
   }
@@ -1215,6 +1280,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._rules!.windowProps = props;
     this._rules!.invalidateClassificationCache();
     this.windowProps = props;
+    this._withTilingShadow("float-override-cleanup", (shadow) => shadow.observePolicy());
   }
 
   private floatAllWindows() {

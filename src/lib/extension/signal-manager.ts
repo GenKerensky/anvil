@@ -28,6 +28,7 @@ type SignalId = number;
 
 /** Host surface for SignalManager — intentionally wide (C1 accepted seam). */
 export interface SignalManagerHost {
+  readonly coreTilingEngine: boolean;
   readonly tracker: WindowTracker;
   readonly tree: Tree;
   readonly layout: LayoutEngine;
@@ -118,6 +119,7 @@ export class SignalManager {
           return;
         }
         host.observePortableTopology();
+        if (host.coreTilingEngine) return;
         if (host.tree.getNodeByType("WINDOW").length > 0) {
           const workspaceReload = this._workspaceAdded || this._workspaceRemoved;
           if (workspaceReload) {
@@ -137,6 +139,7 @@ export class SignalManager {
       }),
       shellWm.connect("minimize", () => {
         host.hideWindowBorders();
+        if (host.coreTilingEngine) return;
         const focusNodeWindow = host.tree.findNode(global.display.get_focus_window());
         if (focusNodeWindow) {
           if (host.tree.getTiledChildren(focusNodeWindow!.parentNode!.childNodes).length === 0) {
@@ -151,6 +154,7 @@ export class SignalManager {
         if (prevFrozen) host.freezeRender();
       }),
       shellWm.connect("unminimize", () => {
+        if (host.coreTilingEngine) return;
         const focusNodeWindow = host.tree.findNode(global.display.get_focus_window());
         if (focusNodeWindow) {
           host.layout.resetSiblingPercent(focusNodeWindow!.parentNode!);
@@ -179,6 +183,7 @@ export class SignalManager {
       }),
       extWsm.connect("workspace-added", (_wsm, wsIndex) => {
         host.observePortableTopology();
+        if (host.coreTilingEngine) return;
         host.tree.addWorkspace(wsIndex);
         host.trackCurrentMonWs();
         this._workspaceAdded = true;
@@ -186,6 +191,7 @@ export class SignalManager {
       }),
       extWsm.connect("workspace-removed", (_wsm, wsIndex) => {
         host.observePortableTopology();
+        if (host.coreTilingEngine) return;
         host.tree.removeWorkspace(wsIndex);
         host.trackCurrentMonWs();
         this._workspaceRemoved = true;
@@ -238,6 +244,7 @@ export class SignalManager {
         const eventObj = {
           name: "focus-after-overview",
           callback: () => {
+            if (host.coreTilingEngine) return;
             const focusNodeWindow = host.tree.findNode(global.display.get_focus_window());
             host.updateStackedFocus(focusNodeWindow);
             host.updateTabbedFocus(focusNodeWindow);

@@ -29,6 +29,7 @@ describe("CoreTilingEffectDriver", () => {
     const apply = vi.fn(() => ({ facts: [immediateFact], pendingFrames }));
     const observeSettled = vi.fn(() => [settledFact]);
     const submitFacts = vi.fn();
+    const requestReconcile = vi.fn();
     const scheduled: Array<{ name: string; callback: () => void; intervalMs?: number }> = [];
     const scheduler = {
       pendingCount: 0,
@@ -36,7 +37,12 @@ describe("CoreTilingEffectDriver", () => {
         scheduled.push({ ...event, intervalMs });
       },
     };
-    const driver = new CoreTilingEffectDriver({ apply, observeSettled }, scheduler, submitFacts);
+    const driver = new CoreTilingEffectDriver(
+      { apply, observeSettled },
+      scheduler,
+      submitFacts,
+      requestReconcile
+    );
     const transition: TilingTransition = {
       status: "committed",
       revision: 2,
@@ -65,6 +71,10 @@ describe("CoreTilingEffectDriver", () => {
 
     expect(observeSettled).toHaveBeenCalledWith(pendingFrames);
     expect(submitFacts).toHaveBeenCalledWith([immediateFact, settledFact]);
+    expect(requestReconcile).toHaveBeenCalledOnce();
+    expect(submitFacts.mock.invocationCallOrder[0]).toBeLessThan(
+      requestReconcile.mock.invocationCallOrder[0]
+    );
   });
 
   it("does not schedule work for ignored transitions or empty results", () => {
@@ -74,7 +84,8 @@ describe("CoreTilingEffectDriver", () => {
     const driver = new CoreTilingEffectDriver(
       { apply, observeSettled: vi.fn(() => []) },
       scheduler,
-      submitFacts
+      submitFacts,
+      vi.fn()
     );
 
     driver.consume({

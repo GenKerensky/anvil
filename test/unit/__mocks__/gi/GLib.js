@@ -14,6 +14,12 @@ class Variant {
 export { Variant };
 
 export default {
+  get_environ: vi.fn(() => []),
+  environ_getenv: vi.fn((env, variable) => {
+    const prefix = `${variable}=`;
+    const entry = env?.find((value) => value.startsWith(prefix));
+    return entry ? entry.slice(prefix.length) : null;
+  }),
   get_user_config_dir: vi.fn(() => "/tmp/mock-config"),
   build_filenamev: vi.fn((parts) => parts.join("/")),
   mkdir_with_parents: vi.fn(() => 0),

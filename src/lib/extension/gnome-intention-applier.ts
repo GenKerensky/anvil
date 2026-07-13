@@ -114,12 +114,15 @@ export class GnomeIntentionApplier {
               legacyWindow.unmaximize(Meta.MaximizeFlags.BOTH);
             }
             const actor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+            // `window-created` can precede compositor actor creation. Moving the frame at
+            // that point crashes Mutter. Defer by observing the unchanged frame at settle;
+            // reconciliation will issue a fresh placement once the mapped actor exists.
             if (!actor) {
-              if (!withdrawnWindows.has(intention.windowId)) {
-                facts.push({ type: "WindowWithdrawn", windowId: intention.windowId });
-                withdrawnWindows.add(intention.windowId);
-              }
-              fail(intention, "target-withdrawn");
+              pendingFrames.push({
+                windowId: intention.windowId,
+                surfaceId: intention.surfaceId,
+                causalToken: token(intention),
+              });
               break;
             }
             actor.remove_all_transitions();

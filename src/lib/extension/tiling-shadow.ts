@@ -23,6 +23,7 @@ import {
   type Point,
   type PlatformFact,
   type PlatformSnapshot,
+  type Rect,
   type ParticipationRule,
   type SurfaceFact,
   type SurfaceConstraint,
@@ -451,6 +452,10 @@ export class TilingShadow {
     this.submit({ type: "FactsObserved", facts });
   }
 
+  requestReconcile(): void {
+    this.submit({ type: "ReconcileRequested" });
+  }
+
   bootstrap(windows: readonly Meta.Window[], validWindow: (window: Meta.Window) => boolean): void {
     this.machine = createTilingStateMachine(this.policy());
     this.rejectedEvents = [];
@@ -537,10 +542,10 @@ export class TilingShadow {
     this.observePolicy();
   }
 
-  observeCommand(action: AnvilAction, focusedWindow: Meta.Window | null): void {
-    if (!focusedWindow) return;
+  observeCommand(action: AnvilAction, focusedWindow: Meta.Window | null): boolean {
+    if (!focusedWindow) return false;
     const focusedWindowId = this.identities.knownWindow(focusedWindow);
-    if (!focusedWindowId) return;
+    if (!focusedWindowId) return false;
     const direction =
       "direction" in action
         ? (
@@ -578,7 +583,7 @@ export class TilingShadow {
       const inspection = this.machine.inspect();
       const window = inspection.windows.find((item) => item.id === focusedWindowId);
       const container = inspection.containers.find((item) => item.id === window?.parentId);
-      if (!container) return;
+      if (!container) return false;
       const layout = action.orientation
         ? action.orientation.toLowerCase().startsWith("v")
           ? "vertical"
@@ -595,7 +600,7 @@ export class TilingShadow {
       const inspection = this.machine.inspect();
       const window = inspection.windows.find((item) => item.id === focusedWindowId);
       const container = inspection.containers.find((item) => item.id === window?.parentId);
-      if (!container) return;
+      if (!container) return false;
       let layout: Layout;
       if (action.name === "LayoutStackedToggle") {
         layout = container.layout === "stacked" ? "horizontal" : "stacked";
@@ -606,7 +611,9 @@ export class TilingShadow {
       }
       command = { type: "SetLayout", windowId: focusedWindowId, layout };
     }
-    if (command) this.submit({ type: "CommandRequested", command });
+    if (!command) return false;
+    this.submit({ type: "CommandRequested", command });
+    return true;
   }
 
   observeGrabBegin(metaWindow: Meta.Window, grabOp: Meta.GrabOp): void {
@@ -659,6 +666,28 @@ export class TilingShadow {
 
   resolveWindow(id: WindowId): Meta.Window | undefined {
     return this.identities.resolveWindow(id);
+  }
+
+  toGlobalRect(surface: SurfaceId, rect: Rect): Rect {
+    const origin = this.surfaceOrigins.get(surface);
+    if (!origin) throw new Error(`missing GNOME origin for ${surface}`);
+    return {
+      x: rect.x + origin.x,
+      y: rect.y + origin.y,
+      width: rect.width,
+      height: rect.height,
+    };
+  }
+
+  toLocalRect(surface: SurfaceId, rect: Rect): Rect {
+    const origin = this.surfaceOrigins.get(surface);
+    if (!origin) throw new Error(`missing GNOME origin for ${surface}`);
+    return {
+      x: rect.x - origin.x,
+      y: rect.y - origin.y,
+      width: rect.width,
+      height: rect.height,
+    };
   }
 
   presentationPlan(): GnomePresentationPlan {

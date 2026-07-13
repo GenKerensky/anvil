@@ -465,6 +465,31 @@ export function getAnvilSettings() {
  * @returns {Array<{title: string | null, percent: number, rect: {x: number, y: number, width: number, height: number} | null, parentLayout: any}>}
  */
 export function getNodePercents() {
+  const state = JSON.parse(getAnvilRuntime().getStateJson());
+  if (state.tilingEngineMode === "core") {
+    const inspection = state.portableTiling;
+    const windows = /** @type {any[]} */ (inspection?.windows || []);
+    const containers = /** @type {any[]} */ (inspection?.containers || []);
+    const plans = /** @type {any[]} */ (inspection?.renderPlan?.windows || []);
+    return windows
+      .filter(function (window) {
+        return window.participating;
+      })
+      .map(function (window) {
+        const parent = containers.find(function (container) {
+          return container.id === window.parentId;
+        });
+        const plan = plans.find(function (candidate) {
+          return candidate.id === window.id;
+        });
+        return {
+          title: window.title || null,
+          percent: parent?.weights?.[window.id] ?? null,
+          rect: plan?.frame ?? null,
+          parentLayout: parent?.layout ?? null,
+        };
+      });
+  }
   return getRuntimeWindowStates().map(function (node) {
     return {
       title: node.title,

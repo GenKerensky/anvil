@@ -138,4 +138,38 @@ describe("GnomeIntentionApplier", () => {
     expect(participationChanged).toHaveBeenCalledWith(window, true);
     globals.cleanup();
   });
+
+  it("defers a newly created Meta.Window until its compositor actor exists", () => {
+    const globals = installGnomeGlobals();
+    const surface = surfaceId("surface:1");
+    const id = windowId("window:1");
+    const window = createMockWindow({ rect: { x: 0, y: 0, width: 100, height: 100 } });
+    vi.spyOn(window, "get_compositor_private").mockReturnValue(null);
+    const moveResize = vi.spyOn(window, "move_resize_frame");
+    const applier = new GnomeIntentionApplier({
+      resolveWindow: () => window,
+      toGlobalRect: (_surfaceId, rect) => ({ ...rect }),
+      toLocalRect: (_surfaceId, rect) => ({ ...rect }),
+      participationChanged: vi.fn(),
+      presentContainer: vi.fn(),
+      presentPreview: vi.fn(),
+      clearPreview: vi.fn(),
+    });
+
+    const applied = applier.apply([
+      {
+        type: "PlaceWindow",
+        revision: 1,
+        ordinal: 0,
+        windowId: id,
+        surfaceId: surface,
+        frame: { x: 10, y: 20, width: 300, height: 200 },
+      },
+    ]);
+
+    expect(applied.facts).toEqual([]);
+    expect(moveResize).not.toHaveBeenCalled();
+    expect(applied.pendingFrames).toHaveLength(1);
+    globals.cleanup();
+  });
 });

@@ -15,7 +15,8 @@ export class CoreTilingEffectDriver {
   constructor(
     private readonly applier: CoreIntentionApplierPort,
     private readonly scheduler: EventSchedulerPort,
-    private readonly submitFacts: (facts: readonly PlatformFact[]) => void
+    private readonly submitFacts: (facts: readonly PlatformFact[]) => void,
+    private readonly requestReconcile: () => void
   ) {}
 
   consume(transition: TilingTransition): void {
@@ -29,6 +30,7 @@ export class CoreTilingEffectDriver {
           const settled = this.applier.observeSettled(applied.pendingFrames);
           const facts = [...applied.facts, ...settled];
           if (facts.length > 0) this.submitFacts(facts);
+          if (applied.pendingFrames.length > 0) this.requestReconcile();
         },
       },
       220
