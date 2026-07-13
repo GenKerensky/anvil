@@ -19,6 +19,16 @@ import { classifyParticipation, effectiveParticipation } from "./participation.j
 import { reconcile } from "./reconciliation.js";
 import { validateSurfaces } from "./validation.js";
 
+function tilingSurfaceIds(
+  surfaces: readonly { id: string; capabilities: { move: boolean; resize: boolean } }[]
+): Set<string> {
+  return new Set(
+    surfaces
+      .filter((surface) => surface.capabilities.move && surface.capabilities.resize)
+      .map((surface) => surface.id)
+  );
+}
+
 function inspectWindowFact(
   fact: WindowFact,
   policy: TilingPolicy,
@@ -128,7 +138,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               diagnostics: [],
             };
           }
-          const availableSurfaces = new Set(inspection.surfaces.map((surface) => surface.id));
+          const availableSurfaces = tilingSurfaceIds(inspection.surfaces);
           const candidate: WindowInspection = {
             ...current,
             manualParticipation,
@@ -140,6 +150,29 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             inspection.policy,
             availableSurfaces
           );
+          const participationSurface = inspection.surfaces.find(
+            (item) => item.id === current.surfaceId
+          );
+          if (
+            participating &&
+            (!current.capabilities.move ||
+              !current.capabilities.resize ||
+              !participationSurface?.capabilities.move ||
+              !participationSurface.capabilities.resize)
+          ) {
+            return {
+              status: "rejected",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [
+                {
+                  code: "capability-unsupported",
+                  message: "Tiling participation requires move and resize capabilities",
+                  identity: current.id,
+                },
+              ],
+            };
+          }
           let placementHints = [...inspection.placementHints];
           if (current.participating && !participating) {
             placementHints = placementHints.filter((hint) => hint.windowId !== current.id);
@@ -252,6 +285,24 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               diagnostics: [],
             };
           }
+          const target = inspection.windows.find((candidate) => candidate.id === targetId);
+          const surface = inspection.surfaces.find(
+            (candidate) => candidate.id === target?.surfaceId
+          );
+          if (!target?.capabilities.focus || !surface?.capabilities.focus) {
+            return {
+              status: "rejected",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [
+                {
+                  code: "capability-unsupported",
+                  message: "Focus target does not support platform focus",
+                  identity: targetId,
+                },
+              ],
+            };
+          }
           const revision = inspection.revision + 1;
           const containers = [...inspection.containers];
           containers[containerIndex] = { ...container, selectedChildId: targetId };
@@ -302,6 +353,27 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             };
           }
           const container = inspection.containers[containerIndex];
+          const surface = inspection.surfaces.find(
+            (candidate) => candidate.id === container.surfaceId
+          );
+          const placementUnsupported = container.childIds.some((id) => {
+            const child = inspection.windows.find((candidate) => candidate.id === id);
+            return child && (!child.capabilities.move || !child.capabilities.resize);
+          });
+          if (placementUnsupported || !surface?.capabilities.move || !surface.capabilities.resize) {
+            return {
+              status: "rejected",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [
+                {
+                  code: "capability-unsupported",
+                  message: `${command.type} requires move and resize capabilities`,
+                  identity: command.windowId,
+                },
+              ],
+            };
+          }
           const horizontal = container.layout === "horizontal";
           const compatible = horizontal
             ? command.direction === "left" || command.direction === "right"
@@ -375,6 +447,25 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           };
         }
         const current = inspection.containers[containerIndex];
+        const surface = inspection.surfaces.find((candidate) => candidate.id === current.surfaceId);
+        const placementUnsupported = current.childIds.some((id) => {
+          const child = inspection.windows.find((candidate) => candidate.id === id);
+          return child && (!child.capabilities.move || !child.capabilities.resize);
+        });
+        if (placementUnsupported || !surface?.capabilities.move || !surface.capabilities.resize) {
+          return {
+            status: "rejected",
+            revision: inspection.revision,
+            intentions: [],
+            diagnostics: [
+              {
+                code: "capability-unsupported",
+                message: "SetLayout requires move and resize capabilities",
+                identity: command.windowId,
+              },
+            ],
+          };
+        }
         if (current.layout === command.layout) {
           return {
             status: "ignored",
@@ -445,7 +536,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         }
 
         const nextPolicy = copyPolicy(event.policy);
-        const availableSurfaces = new Set(inspection.surfaces.map((surface) => surface.id));
+        const availableSurfaces = tilingSurfaceIds(inspection.surfaces);
         const participationChanges: Array<{
           windowId: WindowInspection["id"];
           participating: boolean;
@@ -483,12 +574,18 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           );
           return { ...classifiedWindow, participating: true, parentId: surface?.rootId };
         });
-        const containers = inspection.containers.map((container) => ({
-          ...container,
-          childIds: windows
+        const containers = inspection.containers.map((container) => {
+          const desired = windows
             .filter((window) => window.participating && window.parentId === container.id)
-            .map((window) => window.id),
-        }));
+            .map((window) => window.id);
+          const desiredSet = new Set<string>(desired);
+          const retained = container.childIds.filter((id) => desiredSet.has(id));
+          const retainedSet = new Set<string>(retained);
+          return {
+            ...container,
+            childIds: [...retained, ...desired.filter((id) => !retainedSet.has(id))],
+          };
+        });
         const revision = inspection.revision + 1;
         const windowPlans = deriveWindowPlans(inspection.surfaces, windows, containers, nextPolicy);
         const intentions = [
@@ -547,12 +644,25 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         let placementHints = [...inspection.placementHints];
         let evacuationHints = [...inspection.evacuationHints];
         let operations = [...inspection.operations];
+        let diagnostics = [...inspection.diagnostics];
+        const eventDiagnostics: TilingInspection["diagnostics"][number][] = [];
         const participationChanges: Array<{
           windowId: WindowInspection["id"];
           participating: boolean;
         }> = [];
         let changed = false;
         for (const fact of event.facts) {
+          if (fact.type === "EffectFailed") {
+            if (fact.causalToken.revision > inspection.revision) continue;
+            const diagnostic = {
+              code: `effect-failed:${fact.code}`,
+              message: `Platform effect ${fact.causalToken.revision}:${fact.causalToken.ordinal} failed`,
+              ...(fact.identity ? { identity: fact.identity } : {}),
+            };
+            eventDiagnostics.push(diagnostic);
+            diagnostics = [...diagnostics, diagnostic].slice(-50);
+            changed = true;
+          }
           if (fact.type === "FocusObserved") {
             if (
               fact.windowId !== undefined &&
@@ -602,7 +712,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           if (fact.type === "WindowObserved") {
             const index = windows.findIndex((window) => window.id === fact.window.id);
             const previous = index >= 0 ? windows[index] : undefined;
-            const availableSurfaces = new Set(surfaces.map((surface) => surface.id));
+            const availableSurfaces = tilingSurfaceIds(surfaces);
             const observed = inspectWindowFact(
               fact.window,
               inspection.policy,
@@ -627,6 +737,9 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               });
             }
             containers = containers.map((container) => {
+              if (container.id === next.parentId && container.childIds.includes(next.id)) {
+                return container;
+              }
               const childIds = container.childIds.filter((id) => id !== next.id);
               return container.id === next.parentId
                 ? { ...container, childIds: [...childIds, next.id] }
@@ -654,7 +767,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               });
             }
             const candidate = { ...previous, surfaceId: fact.surfaceId };
-            const availableSurfaces = new Set(surfaces.map((surface) => surface.id));
+            const availableSurfaces = tilingSurfaceIds(surfaces);
             const participating = effectiveParticipation(
               candidate,
               inspection.policy,
@@ -801,7 +914,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 ? { selectedChildId: hint.selectedChildId }
                 : {}),
             });
-            const availableSurfaces = new Set([...surfaces.map((surface) => surface.id)]);
+            const availableSurfaces = tilingSurfaceIds(surfaces);
             for (let index = 0; index < windows.length; index += 1) {
               const window = windows[index];
               if (window.surfaceId !== fact.surface.id) continue;
@@ -873,6 +986,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           operations,
           placementHints,
           evacuationHints,
+          diagnostics,
           renderPlan: {
             ...inspection.renderPlan,
             revision,
@@ -884,10 +998,23 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             containers: deriveContainerPlans(surfaces, containers),
           },
         });
-        return { status: "committed", revision, intentions, diagnostics: [] };
+        return { status: "committed", revision, intentions, diagnostics: eventDiagnostics };
       }
 
       if (event.type === "PlatformSnapshotObserved") {
+        if (inspection.revision !== 0) {
+          return {
+            status: "rejected",
+            revision: inspection.revision,
+            intentions: [],
+            diagnostics: [
+              {
+                code: "already-bootstrapped",
+                message: "PlatformSnapshotObserved is valid only for initial bootstrap",
+              },
+            ],
+          };
+        }
         const invalid = validateSurfaces(event.snapshot.surfaces);
         if (invalid) {
           return {
@@ -923,7 +1050,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           surfaceRoots.set(surface.id, rootId);
         }
 
-        const surfaceIds = new Set(surfaces.map((surface) => surface.id));
+        const surfaceIds = tilingSurfaceIds(surfaces);
         const windows: WindowInspection[] = [...event.snapshot.windows]
           .sort((a, b) => a.id.localeCompare(b.id))
           .map((window) => {

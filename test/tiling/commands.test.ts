@@ -145,4 +145,33 @@ describe("Tiling Commands", () => {
       containers: [{ childIds: [second, first] }],
     });
   });
+
+  it("rejects focus commands when the target capability is unavailable", () => {
+    const { machine, first, second, surface } = twoWindowMachine();
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "WindowObserved",
+          window: {
+            id: second,
+            surfaceId: surface,
+            frame: { x: 500, y: 0, width: 500, height: 800 },
+            available: true,
+            capabilities: { focus: false, raise: true, move: true, resize: true },
+          },
+        },
+      ],
+    });
+
+    expect(
+      machine.dispatch({
+        type: "CommandRequested",
+        command: { type: "FocusDirection", windowId: first, direction: "right" },
+      })
+    ).toMatchObject({
+      status: "rejected",
+      diagnostics: [{ code: "capability-unsupported", identity: second }],
+    });
+  });
 });

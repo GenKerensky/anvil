@@ -97,4 +97,57 @@ describe("Tiling Reconciliation", () => {
       diagnostics: [],
     });
   });
+
+  it("records portable effect failures without rolling state backward", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const terminal = windowId("terminal");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [
+          {
+            id: terminal,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 1000, height: 800 },
+            available: true,
+            capabilities,
+          },
+        ],
+      },
+    });
+
+    const transition = machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "EffectFailed",
+          causalToken: { revision: 1, ordinal: 1 },
+          code: "target-withdrawn",
+          identity: terminal,
+        },
+      ],
+    });
+
+    expect(transition).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [],
+      diagnostics: [{ code: "effect-failed:target-withdrawn", identity: terminal }],
+    });
+    expect(machine.inspect()).toMatchObject({
+      revision: 2,
+      diagnostics: [{ code: "effect-failed:target-withdrawn", identity: terminal }],
+      windows: [{ id: terminal, participating: true }],
+    });
+  });
 });

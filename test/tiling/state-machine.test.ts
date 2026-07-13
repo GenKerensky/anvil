@@ -98,6 +98,30 @@ describe("TilingStateMachine", () => {
     });
   });
 
+  it("accepts exactly one bootstrap snapshot per machine lifetime", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const snapshot = {
+      surfaces: [
+        {
+          id: primary,
+          workArea: { x: 0, y: 0, width: 1920, height: 1080 },
+          neighbors: {},
+          capabilities: { focus: true, raise: true, move: true, resize: true },
+        },
+      ],
+      windows: [],
+    } as const;
+    machine.dispatch({ type: "PlatformSnapshotObserved", snapshot });
+
+    expect(machine.dispatch({ type: "PlatformSnapshotObserved", snapshot })).toMatchObject({
+      status: "rejected",
+      revision: 1,
+      diagnostics: [{ code: "already-bootstrapped" }],
+    });
+    expect(machine.inspect().surfaces[0].rootId).toBe("container:1");
+  });
+
   it("admits available windows and derives split geometry", () => {
     const machine = createTilingStateMachine(policy);
     const primary = surfaceId("primary");
@@ -199,6 +223,40 @@ describe("TilingStateMachine", () => {
           },
         ],
       },
+    });
+  });
+
+  it("keeps windows outside topology when placement capabilities are unavailable", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const fixed = windowId("fixed");
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities: { focus: true, raise: true, move: true, resize: true },
+          },
+        ],
+        windows: [
+          {
+            id: fixed,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 400, height: 300 },
+            available: true,
+            capabilities: { focus: true, raise: true, move: true, resize: false },
+          },
+        ],
+      },
+    });
+
+    expect(machine.inspect()).toMatchObject({
+      windows: [{ id: fixed, policyParticipation: true, participating: false }],
+      containers: [{ childIds: [] }],
+      renderPlan: { windows: [] },
     });
   });
 
@@ -561,6 +619,55 @@ describe("TilingStateMachine", () => {
     });
   });
 
+  it("gives matching force-tile rules precedence over automatic float rules", () => {
+    const overridePolicy: TilingPolicy = {
+      ...policy,
+      participationRules: [
+        { id: "float-dialog", action: "float", tags: ["dialog"] },
+        { id: "force-special", action: "tile", applicationId: "~special-app" },
+      ],
+    };
+    const machine = createTilingStateMachine(overridePolicy);
+    const primary = surfaceId("primary");
+    const special = windowId("special");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [
+          {
+            id: special,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 500, height: 500 },
+            available: true,
+            capabilities,
+            applicationId: "ORG.EXAMPLE.SPECIAL-APP",
+            tags: ["dialog"],
+          },
+        ],
+      },
+    });
+
+    expect(machine.inspect()).toMatchObject({
+      windows: [
+        {
+          id: special,
+          participating: true,
+          policyParticipationSource: "rule:force-special",
+        },
+      ],
+    });
+  });
+
   it("applies gaps and Surface constraints only to derived frames", () => {
     const primary = surfaceId("primary");
     const constrainedPolicy: TilingPolicy = {
@@ -729,5 +836,52 @@ describe("TilingStateMachine", () => {
       focusedWindowId: second,
       containers: [{ selectedChildId: second, childIds: before }],
     });
+  });
+
+  it("does not reinterpret metadata observation as a structural move", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const first = windowId("first");
+    const second = windowId("second");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [first, second].map((id) => ({
+          id,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 500, height: 800 },
+          available: true,
+          capabilities,
+        })),
+      },
+    });
+
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "WindowObserved",
+          window: {
+            id: first,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 500, height: 800 },
+            available: true,
+            capabilities,
+            title: "metadata arrived",
+          },
+        },
+      ],
+    });
+
+    expect(machine.inspect().containers[0].childIds).toEqual([first, second]);
   });
 });

@@ -49,7 +49,7 @@ function resizeMachine() {
       })),
     },
   });
-  return { machine, first, second };
+  return { machine, surface, first, second };
 }
 
 describe("Tiling Operations", () => {
@@ -152,6 +152,40 @@ describe("Tiling Operations", () => {
       operations: [],
       windows: [{ id: first }],
       containers: [{ childIds: [first] }],
+    });
+  });
+
+  it("rejects resize when an affected window cannot resize", () => {
+    const { machine, surface, first } = resizeMachine();
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        {
+          type: "WindowObserved",
+          window: {
+            id: first,
+            surfaceId: surface,
+            frame: { x: 0, y: 0, width: 500, height: 800 },
+            available: true,
+            capabilities: { focus: true, raise: true, move: true, resize: false },
+          },
+        },
+      ],
+    });
+
+    expect(
+      machine.dispatch({
+        type: "OperationStarted",
+        operation: {
+          id: operationId("unsupported"),
+          kind: "resize",
+          windowId: first,
+          direction: "right",
+        },
+      })
+    ).toMatchObject({
+      status: "rejected",
+      diagnostics: [{ code: "capability-unsupported" }],
     });
   });
 });

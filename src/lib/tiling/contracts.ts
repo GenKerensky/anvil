@@ -258,6 +258,12 @@ export type PlatformFact =
   | Readonly<{
       type: "FocusObserved";
       windowId?: WindowId;
+    }>
+  | Readonly<{
+      type: "EffectFailed";
+      causalToken: IntentionToken;
+      code: string;
+      identity?: string;
     }>;
 
 export type TilingCommand =

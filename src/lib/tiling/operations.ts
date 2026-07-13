@@ -91,6 +91,13 @@ export function applyOperation(
       (candidate) => candidate.id === event.operation.windowId
     );
     const container = inspection.containers.find((candidate) => candidate.id === window?.parentId);
+    if (window && (!window.capabilities.move || !window.capabilities.resize)) {
+      return rejected(
+        inspection,
+        "capability-unsupported",
+        "Resize operation requires move and resize capabilities"
+      );
+    }
     if (!window?.participating || !container) {
       return rejected(
         inspection,
@@ -115,6 +122,21 @@ export function applyOperation(
         inspection,
         "missing-resize-neighbor",
         "Resize operation requires an adjacent participating window"
+      );
+    }
+    const surface = inspection.surfaces.find((candidate) => candidate.id === window.surfaceId);
+    if (
+      !window.capabilities.move ||
+      !window.capabilities.resize ||
+      !neighbor.capabilities.move ||
+      !neighbor.capabilities.resize ||
+      !surface?.capabilities.move ||
+      !surface.capabilities.resize
+    ) {
+      return rejected(
+        inspection,
+        "capability-unsupported",
+        "Resize operation requires move and resize capabilities"
       );
     }
     const baseWeights = normalizedWeights(container);
