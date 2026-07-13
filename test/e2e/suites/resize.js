@@ -285,6 +285,11 @@ describe("Resize", function () {
     await settle(500);
   });
 
+  afterAll(function () {
+    clearMonitorConstraints();
+    clearResizedWindows();
+  });
+
   // ── Existing baseline tests ──
 
   it("keyboard resize right changes percent", async function () {

@@ -947,9 +947,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     };
     // Stop new delayed work before disconnecting producers and owners.
     safely("event scheduler", () => this._eventScheduler?.dispose());
-    safely("decorations", () => Utils._disableDecorations());
     safely("core container presentation", () => this._containerPresenter?.destroy());
     safely("core previews", () => this._previewPresenter?.destroy());
+    safely("decorations", () => Utils._disableDecorations());
     safely("signals", () => this._signalManager?.unbindAll());
     safely("borders", () => this._borders?.destroyAllBorderActors());
     safely("tracker", () => this._tracker?.dispose());

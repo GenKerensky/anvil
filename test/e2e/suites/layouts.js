@@ -13,6 +13,8 @@ import {
   sendAnvilCommandAndSettle,
   getAnvilRuntime,
   closeAllWindows,
+  clearMonitorConstraints,
+  clearResizedWindows,
   sleep,
   waitForWindowCount,
 } from "../../lib/shared-commands.js";
@@ -77,6 +79,8 @@ function expectCorePresentation(layout) {
 
 describe("Advanced Layouts", function () {
   beforeEach(async function () {
+    clearMonitorConstraints();
+    clearResizedWindows();
     await closeAllWindows();
     await sleep(200);
   });
