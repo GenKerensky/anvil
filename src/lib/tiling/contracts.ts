@@ -5,6 +5,15 @@ export type SurfaceId = TilingIdentity<"surface">;
 export type ContainerId = TilingIdentity<"container">;
 export type OperationId = TilingIdentity<"operation">;
 
+function identity<Kind extends string>(kind: Kind, value: string): TilingIdentity<Kind> {
+  if (value.length === 0) throw new TypeError(`${kind} identity must not be empty`);
+  return value as TilingIdentity<Kind>;
+}
+
+export const windowId = (value: string): WindowId => identity("window", value);
+export const surfaceId = (value: string): SurfaceId => identity("surface", value);
+export const operationId = (value: string): OperationId => identity("operation", value);
+
 export type TilingRevision = number;
 export type Layout = "horizontal" | "vertical" | "stacked" | "tabbed";
 export type Direction = "left" | "right" | "up" | "down";
@@ -53,6 +62,34 @@ export type TilingDiagnostic = Readonly<{
   code: string;
   message: string;
   identity?: string;
+}>;
+
+export type PlatformCapabilities = Readonly<{
+  focus: boolean;
+  raise: boolean;
+  move: boolean;
+  resize: boolean;
+}>;
+
+export type SurfaceFact = Readonly<{
+  id: SurfaceId;
+  workArea: Rect;
+  neighbors: Readonly<Partial<Record<Direction, SurfaceId>>>;
+  capabilities: PlatformCapabilities;
+}>;
+
+export type WindowFact = Readonly<{
+  id: WindowId;
+  surfaceId: SurfaceId;
+  frame: Rect;
+  available: boolean;
+  capabilities: PlatformCapabilities;
+  applicationId?: string;
+  title?: string;
+  role?: string;
+  transientParentId?: WindowId;
+  resizable?: boolean;
+  tags?: readonly string[];
 }>;
 
 export type SurfaceInspection = Readonly<{
@@ -150,8 +187,8 @@ export type TilingInspection = Readonly<{
 }>;
 
 export type PlatformSnapshot = Readonly<{
-  surfaces: readonly never[];
-  windows: readonly never[];
+  surfaces: readonly SurfaceFact[];
+  windows: readonly WindowFact[];
   focusedWindowId?: WindowId;
 }>;
 

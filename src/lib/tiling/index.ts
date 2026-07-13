@@ -1,3 +1,4 @@
+export { operationId, surfaceId, windowId } from "./contracts.js";
 export { createTilingStateMachine } from "./state-machine.js";
 export type {
   ContainerId,
@@ -8,12 +9,14 @@ export type {
   OperationId,
   OperationInspection,
   ParticipationRule,
+  PlatformCapabilities,
   PlacementHintInspection,
   PlatformSnapshot,
   PreviewPlan,
   Rect,
   SurfaceConstraint,
   SurfaceEvacuationInspection,
+  SurfaceFact,
   SurfaceId,
   SurfaceInspection,
   SurfacePlan,
@@ -28,6 +31,7 @@ export type {
   TilingStateMachine,
   TilingTransition,
   WindowId,
+  WindowFact,
   WindowInspection,
   WindowPlan,
 } from "./contracts.js";
