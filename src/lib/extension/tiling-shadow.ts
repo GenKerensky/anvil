@@ -2,6 +2,7 @@ import Gio from "gi://Gio";
 import Meta from "gi://Meta";
 
 import type { WindowOverride } from "../shared/settings.js";
+import { GnomeGrabOperationAdapter } from "./gnome-grab-operation-adapter.js";
 import type { AnvilAction } from "./window/actions.js";
 
 import {
@@ -122,38 +123,6 @@ export class GnomeTilingIdentityRegistry {
   }
 }
 
-type ResizeObservation = Readonly<{
-  operationId: OperationId;
-  direction: Direction;
-  startSize: number;
-  containerExtent: number;
-  lastShareDelta: number;
-}>;
-
-function resizeDirection(grabOp: Meta.GrabOp): Direction | undefined {
-  const normalized = grabOp & ~1024;
-  switch (normalized) {
-    case Meta.GrabOp.RESIZING_N:
-    case Meta.GrabOp.KEYBOARD_RESIZING_N:
-      return "up";
-    case Meta.GrabOp.RESIZING_E:
-    case Meta.GrabOp.KEYBOARD_RESIZING_E:
-      return "right";
-    case Meta.GrabOp.RESIZING_S:
-    case Meta.GrabOp.KEYBOARD_RESIZING_S:
-      return "down";
-    case Meta.GrabOp.RESIZING_W:
-    case Meta.GrabOp.KEYBOARD_RESIZING_W:
-      return "left";
-    default:
-      return undefined;
-  }
-}
-
-function oppositeDirection(direction: Direction): Direction {
-  return { left: "right", right: "left", up: "down", down: "up" }[direction] as Direction;
-}
-
 export class TilingShadow {
   private readonly settings: Gio.Settings;
   private readonly identities = new GnomeTilingIdentityRegistry();
@@ -161,7 +130,7 @@ export class TilingShadow {
   private activeSurfaces = new Set<SurfaceId>();
   private bootstrapped = false;
   private pendingEvents: TilingEvent[] = [];
-  private readonly resizeObservations = new Map<WindowId, ResizeObservation>();
+  private readonly grabOperations: GnomeGrabOperationAdapter;
   private rejectedEvents: Array<
     Readonly<{
       eventType: TilingEvent["type"];
@@ -175,6 +144,13 @@ export class TilingShadow {
     this.settings = settings;
     this.windowOverrides = windowOverrides;
     this.machine = createTilingStateMachine(this.policy());
+    this.grabOperations = new GnomeGrabOperationAdapter({
+      knownWindowId: (metaWindow) => this.identities.knownWindow(metaWindow),
+      windowFact: (metaWindow) => this.windowFact(metaWindow),
+      allocateOperationId: () => this.identities.operation(),
+      dispatch: (event) => this.dispatch(event),
+      inspect: () => this.machine.inspect(),
+    });
   }
 
   private policy(): TilingPolicy {
@@ -365,7 +341,7 @@ export class TilingShadow {
   bootstrap(windows: readonly Meta.Window[], validWindow: (window: Meta.Window) => boolean): void {
     this.machine = createTilingStateMachine(this.policy());
     this.rejectedEvents = [];
-    this.resizeObservations.clear();
+    this.grabOperations.reset();
     const surfaces = this.surfaceFacts();
     this.activeSurfaces = new Set(surfaces.map((surface) => surface.id));
     const observedWindows = windows
@@ -501,90 +477,21 @@ export class TilingShadow {
 
   observeGrabBegin(metaWindow: Meta.Window, grabOp: Meta.GrabOp): void {
     if (!this.bootstrapped) return;
-    const id = this.identities.knownWindow(metaWindow);
-    const requestedDirection = resizeDirection(grabOp);
-    const fact = this.windowFact(metaWindow);
-    if (!id || !requestedDirection || !fact) return;
-
-    const before = this.machine.inspect();
-    const window = before.windows.find((candidate) => candidate.id === id);
-    const container = before.containers.find((candidate) => candidate.id === window?.parentId);
-    const horizontal = requestedDirection === "left" || requestedDirection === "right";
-    if (
-      !container ||
-      (horizontal && container.layout !== "horizontal") ||
-      (!horizontal && container.layout !== "vertical")
-    ) {
-      return;
-    }
-    const index = container.childIds.indexOf(id);
-    const requestedOffset = requestedDirection === "left" || requestedDirection === "up" ? -1 : 1;
-    const requestedNeighbor = container.childIds[index + requestedOffset];
-    const oppositeNeighbor = container.childIds[index - requestedOffset];
-    if (!requestedNeighbor && !oppositeNeighbor) return;
-    const direction = requestedNeighbor
-      ? requestedDirection
-      : oppositeDirection(requestedDirection);
-
-    const operation = this.identities.operation();
-    const transition = this.dispatch({
-      type: "OperationStarted",
-      operation: { id: operation, kind: "resize", windowId: id, direction },
-    });
-    if (transition.status !== "committed") return;
-
-    const inspection = this.machine.inspect();
-    const active = inspection.operations.find((candidate) => candidate.id === operation);
-    const renderContainer = inspection.renderPlan.containers.find(
-      (candidate) => candidate.id === active?.containerId
-    );
-    const containerExtent = horizontal ? renderContainer?.rect.width : renderContainer?.rect.height;
-    if (!containerExtent || containerExtent <= 0) {
-      this.dispatch({ type: "OperationCancelled", operationId: operation });
-      return;
-    }
-    this.resizeObservations.set(id, {
-      operationId: operation,
-      direction,
-      startSize: horizontal ? fact.frame.width : fact.frame.height,
-      containerExtent,
-      lastShareDelta: 0,
-    });
+    this.grabOperations.beginResize(metaWindow, grabOp);
   }
 
   observeGrabUpdate(metaWindow: Meta.Window): void {
-    const id = this.identities.knownWindow(metaWindow);
-    const active = id ? this.resizeObservations.get(id) : undefined;
-    const fact = active ? this.windowFact(metaWindow) : null;
-    if (!id || !active || !fact) return;
-    const horizontal = active.direction === "left" || active.direction === "right";
-    const currentSize = horizontal ? fact.frame.width : fact.frame.height;
-    const shareDelta = (currentSize - active.startSize) / active.containerExtent;
-    if (shareDelta === active.lastShareDelta) return;
-    const transition = this.dispatch({
-      type: "OperationUpdated",
-      operationId: active.operationId,
-      update: { shareDelta },
-    });
-    if (transition.status !== "committed") return;
-    this.resizeObservations.set(id, { ...active, lastShareDelta: shareDelta });
+    this.grabOperations.updateResize(metaWindow);
   }
 
   observeGrabEnd(metaWindow: Meta.Window, cancelled: boolean): void {
-    const id = this.identities.knownWindow(metaWindow);
-    const active = id ? this.resizeObservations.get(id) : undefined;
-    if (!id || !active) return;
-    this.dispatch({
-      type: cancelled ? "OperationCancelled" : "OperationCommitted",
-      operationId: active.operationId,
-    });
-    this.resizeObservations.delete(id);
+    this.grabOperations.endResize(metaWindow, cancelled);
   }
 
   withdrawWindow(metaWindow: Meta.Window): void {
     const knownWindow = this.identities.knownWindow(metaWindow);
     if (!knownWindow) return;
-    this.resizeObservations.delete(knownWindow);
+    this.grabOperations.withdrawWindow(metaWindow);
     this.submit({
       type: "FactsObserved",
       facts: [{ type: "WindowWithdrawn", windowId: knownWindow }],

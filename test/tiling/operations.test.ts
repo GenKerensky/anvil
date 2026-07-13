@@ -124,6 +124,29 @@ describe("Tiling Operations", () => {
     expect(machine.inspect().operations).toEqual([]);
   });
 
+  it("resolves an outer resize edge to the opposite sibling", () => {
+    const { machine, first, second } = resizeMachine();
+
+    expect(
+      machine.dispatch({
+        type: "OperationStarted",
+        operation: {
+          id: operationId("outer-edge"),
+          kind: "resize",
+          windowId: second,
+          direction: "right",
+        },
+      })
+    ).toMatchObject({ status: "committed" });
+    expect(machine.inspect().operations).toEqual([
+      expect.objectContaining({
+        windowId: second,
+        neighborWindowId: first,
+        direction: "left",
+      }),
+    ]);
+  });
+
   it("cancels an operation inside a topology-invalidating transition", () => {
     const { machine, first, second } = resizeMachine();
     const operation = operationId("resize-1");

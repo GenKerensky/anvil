@@ -338,6 +338,29 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("cancels a resize overlay and ignores late frame updates", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.RESIZING_E);
+    first._rect.width = 1152;
+    shadow.observeGrabUpdate(first);
+    shadow.observeGrabEnd(first, true);
+
+    const cancelled = shadow.inspect();
+    expect(cancelled.operations).toEqual([]);
+    expect(cancelled.containers[0].weights).toEqual({});
+    first._rect.width = 1200;
+    shadow.observeGrabUpdate(first);
+    expect(shadow.inspect().revision).toBe(cancelled.revision);
+    globals.cleanup();
+  });
+
   it("reports structured desired-versus-observed geometry mismatches", () => {
     const window = createMockWindow({ rect: { x: 10, y: 20, width: 300, height: 200 } });
     const globals = installGnomeGlobals();

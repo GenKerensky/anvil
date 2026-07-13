@@ -63,7 +63,7 @@ export interface GrabResizeHost {
   moveWindowToPointer(node: Node<any>, previewOnly?: boolean): void;
   updateStackedFocus(node: Node<any> | null | undefined): void;
   updateTabbedFocus(node: Node<any> | null | undefined): void;
-  observePortableResize(metaWindow: Meta.Window): void;
+  observeGrabResizeUpdate(metaWindow: Meta.Window): void;
 }
 
 /**
@@ -388,7 +388,7 @@ export class GrabResizeSession {
   handleResizing(focusNodeWindow: Node<any> | null) {
     const host = this._host;
     const observedWindow = this._grabbedMetaWindow ?? host.focusMetaWindow;
-    if (observedWindow) host.observePortableResize(observedWindow);
+    if (observedWindow) host.observeGrabResizeUpdate(observedWindow);
     if (!focusNodeWindow || focusNodeWindow.isFloat()) {
       return;
     }

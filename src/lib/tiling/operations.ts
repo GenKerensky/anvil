@@ -52,6 +52,10 @@ function normalizedWeights(container: ContainerInspection): Record<string, numbe
   return Object.fromEntries(container.childIds.map((id, index) => [id, raw[index] / total]));
 }
 
+function oppositeDirection(direction: "left" | "right" | "up" | "down") {
+  return { left: "right", right: "left", up: "down", down: "up" }[direction] as typeof direction;
+}
+
 function withRender(
   inspection: TilingInspection,
   revision: number,
@@ -113,9 +117,14 @@ export function applyOperation(
       );
     }
     const index = container.childIds.indexOf(window.id);
-    const delta =
-      event.operation.direction === "left" || event.operation.direction === "up" ? -1 : 1;
-    const neighborId = container.childIds[index + delta];
+    let direction = event.operation.direction;
+    let delta = event.operation.direction === "left" || event.operation.direction === "up" ? -1 : 1;
+    let neighborId = container.childIds[index + delta];
+    if (!neighborId) {
+      direction = oppositeDirection(direction);
+      delta *= -1;
+      neighborId = container.childIds[index + delta];
+    }
     const neighbor = inspection.windows.find((candidate) => candidate.id === neighborId);
     if (!neighbor) {
       return rejected(
@@ -146,7 +155,7 @@ export function applyOperation(
       windowId: window.id,
       neighborWindowId: neighbor.id,
       containerId: container.id,
-      direction: event.operation.direction,
+      direction,
       baseWeights,
       overlayWeights: { ...baseWeights },
       topologyRevision: inspection.revision,

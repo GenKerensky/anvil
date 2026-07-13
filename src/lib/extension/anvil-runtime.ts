@@ -284,7 +284,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       moveWindowToPointer: (n, preview) => self._dragDrop!.moveWindowToPointer(n, preview),
       updateStackedFocus: (n) => self.updateStackedFocus(n),
       updateTabbedFocus: (n) => self.updateTabbedFocus(n),
-      observePortableResize: (window) =>
+      observeGrabResizeUpdate: (window) =>
         self._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(window)),
     });
     this._tracker = new WindowTracker({

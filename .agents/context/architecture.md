@@ -33,6 +33,9 @@ inherit the main source's `rootDir: "./src"`.
 
 Source in `src/lib/shared/*.ts` → tests in `test/unit/shared/*.test.ts`.
 Source in `src/lib/extension/*.ts` → tests in `test/unit/extension/*.test.ts`.
+Platform-independent tiling state lives in `src/lib/tiling/`; its migration contract and current
+legacy/shadow/core ownership modes are defined in
+`docs/plans/portable-tiling-state-machine.md`.
 
 ## Target seams
 

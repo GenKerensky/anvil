@@ -82,6 +82,12 @@ Do **not** invent a second write path.
 that calls `TilingRender` (today: `AnvilRuntime.renderTree`). Geometry **apply** stays on
 `TilingRender`.
 
+**Portable migration exception:** the accepted migration plan permits a `shadow` session in which
+legacy remains the sole topology, percentage, and platform-effect writer while the portable state
+machine receives the same normalized ingress for comparison. Shadow intentions are always
+discarded and cannot call Meta/St effects. This diagnostic mirror is not a second production write
+path. See `docs/plans/portable-tiling-state-machine.md` under “Migration rule: never two writers.”
+
 ---
 
 ## 3. Commands are data
