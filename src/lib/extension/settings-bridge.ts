@@ -180,8 +180,13 @@ export class SettingsBridge {
   }
 
   private _onChanged(settingName: string): void {
-    if (PORTABLE_POLICY_KEYS.has(settingName)) this._host.observePortablePolicy();
     const handler = SETTINGS_HANDLERS[settingName];
+    if (settingName === "window-overrides-reload-trigger") {
+      handler?.(this._host, settingName);
+      this._host.observePortablePolicy();
+      return;
+    }
+    if (PORTABLE_POLICY_KEYS.has(settingName)) this._host.observePortablePolicy();
     handler?.(this._host, settingName);
   }
 }

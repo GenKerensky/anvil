@@ -142,8 +142,11 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private _initializeGraph(): void {
     this._rules = new RulesEngine();
-    this._tilingShadow = new TilingShadow(this.ext.settings);
     this.reloadWindowOverrides();
+    this._tilingShadow = new TilingShadow(
+      this.ext.settings,
+      () => this._rules?.windowProps.overrides ?? []
+    );
     this._session = createSessionFlags();
     // Keybindings are wired separately; host getters remain valid across graph activation.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -646,6 +649,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   /** Dispatch a typed user action via CommandBus (B3-1). */
   command(action: AnvilAction) {
     this._assertEnabled("command");
+    this._tilingShadow!.observeCommand(action, this.focusMetaWindow);
     this._commandBus!.dispatch(action);
   }
 

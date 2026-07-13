@@ -1,6 +1,9 @@
 import Gio from "gi://Gio";
 import Meta from "gi://Meta";
 
+import type { WindowOverride } from "../shared/settings.js";
+import type { AnvilAction } from "./window/actions.js";
+
 import {
   createTilingStateMachine,
   surfaceId,
@@ -8,9 +11,11 @@ import {
   type Direction,
   type Layout,
   type PlatformSnapshot,
+  type ParticipationRule,
   type SurfaceFact,
   type SurfaceId,
   type TilingInspection,
+  type TilingCommand,
   type TilingPolicy,
   type TilingStateMachine,
   type WindowFact,
@@ -22,6 +27,33 @@ type WindowCapabilities = Meta.Window & {
   allows_resize?: () => boolean;
   get_role?: () => string | null;
 };
+
+export function createPortableParticipationRules(
+  overrides: readonly WindowOverride[]
+): ParticipationRule[] {
+  const persistent = overrides.filter(
+    (override) => !override.wmId && (override.mode === "tile" || override.mode === "float")
+  );
+  const overrideRules = (action: "tile" | "float") =>
+    persistent
+      .filter((override) => override.mode === action)
+      .map((override, index) => ({
+        id: `override:${action}:${index}`,
+        action,
+        ...(override.wmClass ? { applicationId: override.wmClass } : {}),
+        ...(override.wmTitle ? { title: override.wmTitle } : {}),
+      }));
+  return [
+    ...overrideRules("tile"),
+    { id: "builtin:pip", action: "float", title: "picture-in-picture" },
+    { id: "builtin:blender", action: "float", applicationId: "~blender" },
+    { id: "builtin:steam", action: "float", applicationId: "~steam" },
+    { id: "builtin:dialog", action: "float", tags: ["dialog"] },
+    { id: "builtin:transient", action: "float", transient: true },
+    { id: "builtin:fixed-size", action: "float", resizable: false },
+    ...overrideRules("float"),
+  ];
+}
 
 function booleanSetting(settings: Gio.Settings, key: string, fallback: boolean): boolean {
   try {
@@ -76,9 +108,11 @@ export class TilingShadow {
   private readonly identities = new GnomeTilingIdentityRegistry();
   private machine: TilingStateMachine;
   private activeSurfaces = new Set<SurfaceId>();
+  private readonly windowOverrides: () => readonly WindowOverride[];
 
-  constructor(settings: Gio.Settings) {
+  constructor(settings: Gio.Settings, windowOverrides: () => readonly WindowOverride[] = () => []) {
     this.settings = settings;
+    this.windowOverrides = windowOverrides;
     this.machine = createTilingStateMachine(this.policy());
   }
 
@@ -104,7 +138,7 @@ export class TilingShadow {
       singleTabExit: booleanSetting(this.settings, "auto-exit-tabbed", true) ? "split" : "preserve",
       headerExtent: 0,
       constraints: {},
-      participationRules: [],
+      participationRules: createPortableParticipationRules(this.windowOverrides()),
       reconcileAttempts: 3,
     };
   }
@@ -169,6 +203,11 @@ export class TilingShadow {
     const frame = metaWindow.get_frame_rect();
     const native = metaWindow as WindowCapabilities;
     const transientParent = metaWindow.get_transient_for();
+    const windowType = metaWindow.get_window_type();
+    const tags =
+      windowType === Meta.WindowType.DIALOG || windowType === Meta.WindowType.MODAL_DIALOG
+        ? ["dialog"]
+        : [];
     return {
       id: this.identities.window(metaWindow),
       surfaceId: this.surfaceIdentity(workspace, monitor),
@@ -190,6 +229,7 @@ export class TilingShadow {
       role: native.get_role?.() ?? undefined,
       transientParentId: transientParent ? this.identities.window(transientParent) : undefined,
       resizable: native.allows_resize?.() ?? true,
+      tags,
     };
   }
 
@@ -254,6 +294,68 @@ export class TilingShadow {
       ],
     });
     this.activeSurfaces = nextSurfaces;
+  }
+
+  observeCommand(action: AnvilAction, focusedWindow: Meta.Window | null): void {
+    if (!focusedWindow) return;
+    const focusedWindowId = this.identities.knownWindow(focusedWindow);
+    if (!focusedWindowId) return;
+    const direction =
+      "direction" in action
+        ? (
+            {
+              left: "left",
+              right: "right",
+              up: "up",
+              down: "down",
+              top: "up",
+              bottom: "down",
+            } as const
+          )[action.direction.toLowerCase()]
+        : undefined;
+    let command: TilingCommand | undefined;
+    if (direction && action.name === "Focus") {
+      command = { type: "FocusDirection", windowId: focusedWindowId, direction };
+    } else if (direction && action.name === "Move") {
+      command = { type: "MoveDirection", windowId: focusedWindowId, direction };
+    } else if (direction && action.name === "Swap") {
+      command = { type: "SwapDirection", windowId: focusedWindowId, direction };
+    } else if (
+      action.name === "FloatToggle" ||
+      action.name === "FloatClassToggle" ||
+      action.name === "FloatNonPersistentToggle"
+    ) {
+      const window = this.machine.inspect().windows.find((item) => item.id === focusedWindowId);
+      if (window) {
+        command = {
+          type: "SetParticipation",
+          windowId: focusedWindowId,
+          participating: !window.participating,
+        };
+      }
+    } else if (
+      action.name === "Split" ||
+      action.name === "LayoutToggle" ||
+      action.name === "LayoutStackedToggle" ||
+      action.name === "LayoutTabbedToggle"
+    ) {
+      const inspection = this.machine.inspect();
+      const window = inspection.windows.find((item) => item.id === focusedWindowId);
+      const container = inspection.containers.find((item) => item.id === window?.parentId);
+      if (!container) return;
+      let layout: Layout;
+      if (action.name === "LayoutStackedToggle") {
+        layout = container.layout === "stacked" ? "horizontal" : "stacked";
+      } else if (action.name === "LayoutTabbedToggle") {
+        layout = container.layout === "tabbed" ? "horizontal" : "tabbed";
+      } else if (action.name === "Split" && action.orientation) {
+        layout = action.orientation.toLowerCase().startsWith("v") ? "vertical" : "horizontal";
+      } else {
+        layout = container.layout === "horizontal" ? "vertical" : "horizontal";
+      }
+      command = { type: "SetLayout", windowId: focusedWindowId, layout };
+    }
+    if (command) this.machine.dispatch({ type: "CommandRequested", command });
   }
 
   withdrawWindow(metaWindow: Meta.Window): void {

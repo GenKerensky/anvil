@@ -138,6 +138,40 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("translates Anvil overrides and built-ins into portable participation rules", () => {
+    const globals = installGnomeGlobals();
+    const override = createMockWindow({
+      workspace: globals.workspaces[0],
+      wm_class: "TestApp",
+    });
+    const pictureInPicture = createMockWindow({
+      workspace: globals.workspaces[0],
+      wm_class: "Player",
+      title: "Picture-in-Picture",
+    });
+    const shadow = new TilingShadow(createMockSettings() as never, () => [
+      { wmClass: "TestApp", mode: "float" },
+    ]);
+
+    shadow.bootstrap([override, pictureInPicture], () => true);
+
+    expect(shadow.inspect().windows).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          applicationId: "TestApp",
+          participating: false,
+          policyParticipationSource: "rule:override:float:0",
+        }),
+        expect.objectContaining({
+          applicationId: "Player",
+          participating: false,
+          policyParticipationSource: "rule:builtin:pip",
+        }),
+      ])
+    );
+    globals.cleanup();
+  });
+
   it("withdraws surfaces missing from a later topology observation", () => {
     const globals = installGnomeGlobals();
     const shadow = new TilingShadow(createMockSettings() as never);
@@ -148,6 +182,24 @@ describe("TilingShadow", () => {
     shadow.observeTopology();
 
     expect(shadow.inspect().surfaces).toHaveLength(0);
+    globals.cleanup();
+  });
+
+  it("translates tiling actions without applying their intentions", () => {
+    const first = createMockWindow();
+    const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
+    const second = createMockWindow();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    const secondId = shadow.inspect().windows[1].id;
+
+    shadow.observeCommand({ name: "Focus", direction: "RIGHT" }, first);
+
+    expect(shadow.inspect()).toMatchObject({
+      containers: [{ selectedChildId: secondId }],
+    });
     globals.cleanup();
   });
 });

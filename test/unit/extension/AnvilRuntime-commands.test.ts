@@ -81,9 +81,14 @@ describe("AnvilRuntime - Commands", () => {
 
       const unfreezeSpy = vi.spyOn(wm(), "unfreezeRender");
       const treeMoveSpy = vi.spyOn(wm().layoutEngine, "move");
+      const portableSpy = vi.spyOn(wm()._tilingShadow, "observeCommand");
 
       wm().command({ name: "Move", direction: "UP" });
 
+      expect(portableSpy).toHaveBeenCalledWith({ name: "Move", direction: "UP" }, metaWindow);
+      expect(portableSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        treeMoveSpy.mock.invocationCallOrder[0]
+      );
       expect(unfreezeSpy).toHaveBeenCalled();
       expect(treeMoveSpy).toHaveBeenCalled();
     });

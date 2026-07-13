@@ -69,6 +69,9 @@ describe("SettingsBridge", () => {
   it("window-overrides-reload-trigger reloads overrides", () => {
     bridge.handleChanged("window-overrides-reload-trigger");
     expect(host.reloadWindowOverrides).toHaveBeenCalled();
+    expect(host.reloadWindowOverrides.mock.invocationCallOrder[0]).toBeLessThan(
+      host.observePortablePolicy.mock.invocationCallOrder[0]
+    );
   });
 
   it("unknown key is a no-op", () => {
