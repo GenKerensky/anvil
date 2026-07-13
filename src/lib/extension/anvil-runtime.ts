@@ -65,6 +65,7 @@ import { GnomeIntentionApplier } from "./gnome-intention-applier.js";
 import { CoreTilingEffectDriver } from "./core-tiling-effect-driver.js";
 import { selectTilingEngineMode, type TilingEngineMode } from "./tiling-engine-mode.js";
 import { safeRaise } from "./mutter-safe.js";
+import { GnomeContainerPresenter } from "./gnome-container-presenter.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -123,6 +124,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private _tilingRender: TilingRender | null = null;
   private _tilingShadow: TilingShadow | null = null;
   private _intentionApplier: GnomeIntentionApplier | null = null;
+  private _containerPresenter: GnomeContainerPresenter | null = null;
   private _coreEffectDriver: CoreTilingEffectDriver | null = null;
   private _tilingEngineMode: TilingEngineMode = "shadow";
   private _tilingShadowFailure: string | null = null;
@@ -167,6 +169,10 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         if (self._tilingEngineMode === "core") self._coreEffectDriver?.consume(transition);
       }
     );
+    this._containerPresenter = new GnomeContainerPresenter({
+      resolveWindow: (id) => self._tilingShadow?.resolveWindow(id),
+      toGlobalRect: (surface, rect) => self._tilingShadow!.toGlobalRect(surface, rect),
+    });
     this._intentionApplier = new GnomeIntentionApplier({
       resolveWindow: (id) => self._tilingShadow?.resolveWindow(id),
       toGlobalRect: (surface, rect) => self._tilingShadow!.toGlobalRect(surface, rect),
@@ -174,12 +180,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       participationChanged: () => {
         // Core participation is authoritative; non-participant platform policy is Runtime-owned.
       },
-      presentContainer: () => {
-        // Identity-based container actors are wired in the next migration slice.
-      },
-      removeContainerPresentation: () => {
-        // Identity-based container actors are wired in the next migration slice.
-      },
+      presentContainer: (intention) => self._containerPresenter?.present(intention),
+      removeContainerPresentation: (containerId) => self._containerPresenter?.remove(containerId),
       raiseWindows: (metaWindows) => {
         metaWindows.forEach((metaWindow) => safeRaise(metaWindow));
       },
@@ -730,6 +732,13 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private _handleCorePlatformCommand(action: AnvilAction): boolean {
+    if (action.name === "ShowTabDecorationToggle") {
+      if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return true;
+      const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
+      this.ext.settings.set_boolean("showtab-decoration-enabled", !showTabs);
+      this._withTilingShadow("tab-decoration-policy", (shadow) => shadow.observePolicy());
+      return true;
+    }
     if (action.name !== "FloatClassToggle") return false;
     const metaWindow = this.focusMetaWindow;
     if (!metaWindow) return true;
@@ -795,6 +804,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     // Stop new delayed work before disconnecting producers and owners.
     safely("event scheduler", () => this._eventScheduler?.dispose());
     safely("decorations", () => Utils._disableDecorations());
+    safely("core container presentation", () => this._containerPresenter?.destroy());
     safely("signals", () => this._signalManager?.unbindAll());
     safely("borders", () => this._borders?.destroyAllBorderActors());
     safely("tracker", () => this._tracker?.dispose());
@@ -816,6 +826,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._tilingRender = null;
     this._coreEffectDriver = null;
     this._intentionApplier = null;
+    this._containerPresenter = null;
     this._tilingShadow = null;
     this._tilingShadowComparison = null;
     this._tracker = null;
@@ -1268,6 +1279,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       tree: this._tree ? this._tree!.serializeForTest() : null,
       portableTiling: this._tilingShadow?.inspect() ?? null,
       portablePresentation: this._tilingShadow?.presentationPlan() ?? null,
+      coreContainerPresentations: this._containerPresenter?.inspect() ?? [],
       portableTilingShadow: portableComparison,
       portableTilingShadowFailure: this._tilingShadowFailure,
     });

@@ -118,6 +118,7 @@ describe("GnomeIntentionApplier", () => {
         containerId: "container:1" as never,
         surfaceId: surface,
         layout: "tabbed",
+        windowIds: [id],
         stackingOrder: [id],
       },
       {

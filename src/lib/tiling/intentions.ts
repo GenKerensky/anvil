@@ -64,6 +64,8 @@ export function changedContainerIntentions(
           (old.headerRect && plan.headerRect && sameRect(old.headerRect, plan.headerRect))
         ) ||
         old.selectedChildId !== plan.selectedChildId ||
+        old.selectedWindowId !== plan.selectedWindowId ||
+        !sameOrder(old.windowIds, plan.windowIds) ||
         !sameOrder(old.stackingOrder, plan.stackingOrder)
       );
     })
@@ -76,6 +78,8 @@ export function changedContainerIntentions(
       layout: plan.layout,
       ...(plan.headerRect ? { headerRect: copyRect(plan.headerRect) } : {}),
       ...(plan.selectedChildId ? { selectedChildId: plan.selectedChildId } : {}),
+      ...(plan.selectedWindowId ? { selectedWindowId: plan.selectedWindowId } : {}),
+      windowIds: [...plan.windowIds],
       stackingOrder: [...plan.stackingOrder],
     }));
   const raises: TilingIntention[] = next

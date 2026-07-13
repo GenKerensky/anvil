@@ -143,12 +143,13 @@ function derivePlans(
   };
   const stackingWindowIds = (
     container: ContainerInspection,
-    ancestors: ReadonlySet<string>
+    ancestors: ReadonlySet<string>,
+    selectedLast = true
   ): WindowInspection["id"][] => {
     if (ancestors.has(container.id)) return [];
     const presented = container.layout === "stacked" || container.layout === "tabbed";
     const childIds = [...container.childIds];
-    if (presented && container.selectedChildId) {
+    if (selectedLast && presented && container.selectedChildId) {
       const selectedIndex = childIds.indexOf(container.selectedChildId);
       if (selectedIndex >= 0) childIds.push(...childIds.splice(selectedIndex, 1));
     }
@@ -157,7 +158,7 @@ function derivePlans(
       const window = windowById.get(childId as WindowInspection["id"]);
       if (window) return isAvailable(window.id) ? [window.id] : [];
       const child = containerById.get(childId as ContainerInspection["id"]);
-      return child ? stackingWindowIds(child, nextAncestors) : [];
+      return child ? stackingWindowIds(child, nextAncestors, selectedLast) : [];
     });
   };
 
@@ -171,6 +172,8 @@ function derivePlans(
     const visit = (container: ContainerInspection, rect: Rect, ancestors: Set<string>): void => {
       if (ancestors.has(container.id)) return;
       const headerRect = presentationHeaderRect(container, rect, policy);
+      const windowIds = stackingWindowIds(container, ancestors, false);
+      const stackingOrder = stackingWindowIds(container, ancestors);
       containerPlans.push({
         id: container.id,
         surfaceId: container.surfaceId,
@@ -178,7 +181,12 @@ function derivePlans(
         ...(headerRect ? { headerRect } : {}),
         layout: container.layout,
         ...(container.selectedChildId ? { selectedChildId: container.selectedChildId } : {}),
-        stackingOrder: stackingWindowIds(container, ancestors),
+        ...((container.layout === "stacked" || container.layout === "tabbed") &&
+        stackingOrder.length > 0
+          ? { selectedWindowId: stackingOrder[stackingOrder.length - 1] }
+          : {}),
+        windowIds,
+        stackingOrder,
       });
       const contentRect = headerRect
         ? {

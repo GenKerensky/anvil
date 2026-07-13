@@ -226,6 +226,8 @@ export type ContainerPlan = Readonly<{
   headerRect?: Rect;
   layout: Layout;
   selectedChildId?: ContainerId | WindowId;
+  selectedWindowId?: WindowId;
+  windowIds: readonly WindowId[];
   stackingOrder: readonly WindowId[];
 }>;
 
@@ -429,6 +431,8 @@ export type TilingIntention =
         layout: Layout;
         headerRect?: Rect;
         selectedChildId?: ContainerId | WindowId;
+        selectedWindowId?: WindowId;
+        windowIds: readonly WindowId[];
         stackingOrder: readonly WindowId[];
       }>)
   | (IntentionToken &

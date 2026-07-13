@@ -11,6 +11,7 @@ import {
   getSettings,
   sendAnvilCommand,
   sendAnvilCommandAndSettle,
+  getAnvilRuntime,
   closeAllWindows,
   sleep,
   waitForWindowCount,
@@ -34,6 +35,44 @@ function roughlySameFrame(a, b) {
   const xTol = Math.max(a.width, b.width, 1) * 0.15;
   const wTol = Math.max(a.width, b.width, 1) * 0.15;
   return Math.abs(a.x - b.x) <= xTol && Math.abs(a.width - b.width) <= wTol;
+}
+
+/** @returns {any} */
+function runtimeState() {
+  return JSON.parse(getAnvilRuntime().getStateJson());
+}
+
+/** @param {"stacked"|"tabbed"} layout */
+function expectCorePresentation(layout) {
+  const state = runtimeState();
+  if (state.tilingEngineMode !== "core") return;
+  const container = state.portableTiling.renderPlan.containers.find(function (
+    /** @type {any} */ candidate
+  ) {
+    return candidate.layout === layout;
+  });
+  expect(container).toBeDefined();
+  expect(container.headerRect.height).toBe(35);
+  expect(container.windowIds.length).toBe(2);
+  expect(container.stackingOrder.length).toBe(2);
+  expect(container.selectedWindowId).toBeDefined();
+  const frames = state.portableTiling.renderPlan.windows.filter(function (
+    /** @type {any} */ window
+  ) {
+    return container.windowIds.includes(window.id);
+  });
+  expect(frames.length).toBe(2);
+  frames.forEach(function (/** @type {any} */ window) {
+    expect(window.frame.y).toBe(container.headerRect.y + container.headerRect.height);
+    expect(window.frame.height).toBe(container.rect.height - container.headerRect.height);
+  });
+  const actor = state.coreContainerPresentations.find(function (/** @type {any} */ candidate) {
+    return candidate.containerId === container.id;
+  });
+  expect(actor).toBeDefined();
+  expect(actor.visible).toBe(true);
+  expect(actor.tabCount).toBe(2);
+  expect(actor.rect.height).toBe(35);
 }
 
 describe("Advanced Layouts", function () {
@@ -100,6 +139,8 @@ describe("Advanced Layouts", function () {
 
     await sendAnvilCommandAndSettle({ name: "LayoutStackedToggle" }, 4000);
 
+    expectCorePresentation("stacked");
+
     const wins = getWindowGeometries().filter(function (w) {
       return !w.minimized;
     });
@@ -124,6 +165,8 @@ describe("Advanced Layouts", function () {
 
     await sendAnvilCommandAndSettle({ name: "LayoutTabbedToggle" }, 4000);
 
+    expectCorePresentation("tabbed");
+
     const wins = getWindowGeometries().filter(function (w) {
       return !w.minimized;
     });
@@ -146,7 +189,15 @@ describe("Advanced Layouts", function () {
     await launchApp("org.gnome.Nautilus.desktop");
     await waitForWindowCount(2, 5000);
 
-    await sendAnvilCommandAndSettle({ name: "LayoutTabbedToggle" });
+    const initialState = runtimeState();
+    const alreadyTabbed =
+      initialState.tilingEngineMode === "core" &&
+      initialState.portableTiling.renderPlan.containers.some(function (
+        /** @type {any} */ candidate
+      ) {
+        return candidate.layout === "tabbed";
+      });
+    if (!alreadyTabbed) await sendAnvilCommandAndSettle({ name: "LayoutTabbedToggle" });
 
     const before = getSettings().get_boolean("showtab-decoration-enabled");
     expect(before).toBe(true);
@@ -156,5 +207,15 @@ describe("Advanced Layouts", function () {
 
     const after = getSettings().get_boolean("showtab-decoration-enabled");
     expect(after).toBe(false);
+    const state = runtimeState();
+    if (state.tilingEngineMode === "core") {
+      expect(state.coreContainerPresentations).toEqual([]);
+      const container = state.portableTiling.renderPlan.containers.find(function (
+        /** @type {any} */ candidate
+      ) {
+        return candidate.layout === "tabbed";
+      });
+      expect(container.headerRect).toBeUndefined();
+    }
   });
 });

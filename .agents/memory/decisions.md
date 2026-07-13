@@ -535,3 +535,18 @@ A second audit of the refactor found remaining work; all resolved.
   `Meta.Window.get_min_size()` and converts the client rectangle with Mutter's frame/client
   conversion methods before emitting `WindowFact.minimumSize`. The portable renderer applies the
   minimum after gap and maximum-constraint derivation, matching the frame Mutter can actually set.
+
+### Portable container presentation ownership (2026-07-13)
+
+- **Header reservation is render-plan geometry**: stacked/tabbed containers retain their full
+  rectangle and expose a surface-local `headerRect`; descendant window frames are derived from the
+  remaining content rectangle. Runtime never subtracts a GNOME-specific tab height.
+- **Tab order and compositor order are distinct**: `ContainerPlan.windowIds` is stable structural
+  leaf order, while `stackingOrder` is a bottom-to-top list of leaf `WindowId`s with the selected
+  subtree last. Container identities never cross into the compositor raise effect.
+- **Presentation effects have explicit lifecycles**: the core emits `PresentContainer`,
+  `RemoveContainerPresentation`, and `RaiseWindows`. `GnomeContainerPresenter` alone owns the St
+  actors and resolves identities at application time; the legacy Tree is not consulted.
+- **Core commands do not fall through to legacy topology writers**: platform-owned actions such as
+  `ShowTabDecorationToggle` mutate their platform setting and submit `PolicyReplaced` directly.
+  They must not dispatch through CommandBus when the core writer is active.

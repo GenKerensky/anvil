@@ -18,6 +18,8 @@ export type GnomePresentationPlan = Readonly<{
     rect: Rect;
     layout: Layout;
     selectedChildId?: ContainerId | WindowId;
+    selectedWindowId?: WindowId;
+    windowIds: readonly WindowId[];
     stackingOrder: readonly WindowId[];
   }>[];
   windows: readonly Readonly<{
@@ -87,6 +89,8 @@ export function createGnomePresentationPlan(
         rect: globalRect(container.surfaceId, container.rect, surfaceOrigins),
         layout: container.layout,
         ...(container.selectedChildId ? { selectedChildId: container.selectedChildId } : {}),
+        ...(container.selectedWindowId ? { selectedWindowId: container.selectedWindowId } : {}),
+        windowIds: [...container.windowIds],
         stackingOrder: [...container.stackingOrder],
       };
     }),

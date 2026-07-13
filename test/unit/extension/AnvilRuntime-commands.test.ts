@@ -485,6 +485,20 @@ describe("AnvilRuntime - Commands", () => {
       expect(() => wm().command({ name: "ShowTabDecorationToggle" })).not.toThrow();
       expect(ctx.settings.get_boolean("showtab-decoration-enabled")).toBe(false);
     });
+
+    it("updates core policy without dispatching through the legacy tree", () => {
+      wm()._tilingEngineMode = "core";
+      ctx.settings.set_boolean("tabbed-tiling-mode-enabled", true);
+      ctx.settings.set_boolean("showtab-decoration-enabled", true);
+      const observePolicy = vi.spyOn(wm()._tilingShadow, "observePolicy");
+      const legacyDispatch = vi.spyOn(wm()._commandBus, "dispatch");
+
+      wm().command({ name: "ShowTabDecorationToggle" });
+
+      expect(ctx.settings.get_boolean("showtab-decoration-enabled")).toBe(false);
+      expect(observePolicy).toHaveBeenCalledOnce();
+      expect(legacyDispatch).not.toHaveBeenCalled();
+    });
   });
 
   describe("WindowResize", () => {
