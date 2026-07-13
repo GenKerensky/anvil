@@ -397,4 +397,90 @@ describe("TilingStateMachine", () => {
       renderPlan: { windows: [{ id: survivor }] },
     });
   });
+
+  it("evacuates and restores a Surface without exposing its platform composition", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const terminal = windowId("terminal");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    const surface = {
+      id: primary,
+      workArea: { x: 0, y: 0, width: 1200, height: 900 },
+      neighbors: {},
+      capabilities,
+    } as const;
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [surface],
+        windows: [
+          {
+            id: terminal,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 1200, height: 900 },
+            available: true,
+            capabilities,
+          },
+        ],
+      },
+    });
+
+    const withdrawn = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "SurfaceWithdrawn", surfaceId: primary }],
+    });
+    expect(withdrawn).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        {
+          type: "WindowParticipationChanged",
+          windowId: terminal,
+          participating: false,
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      surfaces: [],
+      containers: [],
+      windows: [{ id: terminal, surfaceId: primary, participating: false }],
+      evacuationHints: [
+        {
+          surfaceId: primary,
+          windowIds: [terminal],
+          layout: "horizontal",
+          childIds: [terminal],
+        },
+      ],
+      renderPlan: { surfaces: [], windows: [], containers: [] },
+    });
+
+    const restored = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "SurfaceObserved", surface }],
+    });
+    expect(restored).toMatchObject({
+      status: "committed",
+      revision: 3,
+      intentions: [
+        {
+          type: "WindowParticipationChanged",
+          windowId: terminal,
+          participating: true,
+        },
+        {
+          type: "PlaceWindow",
+          windowId: terminal,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 1200, height: 900 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      surfaces: [{ id: primary, rootId: "container:2" }],
+      containers: [{ id: "container:2", childIds: [terminal], layout: "horizontal" }],
+      windows: [{ id: terminal, participating: true, parentId: "container:2" }],
+      evacuationHints: [],
+    });
+  });
 });

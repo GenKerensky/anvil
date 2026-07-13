@@ -1,5 +1,6 @@
 import type {
   ContainerInspection,
+  ContainerPlan,
   Rect,
   SurfaceInspection,
   TilingPolicy,
@@ -82,4 +83,25 @@ export function deriveWindowPlans(
       gap
     ).sort((left, right) => left.id.localeCompare(right.id));
   });
+}
+
+export function deriveContainerPlans(
+  surfaces: readonly SurfaceInspection[],
+  containers: readonly ContainerInspection[]
+): ContainerPlan[] {
+  return containers
+    .map((container) => {
+      const surface = surfaces.find((candidate) => candidate.id === container.surfaceId);
+      if (!surface) return null;
+      return {
+        id: container.id,
+        surfaceId: container.surfaceId,
+        rect: copyRect(surface.workArea),
+        layout: container.layout,
+        ...(container.selectedChildId ? { selectedChildId: container.selectedChildId } : {}),
+        stackingOrder: [...container.childIds],
+      } as ContainerPlan;
+    })
+    .filter((container): container is ContainerPlan => container !== null)
+    .sort((left, right) => left.id.localeCompare(right.id));
 }

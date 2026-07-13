@@ -11,6 +11,7 @@ export function copySurface(surface: SurfaceInspection): SurfaceInspection {
     ...surface,
     workArea: copyRect(surface.workArea),
     neighbors: { ...surface.neighbors },
+    capabilities: { ...surface.capabilities },
   };
 }
 
@@ -49,6 +50,8 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
     evacuationHints: inspection.evacuationHints.map((hint) => ({
       ...hint,
       windowIds: [...hint.windowIds],
+      childIds: [...hint.childIds],
+      weights: { ...hint.weights },
     })),
     renderPlan: {
       ...inspection.renderPlan,

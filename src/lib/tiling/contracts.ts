@@ -97,6 +97,7 @@ export type SurfaceInspection = Readonly<{
   workArea: Rect;
   rootId: ContainerId;
   neighbors: Readonly<Partial<Record<Direction, SurfaceId>>>;
+  capabilities: PlatformCapabilities;
 }>;
 
 export type WindowInspection = Readonly<{
@@ -136,6 +137,10 @@ export type PlacementHintInspection = Readonly<{
 export type SurfaceEvacuationInspection = Readonly<{
   surfaceId: SurfaceId;
   windowIds: readonly WindowId[];
+  layout: Layout;
+  childIds: readonly (ContainerId | WindowId)[];
+  weights: Readonly<Record<string, number>>;
+  selectedChildId?: ContainerId | WindowId;
 }>;
 
 export type SurfacePlan = Readonly<{
@@ -201,6 +206,14 @@ export type PlatformFact =
   | Readonly<{
       type: "WindowWithdrawn";
       windowId: WindowId;
+    }>
+  | Readonly<{
+      type: "SurfaceObserved";
+      surface: SurfaceFact;
+    }>
+  | Readonly<{
+      type: "SurfaceWithdrawn";
+      surfaceId: SurfaceId;
     }>;
 
 export type TilingCommand =
