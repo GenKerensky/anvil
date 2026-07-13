@@ -129,6 +129,14 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
         parentCount.get(container.id) === undefined,
         `Root Container ${container.id} must not appear as a child`
       );
+      const onlyChild =
+        container.childIds.length === 1
+          ? containers.get(container.childIds[0] as TilingInspection["containers"][number]["id"])
+          : undefined;
+      invariant(
+        onlyChild?.layout !== "horizontal" && onlyChild?.layout !== "vertical",
+        `Root Container ${container.id} must absorb its sole split child`
+      );
       continue;
     }
     invariant(container.parentId !== undefined, `Container ${container.id} needs a parent`);
@@ -189,57 +197,89 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
     return { windows: windowClosure, containers: containerClosure };
   };
   for (const operation of inspection.operations) {
-    invariant(operation.boundaries.length > 0, "Resize Operation must have a boundary");
-    invariant(
-      operation.boundaries.every(
-        (boundary, index) =>
-          index === 0 ||
-          compareDirections(operation.boundaries[index - 1].direction, boundary.direction) <= 0
-      ),
-      "Resize Operation boundaries must be canonically sorted"
-    );
-    const operationAxes = new Set<string>();
     const expectedContainers = new Set<string>();
     const expectedWindows = new Set<string>();
-    for (const boundary of operation.boundaries) {
-      const operationContainer = containers.get(boundary.containerId);
-      invariant(operationContainer !== undefined, "Operation Container must resolve");
+    if (operation.kind === "resize") {
+      invariant(operation.boundaries.length > 0, "Resize Operation must have a boundary");
       invariant(
-        boundary.primaryChildId !== boundary.neighborChildId &&
-          operationContainer.childIds.includes(boundary.primaryChildId) &&
-          operationContainer.childIds.includes(boundary.neighborChildId),
-        "Operation boundary children must be distinct direct children"
+        operation.boundaries.every(
+          (boundary, index) =>
+            index === 0 ||
+            compareDirections(operation.boundaries[index - 1].direction, boundary.direction) <= 0
+        ),
+        "Resize Operation boundaries must be canonically sorted"
       );
-      const axis = axisForDirection(boundary.direction);
-      const horizontal = axis === "horizontal";
-      invariant(
-        !operationAxes.has(axis),
-        "Resize Operation must have at most one boundary per axis"
-      );
-      operationAxes.add(axis);
-      invariant(
-        (horizontal && operationContainer.layout === "horizontal") ||
-          (!horizontal && operationContainer.layout === "vertical"),
-        "Operation direction must match its split Container"
-      );
-      const closure = descendantClosure([boundary.primaryChildId, boundary.neighborChildId]);
-      closure.containers.add(boundary.containerId);
-      for (const id of closure.containers) expectedContainers.add(id);
-      for (const id of closure.windows) expectedWindows.add(id);
-      const neighborClosure = descendantClosure([boundary.neighborChildId]);
-      invariant(
-        boundary.neighborWindowId === undefined ||
-          neighborClosure.windows.has(boundary.neighborWindowId),
-        "Operation neighbor Window must descend from its boundary child"
-      );
-      for (const weights of [boundary.baseWeights, boundary.overlayWeights]) {
+      const operationAxes = new Set<string>();
+      for (const boundary of operation.boundaries) {
+        const operationContainer = containers.get(boundary.containerId);
+        invariant(operationContainer !== undefined, "Operation Container must resolve");
         invariant(
-          Number.isFinite(weights[boundary.primaryChildId]) &&
-            weights[boundary.primaryChildId] > 0 &&
-            Number.isFinite(weights[boundary.neighborChildId]) &&
-            weights[boundary.neighborChildId] > 0,
-          "Operation boundary weights must be positive and finite"
+          boundary.primaryChildId !== boundary.neighborChildId &&
+            operationContainer.childIds.includes(boundary.primaryChildId) &&
+            operationContainer.childIds.includes(boundary.neighborChildId),
+          "Operation boundary children must be distinct direct children"
         );
+        const axis = axisForDirection(boundary.direction);
+        const horizontal = axis === "horizontal";
+        invariant(
+          !operationAxes.has(axis),
+          "Resize Operation must have at most one boundary per axis"
+        );
+        operationAxes.add(axis);
+        invariant(
+          (horizontal && operationContainer.layout === "horizontal") ||
+            (!horizontal && operationContainer.layout === "vertical"),
+          "Operation direction must match its split Container"
+        );
+        const closure = descendantClosure([boundary.primaryChildId, boundary.neighborChildId]);
+        closure.containers.add(boundary.containerId);
+        for (const id of closure.containers) expectedContainers.add(id);
+        for (const id of closure.windows) expectedWindows.add(id);
+        const neighborClosure = descendantClosure([boundary.neighborChildId]);
+        invariant(
+          boundary.neighborWindowId === undefined ||
+            neighborClosure.windows.has(boundary.neighborWindowId),
+          "Operation neighbor Window must descend from its boundary child"
+        );
+        for (const weights of [boundary.baseWeights, boundary.overlayWeights]) {
+          invariant(
+            Number.isFinite(weights[boundary.primaryChildId]) &&
+              weights[boundary.primaryChildId] > 0 &&
+              Number.isFinite(weights[boundary.neighborChildId]) &&
+              weights[boundary.neighborChildId] > 0,
+            "Operation boundary weights must be positive and finite"
+          );
+        }
+      }
+    } else {
+      const dragged = windows.get(operation.windowId);
+      invariant(dragged !== undefined, "Drag Operation Window must resolve");
+      const target = operation.placement
+        ? windows.get(operation.placement.targetWindowId)
+        : undefined;
+      invariant(
+        operation.placement === undefined ||
+          (target !== undefined && target.id !== operation.windowId),
+        "Drag placement target must resolve to another Window"
+      );
+      if (operation.placement) {
+        const targetContainer = containers.get(operation.placement.containerId);
+        invariant(
+          targetContainer !== undefined && target?.parentId === targetContainer.id,
+          "Drag placement Container must parent its target Window"
+        );
+      }
+      const affectedSurfaceIds = new Set([
+        dragged.surfaceId,
+        ...(target ? [target.surfaceId] : []),
+      ]);
+      for (const window of inspection.windows) {
+        if (window.participating && affectedSurfaceIds.has(window.surfaceId)) {
+          expectedWindows.add(window.id);
+        }
+      }
+      for (const container of inspection.containers) {
+        if (affectedSurfaceIds.has(container.surfaceId)) expectedContainers.add(container.id);
       }
     }
     invariant(
@@ -297,6 +337,43 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
       invariant(!operatedWindows.has(id), "Active operations have disjoint windows");
       operatedWindows.add(id);
     }
+  }
+
+  const previewOperationIds = new Set<string>();
+  for (const preview of inspection.renderPlan.previews) {
+    invariant(
+      !previewOperationIds.has(preview.operationId),
+      "Each Operation may expose at most one preview"
+    );
+    previewOperationIds.add(preview.operationId);
+    const operation = inspection.operations.find(
+      (candidate) => candidate.id === preview.operationId
+    );
+    invariant(
+      operation?.kind === "drag" && operation.placement !== undefined,
+      "Preview must belong to an active Drag placement"
+    );
+    const target = windows.get(operation.placement.targetWindowId);
+    invariant(
+      target !== undefined && target.surfaceId === preview.surfaceId,
+      "Preview Surface must match its Drag target"
+    );
+    invariant(
+      Number.isFinite(preview.rect.x) &&
+        Number.isFinite(preview.rect.y) &&
+        Number.isFinite(preview.rect.width) &&
+        Number.isFinite(preview.rect.height) &&
+        preview.rect.width > 0 &&
+        preview.rect.height > 0,
+      "Preview must have a finite positive rectangle"
+    );
+  }
+  for (const operation of inspection.operations) {
+    invariant(
+      operation.kind !== "drag" ||
+        (operation.placement === undefined) !== previewOperationIds.has(operation.id),
+      "Drag placement and preview must exist together"
+    );
   }
 
   for (const plan of inspection.renderPlan.windows) {

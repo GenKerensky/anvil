@@ -328,7 +328,10 @@ describe("TilingShadow", () => {
 
     first._rect.width = 1152;
     shadow.observeGrabUpdate(first);
-    expect(shadow.inspect().operations[0].boundaries[0].overlayWeights).toEqual({
+    const active = shadow.inspect().operations[0];
+    expect(active.kind).toBe("resize");
+    if (active.kind !== "resize") throw new Error("expected resize operation");
+    expect(active.boundaries[0].overlayWeights).toEqual({
       [firstId]: 0.6,
       [secondId]: 0.4,
     });
@@ -446,7 +449,10 @@ describe("TilingShadow", () => {
 
     third._rect.width = 300;
     shadow.observeGrabUpdate(third);
-    expect(shadow.inspect().operations[0].boundaries[0].overlayWeights).toEqual({
+    const active = shadow.inspect().operations[0];
+    expect(active.kind).toBe("resize");
+    if (active.kind !== "resize") throw new Error("expected resize operation");
+    expect(active.boundaries[0].overlayWeights).toEqual({
       "container:2": 0.6,
       [secondId]: 0.4,
     });
@@ -492,7 +498,10 @@ describe("TilingShadow", () => {
     first._rect.width = 1152;
     first._rect.height = 648;
     shadow.observeGrabUpdate(first);
-    const boundaries = shadow.inspect().operations[0].boundaries;
+    const active = shadow.inspect().operations[0];
+    expect(active.kind).toBe("resize");
+    if (active.kind !== "resize") throw new Error("expected resize operation");
+    const boundaries = active.boundaries;
     expect(boundaries).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

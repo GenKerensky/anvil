@@ -73,7 +73,8 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         event.type === "OperationCommitted" ||
         event.type === "OperationCancelled"
       ) {
-        const result = applyOperation(inspection, event);
+        const result = applyOperation(inspection, event, nextContainer);
+        if (result.nextContainer !== undefined) nextContainer = result.nextContainer;
         commitCandidate(result.inspection);
         return result.transition;
       }

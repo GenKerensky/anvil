@@ -12,6 +12,7 @@ import type {
 import { deriveContainerPlans, deriveWindowPlans } from "./geometry.js";
 import { changedPlacementIntentions } from "./intentions.js";
 import { axisForDirection, compareDirections, isDirection } from "./directions.js";
+import { applyDragOperation } from "./drag-operations.js";
 
 type OperationEvent = Extract<
   TilingEvent,
@@ -23,6 +24,7 @@ type OperationEvent = Extract<
 export type OperationResult = Readonly<{
   inspection: TilingInspection;
   transition: TilingTransition;
+  nextContainer?: number;
 }>;
 
 function ignored(inspection: TilingInspection): OperationResult {
@@ -206,9 +208,23 @@ function withRender(
 
 export function applyOperation(
   inspection: TilingInspection,
-  event: OperationEvent
+  event: OperationEvent,
+  currentNextContainer: number
 ): OperationResult {
+  const existingOperation =
+    event.type === "OperationStarted"
+      ? undefined
+      : inspection.operations.find((candidate) => candidate.id === event.operationId);
+  if (
+    (event.type === "OperationStarted" && event.operation.kind === "drag") ||
+    existingOperation?.kind === "drag"
+  ) {
+    return applyDragOperation(inspection, event, currentNextContainer);
+  }
   if (event.type === "OperationStarted") {
+    if (event.operation.kind !== "resize") {
+      return rejected(inspection, "invalid-operation-kind", "Operation kind is not supported");
+    }
     if (
       !isRecord(event.operation) ||
       !hasExactKeys(event.operation, ["id", "kind", "windowId", "directions"]) ||
@@ -370,6 +386,7 @@ export function applyOperation(
 
   const operation = inspection.operations.find((candidate) => candidate.id === event.operationId);
   if (!operation) return ignored(inspection);
+  if (operation.kind !== "resize") return ignored(inspection);
   if (
     operation.boundaries.some(
       (boundary) =>

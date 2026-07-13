@@ -4,6 +4,7 @@ import type {
   Direction,
   NonEmptyDirections,
   OperationId,
+  ResizeOperationInspection,
   TilingEvent,
   TilingInspection,
   TilingTransition,
@@ -94,7 +95,10 @@ export class GnomeGrabOperationAdapter {
     if (transition.status !== "committed") return;
 
     const inspection = this.port.inspect();
-    const active = inspection.operations.find((candidate) => candidate.id === operationId);
+    const active = inspection.operations.find(
+      (candidate): candidate is ResizeOperationInspection =>
+        candidate.id === operationId && candidate.kind === "resize"
+    );
     const axes = (active?.boundaries ?? [])
       .map((boundary): ResizeAxisObservation | undefined => {
         const container = inspection.renderPlan.containers.find(

@@ -19,6 +19,14 @@ export type TilingRevision = number;
 export type Layout = "horizontal" | "vertical" | "stacked" | "tabbed";
 export type Direction = "left" | "right" | "up" | "down";
 export type NonEmptyDirections = readonly [Direction, ...Direction[]];
+export type DragRegion = Direction | "center";
+export type DragCenterAction = "swap" | Layout;
+
+export type Point = Readonly<{
+  surfaceId: SurfaceId;
+  x: number;
+  y: number;
+}>;
 
 export type Rect = Readonly<{
   x: number;
@@ -143,16 +151,38 @@ export type ResizeBoundaryInspection = Readonly<{
   overlayWeights: Readonly<Record<string, number>>;
 }>;
 
-export type OperationInspection = Readonly<{
+type OperationInspectionBase = Readonly<{
   id: OperationId;
-  kind: "resize";
   windowId: WindowId;
-  boundaries: readonly ResizeBoundaryInspection[];
   affectedWindowIds: readonly WindowId[];
   affectedContainerIds: readonly ContainerId[];
   topologyRevision: TilingRevision;
   topologySignature: string;
 }>;
+
+export type ResizeOperationInspection = OperationInspectionBase &
+  Readonly<{
+    kind: "resize";
+    boundaries: readonly ResizeBoundaryInspection[];
+  }>;
+
+export type DragPlacementInspection = Readonly<{
+  kind: "swap" | "insert" | "split" | "detach";
+  targetWindowId: WindowId;
+  region: DragRegion;
+  containerId: ContainerId;
+  referenceChildId?: TilingChildId;
+  layout?: Layout;
+}>;
+
+export type DragOperationInspection = OperationInspectionBase &
+  Readonly<{
+    kind: "drag";
+    centerAction: DragCenterAction;
+    placement?: DragPlacementInspection;
+  }>;
+
+export type OperationInspection = ResizeOperationInspection | DragOperationInspection;
 
 export type PlacementHintInspection = Readonly<{
   windowId: WindowId;
@@ -307,16 +337,27 @@ export type TilingCommand =
       participating: boolean | null;
     }>;
 
-export type OperationStart = Readonly<{
-  id: OperationId;
-  kind: "resize";
-  windowId: WindowId;
-  directions: NonEmptyDirections;
-}>;
+export type OperationStart =
+  | Readonly<{
+      id: OperationId;
+      kind: "resize";
+      windowId: WindowId;
+      directions: NonEmptyDirections;
+    }>
+  | Readonly<{
+      id: OperationId;
+      kind: "drag";
+      windowId: WindowId;
+      centerAction: DragCenterAction;
+    }>;
 
-export type OperationUpdate = Readonly<{
-  shareDeltas: Readonly<Partial<Record<Direction, number>>>;
-}>;
+export type OperationUpdate =
+  | Readonly<{
+      shareDeltas: Readonly<Partial<Record<Direction, number>>>;
+    }>
+  | Readonly<{
+      pointer: Point;
+    }>;
 
 export type TilingEvent =
   | Readonly<{
@@ -380,6 +421,18 @@ export type TilingIntention =
         layout: Layout;
         selectedChildId?: ContainerId | WindowId;
         stackingOrder: readonly (ContainerId | WindowId)[];
+      }>)
+  | (IntentionToken &
+      Readonly<{
+        type: "PresentPreview";
+        operationId: OperationId;
+        surfaceId: SurfaceId;
+        rect: Rect;
+      }>)
+  | (IntentionToken &
+      Readonly<{
+        type: "ClearPreview";
+        operationId: OperationId;
       }>);
 
 export type TilingTransition =

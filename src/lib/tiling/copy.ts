@@ -50,16 +50,25 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
       tags: [...window.tags],
     })),
     containers: inspection.containers.map(copyContainer),
-    operations: inspection.operations.map((operation) => ({
-      ...operation,
-      boundaries: operation.boundaries.map((boundary) => ({
-        ...boundary,
-        baseWeights: { ...boundary.baseWeights },
-        overlayWeights: { ...boundary.overlayWeights },
-      })),
-      affectedWindowIds: [...operation.affectedWindowIds],
-      affectedContainerIds: [...operation.affectedContainerIds],
-    })),
+    operations: inspection.operations.map((operation) =>
+      operation.kind === "resize"
+        ? {
+            ...operation,
+            boundaries: operation.boundaries.map((boundary) => ({
+              ...boundary,
+              baseWeights: { ...boundary.baseWeights },
+              overlayWeights: { ...boundary.overlayWeights },
+            })),
+            affectedWindowIds: [...operation.affectedWindowIds],
+            affectedContainerIds: [...operation.affectedContainerIds],
+          }
+        : {
+            ...operation,
+            ...(operation.placement ? { placement: { ...operation.placement } } : {}),
+            affectedWindowIds: [...operation.affectedWindowIds],
+            affectedContainerIds: [...operation.affectedContainerIds],
+          }
+    ),
     placementHints: inspection.placementHints.map((hint) => ({ ...hint })),
     evacuationHints: inspection.evacuationHints.map((hint) => ({
       ...hint,
