@@ -7,6 +7,7 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
+import St from "gi://St";
 import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
@@ -330,7 +331,7 @@ describe("AnvilRuntime - Resize", () => {
       monitor._rect = monRect;
 
       // Create CON node under monitor with HSPLIT layout
-      const conNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, {});
+      const conNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
       conNode.layout = LAYOUT_TYPES.HSPLIT;
       conNode.percent = 1.0;
       conNode._rect = monRect;
@@ -408,6 +409,19 @@ describe("AnvilRuntime - Resize", () => {
       expect(node2.percent).not.toBe(0.5);
       expect(node1.initRect).toBeNull();
       expect(node1.grabMode).toBeNull();
+    });
+
+    it("should preserve a pointer-resized split through the grab-end render", () => {
+      const { metaWin1, node1, node2 } = setupTwoWindows(ctx);
+      wm()._handleGrabOpBegin(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
+      metaWin1.move_resize_frame(true, 0, 0, 1060, 1080);
+      wm().updateMetaPositionSize(metaWin1, "size-changed");
+
+      wm()._handleGrabOpEnd(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
+
+      expect(node1.percent).toBeCloseTo(1060 / 1920, 3);
+      expect(node2.percent).toBeCloseTo(860 / 1920, 3);
+      expect(metaWin1.get_frame_rect().width).toBeGreaterThan(960);
     });
 
     it("should update percents after vertical resize", () => {

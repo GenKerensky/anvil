@@ -615,6 +615,7 @@ export class Node<T extends string> extends GObject.Object {
     if (this.isWindow()) {
       const metaWindow = this.nodeValue;
       const floatAlwaysOnTop = this.settings?.get_boolean("float-always-on-top-enabled") ?? false;
+      const wasFloating = this.mode === WINDOW_MODES.FLOAT;
       if (value) {
         this.mode = WINDOW_MODES.FLOAT;
         if (!metaWindow.is_above()) {
@@ -628,12 +629,15 @@ export class Node<T extends string> extends GObject.Object {
         // If a window is changing from float -> tile (e.g. late classification
         // after metadata arrives for Inkscape/Brave etc.), zero percents on the
         // parent's children so the layout engine will give the newcomer proper
-        // space on the next processNode/apply.
-        const p = this.parentNode;
-        if (p) {
-          p.childNodes.forEach((c: any) => {
-            c.percent = undefined;
-          });
+        // space on the next processNode/apply. Reclassifying an already tiled
+        // window must be idempotent or every render erases manual resize state.
+        if (wasFloating) {
+          const p = this.parentNode;
+          if (p) {
+            p.childNodes.forEach((c: any) => {
+              c.percent = undefined;
+            });
+          }
         }
       }
     }
