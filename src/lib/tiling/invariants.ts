@@ -18,6 +18,10 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
   invariant(surfaceIds.size === inspection.surfaces.length, "Surface identities must be unique");
   invariant(windowIds.size === inspection.windows.length, "Window identities must be unique");
   invariant(
+    inspection.focusedWindowId === undefined || windowIds.has(inspection.focusedWindowId),
+    "Focused Window identity must resolve"
+  );
+  invariant(
     containerIds.size === inspection.containers.length,
     "Container identities must be unique"
   );

@@ -95,4 +95,24 @@ describe("TilingShadow", () => {
     expect(observed.frame.x).toBe(40);
     globals.cleanup();
   });
+
+  it("observes focus only for windows already admitted to the core", () => {
+    const workspaceWindow = createMockWindow();
+    const globals = installGnomeGlobals({
+      display: { getFocusWindow: () => workspaceWindow },
+    });
+    workspaceWindow._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+
+    shadow.bootstrap([workspaceWindow], () => true);
+    const admittedId = shadow.inspect().windows[0].id;
+    expect(shadow.inspect().focusedWindowId).toBe(admittedId);
+
+    shadow.observeFocus(null);
+    expect(shadow.inspect().focusedWindowId).toBeUndefined();
+
+    shadow.observeFocus(createMockWindow({ workspace: globals.workspaces[0] }));
+    expect(shadow.inspect().focusedWindowId).toBeUndefined();
+    globals.cleanup();
+  });
 });

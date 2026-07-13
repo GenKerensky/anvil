@@ -689,4 +689,45 @@ describe("TilingStateMachine", () => {
       ],
     });
   });
+
+  it("observes compositor focus as selection without reordering topology", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const first = windowId("first");
+    const second = windowId("second");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [first, second].map((id) => ({
+          id,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 500, height: 800 },
+          available: true,
+          capabilities,
+        })),
+        focusedWindowId: first,
+      },
+    });
+
+    const before = machine.inspect().containers[0].childIds;
+    const transition = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "FocusObserved", windowId: second }],
+    });
+
+    expect(transition).toMatchObject({ status: "committed", revision: 2, intentions: [] });
+    expect(machine.inspect()).toMatchObject({
+      focusedWindowId: second,
+      containers: [{ selectedChildId: second, childIds: before }],
+    });
+  });
 });

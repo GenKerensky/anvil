@@ -52,6 +52,10 @@ export class GnomeTilingIdentityRegistry {
     return id;
   }
 
+  knownWindow(metaWindow: Meta.Window): WindowId | undefined {
+    return this.windows.get(metaWindow);
+  }
+
   surface(workspace: Meta.Workspace, outputKey: string): SurfaceId {
     let outputs = this.surfaces.get(workspace);
     if (!outputs) {
@@ -178,15 +182,16 @@ export class TilingShadow {
         surfaces.push(this.surfaceFact(workspace, monitor));
       }
     }
+    const observedWindows = windows
+      .filter(validWindow)
+      .map((window) => this.windowFact(window))
+      .filter((window): window is WindowFact => window !== null);
+    const focusedWindow = global.display.get_focus_window();
+    const focusedWindowId = focusedWindow ? this.identities.knownWindow(focusedWindow) : undefined;
     const snapshot: PlatformSnapshot = {
       surfaces,
-      windows: windows
-        .filter(validWindow)
-        .map((window) => this.windowFact(window))
-        .filter((window): window is WindowFact => window !== null),
-      ...(global.display.get_focus_window()
-        ? { focusedWindowId: this.identities.window(global.display.get_focus_window()!) }
-        : {}),
+      windows: observedWindows,
+      ...(focusedWindowId ? { focusedWindowId } : {}),
     };
     this.machine.dispatch({ type: "PlatformSnapshotObserved", snapshot });
   }
@@ -206,6 +211,14 @@ export class TilingShadow {
     this.machine.dispatch({
       type: "FactsObserved",
       facts: [{ type: "FrameObserved", windowId: fact.id, frame: fact.frame }],
+    });
+  }
+
+  observeFocus(metaWindow: Meta.Window | null): void {
+    const focusedWindowId = metaWindow ? this.identities.knownWindow(metaWindow) : undefined;
+    this.machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "FocusObserved", windowId: focusedWindowId }],
     });
   }
 

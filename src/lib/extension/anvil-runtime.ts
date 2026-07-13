@@ -310,6 +310,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       autoSplitFromFocus: () => self.layoutEngine.autoSplitFromFocus(),
       observePortableWindow: (w) => self._tilingShadow!.observeWindow(w),
       observePortableFrame: (w) => self._tilingShadow!.observeFrame(w),
+      observePortableFocus: (w) => self._tilingShadow!.observeFocus(w),
       withdrawPortableWindow: (w) => self._tilingShadow!.withdrawWindow(w),
     });
     this._settingsBridge = new SettingsBridge({

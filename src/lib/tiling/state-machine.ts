@@ -541,6 +541,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
       if (event.type === "FactsObserved") {
         const windows: WindowInspection[] = [...inspection.windows];
+        let focusedWindowId = inspection.focusedWindowId;
         let surfaces = [...inspection.surfaces];
         let containers = [...inspection.containers];
         let placementHints = [...inspection.placementHints];
@@ -552,6 +553,27 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         }> = [];
         let changed = false;
         for (const fact of event.facts) {
+          if (fact.type === "FocusObserved") {
+            if (
+              fact.windowId !== undefined &&
+              !windows.some((window) => window.id === fact.windowId)
+            ) {
+              continue;
+            }
+            if (fact.windowId === focusedWindowId) continue;
+            focusedWindowId = fact.windowId;
+            if (focusedWindowId) {
+              const focused = windows.find((window) => window.id === focusedWindowId);
+              if (focused?.participating && focused.parentId) {
+                containers = containers.map((container) =>
+                  container.id === focused.parentId
+                    ? { ...container, selectedChildId: focusedWindowId }
+                    : container
+                );
+              }
+            }
+            changed = true;
+          }
           if (fact.type === "WindowAvailabilityObserved") {
             const index = windows.findIndex((window) => window.id === fact.windowId);
             if (index < 0 || windows[index].available === fact.available) continue;
@@ -666,6 +688,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             const index = windows.findIndex((window) => window.id === fact.windowId);
             if (index < 0) continue;
             windows.splice(index, 1);
+            if (focusedWindowId === fact.windowId) focusedWindowId = undefined;
             containers = containers.map((container) => ({
               ...container,
               childIds: container.childIds.filter((id) => id !== fact.windowId),
@@ -843,6 +866,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         commitCandidate({
           ...inspection,
           revision,
+          focusedWindowId,
           surfaces,
           windows,
           containers,
@@ -918,6 +942,26 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             };
           });
 
+        const focusedWindowId = windows.some(
+          (window) => window.id === event.snapshot.focusedWindowId
+        )
+          ? event.snapshot.focusedWindowId
+          : undefined;
+        if (focusedWindowId) {
+          const focused = windows.find((window) => window.id === focusedWindowId);
+          if (focused?.participating && focused.parentId) {
+            const parentIndex = containers.findIndex(
+              (container) => container.id === focused.parentId
+            );
+            if (parentIndex >= 0) {
+              containers[parentIndex] = {
+                ...containers[parentIndex],
+                selectedChildId: focusedWindowId,
+              };
+            }
+          }
+        }
+
         const windowPlans = deriveWindowPlans(surfaces, windows, containers, inspection.policy);
 
         const intentions = [
@@ -943,6 +987,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         commitCandidate({
           ...inspection,
           revision,
+          focusedWindowId,
           surfaces,
           windows,
           containers,

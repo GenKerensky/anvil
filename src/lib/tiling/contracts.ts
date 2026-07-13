@@ -199,6 +199,7 @@ export type TilingRenderPlan = Readonly<{
 export type TilingInspection = Readonly<{
   schemaVersion: 1;
   revision: TilingRevision;
+  focusedWindowId?: WindowId;
   policy: TilingPolicy;
   surfaces: readonly SurfaceInspection[];
   windows: readonly WindowInspection[];
@@ -253,6 +254,10 @@ export type PlatformFact =
       type: "WindowSurfaceObserved";
       windowId: WindowId;
       surfaceId: SurfaceId;
+    }>
+  | Readonly<{
+      type: "FocusObserved";
+      windowId?: WindowId;
     }>;
 
 export type TilingCommand =

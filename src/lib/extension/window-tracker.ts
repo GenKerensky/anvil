@@ -63,6 +63,7 @@ export interface WindowTrackerHost {
   autoSplitFromFocus(): boolean;
   observePortableWindow(metaWindow: Meta.Window): void;
   observePortableFrame(metaWindow: Meta.Window): void;
+  observePortableFocus(metaWindow: Meta.Window | null): void;
   withdrawPortableWindow(metaWindow: Meta.Window): void;
 }
 
@@ -413,6 +414,7 @@ export class WindowTracker {
               host.hideActorBorder(windowActor);
             }),
             metaWindow.connect("focus", (_metaWindowFocus: Meta.Window) => {
+              host.observePortableFocus(_metaWindowFocus);
               if (Utils.isEphemeralHelperWindow(_metaWindowFocus)) {
                 return;
               }
