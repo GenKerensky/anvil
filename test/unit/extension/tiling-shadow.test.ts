@@ -150,6 +150,21 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("normalizes Mutter client minimum-size hints", () => {
+    const globals = installGnomeGlobals();
+    const window = createMockWindow({
+      workspace: globals.workspaces[0],
+      minimum_size: { width: 120, height: 430 },
+      client_frame_delta: { width: 0, height: 50 },
+    });
+    const shadow = new TilingShadow(createMockSettings() as never);
+
+    shadow.bootstrap([window], () => true);
+
+    expect(shadow.inspect().windows[0].minimumSize).toEqual({ width: 120, height: 380 });
+    globals.cleanup();
+  });
+
   it("observes focus only for windows already admitted to the core", () => {
     const workspaceWindow = createMockWindow();
     const globals = installGnomeGlobals({
@@ -243,6 +258,27 @@ describe("TilingShadow", () => {
     shadow.bootstrap([], () => true);
 
     expect(shadow.inspect().windows).toHaveLength(1);
+    globals.cleanup();
+  });
+
+  it("submits a normalized window snapshot as one ordered fact batch", () => {
+    const globals = installGnomeGlobals();
+    const windows = [createMockWindow(), createMockWindow(), createMockWindow()];
+    for (const window of windows) window._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([], () => true);
+    const bootstrapRevision = shadow.inspect().revision;
+
+    shadow.observeWindows(windows);
+
+    const inspection = shadow.inspect();
+    expect(inspection.revision).toBe(bootstrapRevision + 1);
+    expect(inspection.containers[0].childIds).toEqual(
+      windows.map(
+        (window) =>
+          shadow.inspect().windows.find((item) => shadow.resolveWindow(item.id) === window)!.id
+      )
+    );
     globals.cleanup();
   });
 

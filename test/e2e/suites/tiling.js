@@ -148,6 +148,7 @@ describe("Window Tiling", function () {
     wins.forEach(function (w) {
       expect(w.width).toBeGreaterThan(0);
     });
+    await expectPortableShadowParity();
   });
 
   it("after-toggle layout does not overlap", async function () {
@@ -167,5 +168,6 @@ describe("Window Tiling", function () {
       expect(w.width).toBeGreaterThan(0);
       expect(w.height).toBeGreaterThan(0);
     });
+    await expectPortableShadowParity();
   });
 });

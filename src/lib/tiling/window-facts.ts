@@ -26,6 +26,7 @@ export function inspectWindowFact(
     ...(fact.role ? { role: fact.role } : {}),
     ...(fact.transientParentId ? { transientParentId: fact.transientParentId } : {}),
     ...(fact.resizable !== undefined ? { resizable: fact.resizable } : {}),
+    ...(fact.minimumSize ? { minimumSize: { ...fact.minimumSize } } : {}),
     tags: [...(fact.tags ?? [])],
     reconcileAttempts: previous?.reconcileAttempts ?? 0,
   };

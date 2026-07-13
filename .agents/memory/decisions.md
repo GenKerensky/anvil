@@ -522,3 +522,16 @@ A second audit of the refactor found remaining work; all resolved.
   declarations hold offset, blur, spread, color, and opacity. Appearance preferences edit those
   declarations through `PrefsThemeManager`; the existing `css-updated` event reloads the shell and
   refreshes decoration layout without adding parallel GSettings state.
+
+### Portable admission order and minimum-size facts (2026-07-13)
+
+- **Fact order may define structural order**: snapshot and multi-window `FactsObserved` input order
+  is preserved when attaching newly participating windows. Canonical inspection sorting is a
+  separate concern and must never rewrite container child order.
+- **Selection is the insertion anchor**: a newly participating window is inserted immediately after
+  its target container's selected child. A per-batch cursor preserves the submitted order for
+  multiple admissions without reordering existing children or treating focus as structural order.
+- **Minimum sizes cross the boundary as frame dimensions**: the GNOME adapter reads
+  `Meta.Window.get_min_size()` and converts the client rectangle with Mutter's frame/client
+  conversion methods before emitting `WindowFact.minimumSize`. The portable renderer applies the
+  minimum after gap and maximum-constraint derivation, matching the frame Mutter can actually set.

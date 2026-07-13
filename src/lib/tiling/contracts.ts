@@ -35,6 +35,11 @@ export type Rect = Readonly<{
   height: number;
 }>;
 
+export type MinimumSize = Readonly<{
+  width: number;
+  height: number;
+}>;
+
 export type SurfaceConstraint = Readonly<{
   maxWidth?: number;
   maxHeight?: number;
@@ -99,6 +104,7 @@ export type WindowFact = Readonly<{
   role?: string;
   transientParentId?: WindowId;
   resizable?: boolean;
+  minimumSize?: MinimumSize;
   tags?: readonly string[];
 }>;
 
@@ -127,6 +133,7 @@ export type WindowInspection = Readonly<{
   role?: string;
   transientParentId?: WindowId;
   resizable?: boolean;
+  minimumSize?: MinimumSize;
   tags: readonly string[];
   reconcileAttempts: number;
 }>;

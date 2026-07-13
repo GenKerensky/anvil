@@ -163,6 +163,14 @@ export function assertTilingInvariants(inspection: TilingInspection): void {
   );
 
   for (const window of inspection.windows) {
+    invariant(
+      window.minimumSize === undefined ||
+        (Number.isFinite(window.minimumSize.width) &&
+          Number.isFinite(window.minimumSize.height) &&
+          window.minimumSize.width >= 0 &&
+          window.minimumSize.height >= 0),
+      `Window ${window.id} minimum size must be finite and non-negative`
+    );
     if (window.participating) {
       invariant(
         surfaceIds.has(window.surfaceId),

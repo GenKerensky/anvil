@@ -840,17 +840,17 @@ pass without GNOME mocks.
     - Run replay plus real-shell scenarios until all intentional differences are documented and all
       accidental differences are fixed.
 
-Current real-shell parity evidence and open gaps (2026-07-13):
+Current real-shell parity evidence (2026-07-13):
 
-- Settled two-window horizontal tiling has zero geometry mismatches and zero rejected shadow events
-  on GNOME Shell 50.1 in the Fedora Devbox.
-- Three-or-more-window command scenarios still expose asynchronous admission-order drift between
-  individually observed GNOME map events and legacy Tree attachment. Complete normalized fact
-  batching/placement ordering before treating later swap or layout mismatches as command defects.
-- Nautilus can clamp a three-way vertical tile to a client minimum height. The portable plan still
-  requests equal shares because minimum-size capabilities are not yet represented in Window facts.
-  Model the platform constraint or its resulting effect failure before requiring zero observed-frame
-  mismatch for that fixture.
+- Settled two-window horizontal tiling, three-window swap, and three-window layout-toggle scenarios
+  have zero geometry mismatches and zero rejected shadow events on GNOME Shell 50.1 in the Fedora
+  Devbox.
+- Snapshot and multi-window fact order is now a structural input independent of canonical identity
+  sorting. New admissions insert after the selected child, and one batch cursor preserves the fact
+  order when several windows target the same container.
+- Window facts carry client minimum sizes normalized into frame dimensions with Mutter's
+  client-to-frame conversion. This matches Nautilus's three-way vertical clamp without exposing
+  GNOME decoration geometry to the core.
 
 **Gate:** legacy remains the only writer; shadow mismatch count is zero for the acceptance matrix,
 or each remaining mismatch has an approved behavior-change decision.

@@ -47,6 +47,7 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
       ...window,
       frame: copyRect(window.frame),
       capabilities: { ...window.capabilities },
+      ...(window.minimumSize ? { minimumSize: { ...window.minimumSize } } : {}),
       tags: [...window.tags],
     })),
     containers: inspection.containers.map(copyContainer),

@@ -31,21 +31,30 @@ function inset(rect: Rect, gap: number): Rect {
   };
 }
 
-function constrain(rect: Rect, constraint: TilingPolicy["constraints"][string] | undefined): Rect {
-  if (!constraint) return rect;
+function constrain(
+  rect: Rect,
+  constraint: TilingPolicy["constraints"][string] | undefined,
+  minimumSize: WindowInspection["minimumSize"]
+): Rect {
   let { x, y, width, height } = rect;
-  if (constraint.maxWidth !== undefined && constraint.maxWidth > 0 && width > constraint.maxWidth) {
+  if (
+    constraint?.maxWidth !== undefined &&
+    constraint.maxWidth > 0 &&
+    width > constraint.maxWidth
+  ) {
     x += Math.floor((width - constraint.maxWidth) / 2);
     width = constraint.maxWidth;
   }
   if (
-    constraint.maxHeight !== undefined &&
+    constraint?.maxHeight !== undefined &&
     constraint.maxHeight > 0 &&
     height > constraint.maxHeight
   ) {
     y += Math.floor((height - constraint.maxHeight) / 2);
     height = constraint.maxHeight;
   }
+  width = Math.max(width, minimumSize?.width ?? 0);
+  height = Math.max(height, minimumSize?.height ?? 0);
   return { x, y, width, height };
 }
 
@@ -148,7 +157,11 @@ function derivePlans(
             windowPlans.push({
               id: window.id,
               surfaceId: window.surfaceId,
-              frame: constrain(inset(childRect, gap), policy.constraints[surface.id]),
+              frame: constrain(
+                inset(childRect, gap),
+                policy.constraints[surface.id],
+                window.minimumSize
+              ),
             });
           }
           continue;

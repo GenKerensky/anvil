@@ -218,9 +218,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       observePortableWindow: (window) =>
         self._withTilingShadow("window", (shadow) => shadow.observeWindow(window)),
       observePortableWindows: () =>
-        self._withTilingShadow("windows", (shadow) => {
-          for (const window of self.windowsAllWorkspaces) shadow.observeWindow(window);
-        }),
+        self._withTilingShadow("windows", (shadow) =>
+          shadow.observeWindows(self.windowsAllWorkspaces)
+        ),
     });
     this._tree = new Tree({
       get settings() {

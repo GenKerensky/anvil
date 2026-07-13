@@ -13,6 +13,7 @@ export type {
   DragRegion,
   IntentionToken,
   Layout,
+  MinimumSize,
   NonEmptyDirections,
   OperationId,
   OperationInspection,

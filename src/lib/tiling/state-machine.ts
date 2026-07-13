@@ -110,6 +110,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           windowId: WindowInspection["id"];
           participating: boolean;
         }> = [];
+        const attachmentCursors = new Map<ContainerId, ContainerId | WindowInspection["id"]>();
         let changed = false;
         for (const fact of event.facts) {
           if (fact.type === "EffectFailed") {
@@ -219,9 +220,17 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
                 return container;
               }
               const childIds = container.childIds.filter((id) => id !== next.id);
-              return container.id === next.parentId
-                ? { ...container, childIds: [...childIds, next.id] }
-                : { ...container, childIds };
+              if (container.id !== next.parentId) return { ...container, childIds };
+              const anchorId =
+                attachmentCursors.get(container.id) ??
+                (container.selectedChildId && childIds.includes(container.selectedChildId)
+                  ? container.selectedChildId
+                  : undefined);
+              const anchorIndex = anchorId ? childIds.indexOf(anchorId) : -1;
+              const insertionIndex = anchorIndex >= 0 ? anchorIndex + 1 : childIds.length;
+              childIds.splice(insertionIndex, 0, next.id);
+              attachmentCursors.set(container.id, next.id);
+              return { ...container, childIds };
             });
             if (index >= 0) windows[index] = next;
             else windows.push(next);

@@ -71,23 +71,22 @@ export function applyBootstrap(
   }
 
   const surfaceIds = tilingSurfaceIds(surfaces);
-  const windows: WindowInspection[] = [...event.snapshot.windows]
-    .sort((a, b) => a.id.localeCompare(b.id))
-    .map((window) => {
-      const classifiedWindow = inspectWindowFact(window, inspection.policy, surfaceIds);
-      const parentId = classifiedWindow.participating
-        ? surfaceRoots.get(window.surfaceId)
-        : undefined;
-      if (parentId) {
-        const parentIndex = containers.findIndex((container) => container.id === parentId);
-        const parent = containers[parentIndex];
-        containers[parentIndex] = { ...parent, childIds: [...parent.childIds, window.id] };
-      }
-      return {
-        ...classifiedWindow,
-        ...(parentId ? { parentId } : {}),
-      };
-    });
+  const windows: WindowInspection[] = event.snapshot.windows.map((window) => {
+    const classifiedWindow = inspectWindowFact(window, inspection.policy, surfaceIds);
+    const parentId = classifiedWindow.participating
+      ? surfaceRoots.get(window.surfaceId)
+      : undefined;
+    if (parentId) {
+      const parentIndex = containers.findIndex((container) => container.id === parentId);
+      const parent = containers[parentIndex];
+      containers[parentIndex] = { ...parent, childIds: [...parent.childIds, window.id] };
+    }
+    return {
+      ...classifiedWindow,
+      ...(parentId ? { parentId } : {}),
+    };
+  });
+  windows.sort((left, right) => left.id.localeCompare(right.id));
 
   const focusedWindowId = windows.some((window) => window.id === event.snapshot.focusedWindowId)
     ? event.snapshot.focusedWindowId

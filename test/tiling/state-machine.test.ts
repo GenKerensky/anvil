@@ -820,6 +820,49 @@ describe("TilingStateMachine", () => {
     });
   });
 
+  it("reflects known client minimum sizes in desired applied frames", () => {
+    const primary = surfaceId("primary");
+    const machine = createTilingStateMachine({ ...policy, defaultLayout: "vertical" });
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    const windows = [windowId("first"), windowId("second"), windowId("third")];
+
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 1048 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: windows.map((id) => ({
+          id,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 1000, height: 380 },
+          available: true,
+          capabilities,
+          minimumSize: { width: 120, height: 380 },
+        })),
+      },
+    });
+
+    expect(machine.inspect().renderPlan.windows).toEqual([
+      { id: windows[0], surfaceId: primary, frame: { x: 0, y: 0, width: 1000, height: 380 } },
+      {
+        id: windows[1],
+        surfaceId: primary,
+        frame: { x: 0, y: 349, width: 1000, height: 380 },
+      },
+      {
+        id: windows[2],
+        surfaceId: primary,
+        frame: { x: 0, y: 698, width: 1000, height: 380 },
+      },
+    ]);
+  });
+
   it("discovers and reassigns a window using only Surface identities", () => {
     const machine = createTilingStateMachine(policy);
     const left = surfaceId("left");
@@ -992,5 +1035,80 @@ describe("TilingStateMachine", () => {
     });
 
     expect(machine.inspect().containers[0].childIds).toEqual([first, second]);
+  });
+
+  it("inserts an observed window batch after selection in fact order", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const first = windowId("first");
+    const second = windowId("second");
+    const third = windowId("third");
+    const last = windowId("last");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    const observed = (id: typeof first) => ({
+      id,
+      surfaceId: primary,
+      frame: { x: 0, y: 0, width: 250, height: 800 },
+      available: true,
+      capabilities,
+    });
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [observed(first), observed(last)],
+        focusedWindowId: first,
+      },
+    });
+
+    machine.dispatch({
+      type: "FactsObserved",
+      facts: [
+        { type: "WindowObserved", window: observed(second) },
+        { type: "WindowObserved", window: observed(third) },
+      ],
+    });
+
+    expect(machine.inspect().containers[0].childIds).toEqual([first, second, third, last]);
+  });
+
+  it("preserves snapshot admission order independently of canonical identity sorting", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    const orderedIds = Array.from({ length: 11 }, (_, index) => windowId(`window:${index + 1}`));
+
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1100, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: orderedIds.map((id) => ({
+          id,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 100, height: 800 },
+          available: true,
+          capabilities,
+        })),
+      },
+    });
+
+    expect(machine.inspect().containers[0].childIds).toEqual(orderedIds);
+    expect(machine.inspect().windows.map((window) => window.id)).toEqual(
+      [...orderedIds].sort((left, right) => left.localeCompare(right))
+    );
   });
 });

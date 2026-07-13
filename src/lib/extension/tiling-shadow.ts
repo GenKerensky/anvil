@@ -40,6 +40,13 @@ import {
 type WindowCapabilities = Meta.Window & {
   allows_move?: () => boolean;
   allows_resize?: () => boolean;
+  get_min_size?: () => [boolean, number, number];
+  frame_rect_to_client_rect?: (
+    rect: ReturnType<Meta.Window["get_frame_rect"]>
+  ) => ReturnType<Meta.Window["get_frame_rect"]>;
+  client_rect_to_frame_rect?: (
+    rect: ReturnType<Meta.Window["get_frame_rect"]>
+  ) => ReturnType<Meta.Window["get_frame_rect"]>;
   get_role?: () => string | null;
 };
 
@@ -358,6 +365,26 @@ export class TilingShadow {
     const workArea = workspace.get_work_area_for_monitor(monitor);
     const frame = metaWindow.get_frame_rect();
     const native = metaWindow as WindowCapabilities;
+    const [minimumSizeKnown, minimumWidth, minimumHeight] = native.get_min_size?.() ?? [
+      false,
+      0,
+      0,
+    ];
+    let minimumFrameSize: { width: number; height: number } | undefined;
+    if (minimumSizeKnown) {
+      const clientRect = native.frame_rect_to_client_rect?.(frame);
+      if (clientRect && native.client_rect_to_frame_rect) {
+        clientRect.width = minimumWidth;
+        clientRect.height = minimumHeight;
+        const minimumFrame = native.client_rect_to_frame_rect(clientRect);
+        minimumFrameSize = {
+          width: Math.max(0, minimumFrame.width),
+          height: Math.max(0, minimumFrame.height),
+        };
+      } else {
+        minimumFrameSize = { width: minimumWidth, height: minimumHeight };
+      }
+    }
     const transientParent = metaWindow.get_transient_for();
     const windowType = metaWindow.get_window_type();
     const tags =
@@ -385,6 +412,7 @@ export class TilingShadow {
       role: native.get_role?.() ?? undefined,
       transientParentId: transientParent ? this.identities.window(transientParent) : undefined,
       resizable: native.allows_resize?.() ?? true,
+      ...(minimumFrameSize ? { minimumSize: minimumFrameSize } : {}),
       tags,
     };
   }
@@ -439,11 +467,18 @@ export class TilingShadow {
   }
 
   observeWindow(metaWindow: Meta.Window): void {
-    const window = this.windowFact(metaWindow);
-    if (!window) return;
+    this.observeWindows([metaWindow]);
+  }
+
+  observeWindows(metaWindows: readonly Meta.Window[]): void {
+    const facts = metaWindows
+      .map((metaWindow) => this.windowFact(metaWindow))
+      .filter((window): window is WindowFact => window !== null)
+      .map((window) => ({ type: "WindowObserved" as const, window }));
+    if (facts.length === 0) return;
     this.submit({
       type: "FactsObserved",
-      facts: [{ type: "WindowObserved", window }],
+      facts,
     });
   }
 

@@ -61,6 +61,8 @@ export class Window extends withSignals() {
     this._window_type = "window_type" in params ? params.window_type : WindowType.NORMAL;
     this._transient_for = "transient_for" in params ? params.transient_for : null;
     this._allows_resize = "allows_resize" in params ? params.allows_resize : true;
+    this._minimum_size = params.minimum_size ?? null;
+    this._client_frame_delta = params.client_frame_delta ?? { width: 0, height: 0 };
     this._workspace = params.workspace ?? null;
     this._monitor = params.monitor ?? 0;
   }
@@ -183,6 +185,30 @@ export class Window extends withSignals() {
 
   allows_resize() {
     return this._allows_resize;
+  }
+
+  get_min_size() {
+    return this._minimum_size
+      ? [true, this._minimum_size.width, this._minimum_size.height]
+      : [false, 0, 0];
+  }
+
+  frame_rect_to_client_rect(rect) {
+    return new Rectangle({
+      x: rect.x,
+      y: rect.y,
+      width: rect.width + this._client_frame_delta.width,
+      height: rect.height + this._client_frame_delta.height,
+    });
+  }
+
+  client_rect_to_frame_rect(rect) {
+    return new Rectangle({
+      x: rect.x,
+      y: rect.y,
+      width: rect.width - this._client_frame_delta.width,
+      height: rect.height - this._client_frame_delta.height,
+    });
   }
 
   get_window_type() {
