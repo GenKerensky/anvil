@@ -192,11 +192,16 @@ export type PlatformSnapshot = Readonly<{
   focusedWindowId?: WindowId;
 }>;
 
-export type PlatformFact = Readonly<{
-  type: "WindowAvailabilityObserved";
-  windowId: WindowId;
-  available: boolean;
-}>;
+export type PlatformFact =
+  | Readonly<{
+      type: "WindowAvailabilityObserved";
+      windowId: WindowId;
+      available: boolean;
+    }>
+  | Readonly<{
+      type: "WindowWithdrawn";
+      windowId: WindowId;
+    }>;
 
 export type TilingCommand =
   | Readonly<{

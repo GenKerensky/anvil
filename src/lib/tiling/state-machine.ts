@@ -366,12 +366,28 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
       if (event.type === "FactsObserved") {
         const windows: WindowInspection[] = [...inspection.windows];
+        let containers = [...inspection.containers];
+        let placementHints = [...inspection.placementHints];
         let changed = false;
         for (const fact of event.facts) {
           if (fact.type === "WindowAvailabilityObserved") {
             const index = windows.findIndex((window) => window.id === fact.windowId);
             if (index < 0 || windows[index].available === fact.available) continue;
             windows[index] = { ...windows[index], available: fact.available };
+            changed = true;
+          }
+          if (fact.type === "WindowWithdrawn") {
+            const index = windows.findIndex((window) => window.id === fact.windowId);
+            if (index < 0) continue;
+            windows.splice(index, 1);
+            containers = containers.map((container) => ({
+              ...container,
+              childIds: container.childIds.filter((id) => id !== fact.windowId),
+              ...(container.selectedChildId === fact.windowId
+                ? { selectedChildId: undefined }
+                : {}),
+            }));
+            placementHints = placementHints.filter((hint) => hint.windowId !== fact.windowId);
             changed = true;
           }
         }
@@ -388,31 +404,35 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         const windowPlans = deriveWindowPlans(
           inspection.surfaces,
           windows,
-          inspection.containers,
+          containers,
           inspection.policy
         );
-        const intentions = windowPlans
-          .filter((plan) => {
-            const previous = inspection.renderPlan.windows.find((window) => window.id === plan.id);
-            return (
-              !previous ||
-              previous.surfaceId !== plan.surfaceId ||
-              !sameRect(previous.frame, plan.frame)
-            );
-          })
-          .map((plan, ordinal) => ({
-            type: "PlaceWindow" as const,
-            revision,
-            ordinal,
-            windowId: plan.id,
-            surfaceId: plan.surfaceId,
-            frame: copyRect(plan.frame),
-          }));
+        const intentions = changedPlacementIntentions(
+          inspection.renderPlan.windows,
+          windowPlans,
+          revision
+        );
         inspection = {
           ...inspection,
           revision,
           windows,
-          renderPlan: { ...inspection.renderPlan, revision, windows: windowPlans },
+          containers,
+          placementHints,
+          renderPlan: {
+            ...inspection.renderPlan,
+            revision,
+            windows: windowPlans,
+            containers: inspection.renderPlan.containers.map((plan) => {
+              const container = containers.find((candidate) => candidate.id === plan.id)!;
+              return {
+                ...plan,
+                ...(container.selectedChildId
+                  ? { selectedChildId: container.selectedChildId }
+                  : { selectedChildId: undefined }),
+                stackingOrder: [...container.childIds],
+              };
+            }),
+          },
         };
         return { status: "committed", revision, intentions, diagnostics: [] };
       }

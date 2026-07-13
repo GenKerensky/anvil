@@ -347,4 +347,54 @@ describe("TilingStateMachine", () => {
       containers: [{ childIds: [terminal] }],
     });
   });
+
+  it("withdraws a window before retiling its surviving sibling", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const removed = windowId("removed");
+    const survivor = windowId("survivor");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [removed, survivor].map((id) => ({
+          id,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 500, height: 800 },
+          available: true,
+          capabilities,
+        })),
+      },
+    });
+
+    const transition = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "WindowWithdrawn", windowId: removed }],
+    });
+
+    expect(transition).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        {
+          type: "PlaceWindow",
+          windowId: survivor,
+          frame: { x: 0, y: 0, width: 1000, height: 800 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [{ id: survivor }],
+      containers: [{ childIds: [survivor] }],
+      renderPlan: { windows: [{ id: survivor }] },
+    });
+  });
 });
