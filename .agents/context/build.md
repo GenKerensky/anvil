@@ -36,6 +36,10 @@ distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && make test-e2e'
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --tag resize'
+distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --virtual-monitors 2 --tag monitor-churn'
+distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --tag session-mode'
 python3 test/e2e/run.py --tag focus        # Direct host smoke when dependencies exist
 python3 test/e2e/run.py --no-build         # Skip make dist
 ```
@@ -51,6 +55,12 @@ Requires `gnome-shell` + `jasmine-gjs` + `glib2-devel`. The core-default Xwaylan
 `xterm`; install it inside the mutable Devbox with `sudo dnf install -y xterm`. On Bazzite, the
 Fedora Devbox command above is the normal E2E route; do not classify a missing immutable-host
 `jasmine-gjs` as an E2E product failure.
+
+`--virtual-monitors COUNT` creates one to four persistent 1920×1080 virtual outputs. The
+`monitor-churn` suite registers only when `COUNT` is greater than one. Mutter 50.1's headless
+mirror transition emits stale work-area assertions under both core and legacy writers when a live
+window occupies the collapsing output; use the core invariant result as automated evidence and a
+physical-output session for the final hotplug gate.
 
 **Important**: `Shell.Eval` is broken system-wide (returns `(false, '')` for all expressions). Use
 D-Bus APIs (`org.gnome.Shell.Extensions.*`) and direct GJS API calls instead.

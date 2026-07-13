@@ -928,23 +928,50 @@ Gate evidence (2026-07-13, Fedora Devbox, GNOME Shell/Mutter 50.1, commit `d0425
 
 Core-default soak matrix (tracked independently from the Phase 6 functional matrix):
 
-| Scenario                        | Current evidence                                                             | Status   |
-| ------------------------------- | ---------------------------------------------------------------------------- | -------- |
-| enable/disable with core writer | full E2E `Extension Lifecycle`                                               | complete |
-| fullscreen enter/exit           | full E2E border/window-state scenario                                        | complete |
-| ordinary minimize/restore       | full E2E `Minimize Behavior`                                                 | complete |
-| repeated keyboard resize        | 74-case full E2E resize matrix                                               | complete |
-| rapid minimize/restore churn    | five-cycle core E2E with diagnostic assertions                               | complete |
-| dynamic workspace create/remove | core E2E surface/window referential-integrity test                           | complete |
-| monitor add/remove/reconfigure  | constraint coverage is not monitor hotplug                                   | pending  |
-| Xwayland window mapped late     | late `xterm` admission core E2E                                              | complete |
-| repeated pointer drag/resize    | headless `begin_grab_op` segfaults both engines; manual Devkit soak required | pending  |
-| lock/unlock                     | not exercised by the headless functional suite                               | pending  |
+| Scenario                        | Current evidence                                                               | Status   |
+| ------------------------------- | ------------------------------------------------------------------------------ | -------- |
+| enable/disable with core writer | full E2E `Extension Lifecycle`                                                 | complete |
+| fullscreen enter/exit           | full E2E border/window-state scenario                                          | complete |
+| ordinary minimize/restore       | full E2E `Minimize Behavior`                                                   | complete |
+| repeated keyboard resize        | 74-case full E2E resize matrix                                                 | complete |
+| rapid minimize/restore churn    | five-cycle core E2E with diagnostic assertions                                 | complete |
+| dynamic workspace create/remove | core E2E surface/window referential-integrity test                             | complete |
+| monitor add/remove/reconfigure  | two-monitor mirror/linear core E2E preserves surface identities and invariants | partial  |
+| Xwayland window mapped late     | late `xterm` admission core E2E                                                | complete |
+| repeated pointer drag/resize    | headless `begin_grab_op` segfaults both engines; manual Devkit soak required   | pending  |
+| lock/unlock                     | real Shell `unlock-dialog` session-mode push/pop preserves core identity       | complete |
 
-The engine does not become the production default until every pending row has a reproducible
-real-shell test or a recorded environment limitation plus an approved manual result. Legacy removal
-still requires explicit approval after the default soak; passing this matrix alone does not approve
-deletion.
+The monitor test runs with two persistent virtual outputs, moves a live window to the second
+output, collapses the topology to mirror mode, and restores linear mode. The core keeps its
+surface identities stable, withdraws/restores topology without an invariant failure, and ends with
+every participating window assigned to a live surface. Mutter 50.1 emits two stale work-area
+assertions while collapsing a window-bearing second virtual output. The identical assertions occur
+under the legacy writer, so they are recorded as a headless compositor limitation rather than a
+core failure. Physical add/remove remains a manual cutover item.
+
+The lock test drives the real GNOME Shell `SessionMode` stack through `unlock-dialog` and back to
+`user`, which covers Anvil's extension persistence, indicator lifecycle, and retained core state.
+The headless Shell has no `Main.screenShield` or GDM authentication service, so this does not claim
+lock-screen UI or authentication coverage; those are outside the tiling engine's state boundary.
+
+Remaining manual cutover checklist:
+
+1. Start an isolated core-mode Devkit session with
+   `ANVIL_TILING_ENGINE=core .agents/skills/gnome-shell-debug/scripts/run-devkit-session.sh`.
+2. Open at least three tiled windows. Perform ten pointer moves across split siblings and between
+   outputs, including center, edge-insert, and swap drop zones; cancel at least two moves.
+3. Perform ten pointer resizes from different edges/corners, including a cancel. After each group,
+   verify no window disappears, shares remain positive, and subsequent keyboard focus/move works.
+4. In a real user session with two physical outputs, unplug/replug or disable/re-enable one output
+   while each output owns a tiled window. Verify the returned surface restores its windows and no
+   transition, invariant, effect, or reconcile-exhaustion diagnostic appears.
+5. Record GNOME Shell/Mutter version, display topology, the Devkit/session log path, and pass/fail
+   result here before approving the core-default switch.
+
+The engine does not become the production default until every pending or partial row has a
+reproducible real-shell test or a recorded environment limitation plus an approved manual result.
+Legacy removal still requires explicit approval after the default soak; passing this matrix alone
+does not approve deletion.
 
 **Final gate:** no production import outside `src/lib/tiling/` mutates logical topology, shares,
 selection, or render plans; no file inside imports GNOME; full unit/build/E2E validation is green.
