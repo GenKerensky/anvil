@@ -122,6 +122,7 @@ export function installGnomeGlobals(options = {}) {
   const { workspaceManager, workspaces } = createMockWorkspaceManager(wmOpts);
   display.get_workspace_manager.mockReturnValue(workspaceManager);
 
+  const previousBackend = global.backend;
   global.display = display;
   global.workspace_manager = workspaceManager;
 
@@ -152,6 +153,7 @@ export function installGnomeGlobals(options = {}) {
     vi.clearAllTimers();
     delete global.display;
     delete global.workspace_manager;
+    global.backend = previousBackend;
     delete global.window_group;
     delete global.stage;
     delete global.get_current_time;

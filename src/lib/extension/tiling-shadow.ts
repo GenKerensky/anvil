@@ -250,7 +250,11 @@ export class TilingShadow {
     );
     let defaultLayout: Layout = "horizontal";
     try {
-      const geometry = global.display.get_monitor_geometry(global.display.get_current_monitor());
+      const monitorCount = this.logicalMonitorCount();
+      const currentMonitor = global.display.get_current_monitor();
+      const geometry = global.display.get_monitor_geometry(
+        currentMonitor >= 0 && currentMonitor < monitorCount ? currentMonitor : 0
+      );
       defaultLayout = geometry.width < geometry.height ? "vertical" : "horizontal";
     } catch {
       // The adapter can start before monitor geometry is available. Match the
@@ -264,7 +268,7 @@ export class TilingShadow {
     ) {
       const workspace = workspaceManager.get_workspace_by_index(workspaceIndex);
       if (!workspace) continue;
-      for (let monitor = 0; monitor < global.display.get_n_monitors(); monitor += 1) {
+      for (let monitor = 0; monitor < this.logicalMonitorCount(); monitor += 1) {
         const id = this.surfaceIdentity(workspace, monitor);
         surfaceTiling[id] = !skippedWorkspaces.has(workspaceIndex);
         const constraint = constraintsByOutput.get(this.outputKey(monitor));
@@ -297,6 +301,14 @@ export class TilingShadow {
     }
   }
 
+  private logicalMonitorCount(): number {
+    try {
+      return global.backend.get_monitor_manager().get_logical_monitors()?.length ?? 0;
+    } catch {
+      return global.display.get_n_monitors();
+    }
+  }
+
   private surfaceIdentity(workspace: Meta.Workspace, monitor: number): SurfaceId {
     return this.identities.surface(workspace, this.outputKey(monitor));
   }
@@ -314,7 +326,9 @@ export class TilingShadow {
     ];
     for (const [direction, nativeDirection] of directions) {
       const neighbor = global.display.get_monitor_neighbor_index(monitor, nativeDirection);
-      if (neighbor >= 0) neighbors[direction] = this.surfaceIdentity(workspace, neighbor);
+      if (neighbor >= 0 && neighbor < this.logicalMonitorCount()) {
+        neighbors[direction] = this.surfaceIdentity(workspace, neighbor);
+      }
     }
     return {
       id,
@@ -330,7 +344,7 @@ export class TilingShadow {
   ): Point | null {
     const [x, y] = pointer;
     if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
-    for (let monitor = 0; monitor < global.display.get_n_monitors(); monitor += 1) {
+    for (let monitor = 0; monitor < this.logicalMonitorCount(); monitor += 1) {
       const geometry = global.display.get_monitor_geometry(monitor);
       if (
         x < geometry.x ||
@@ -360,7 +374,7 @@ export class TilingShadow {
     ) {
       const workspace = workspaceManager.get_workspace_by_index(workspaceIndex);
       if (!workspace) continue;
-      for (let monitor = 0; monitor < global.display.get_n_monitors(); monitor += 1) {
+      for (let monitor = 0; monitor < this.logicalMonitorCount(); monitor += 1) {
         surfaces.push(this.surfaceFact(workspace, monitor));
       }
     }
@@ -371,6 +385,7 @@ export class TilingShadow {
     const workspace = metaWindow.get_workspace();
     if (!workspace) return null;
     const monitor = metaWindow.get_monitor();
+    if (monitor < 0 || monitor >= this.logicalMonitorCount()) return null;
     const workArea = workspace.get_work_area_for_monitor(monitor);
     const frame = metaWindow.get_frame_rect();
     const native = metaWindow as WindowCapabilities;

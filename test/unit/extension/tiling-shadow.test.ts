@@ -108,6 +108,26 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("does not sample a stale display monitor outside the logical topology", () => {
+    const globals = installGnomeGlobals({ display: { monitorCount: 2 } });
+    (global as unknown as { backend: unknown }).backend = {
+      get_monitor_manager: vi.fn(() => ({
+        get_logical_monitors: () => [{ get_monitors: () => [{ get_connector: () => "DP-1" }] }],
+      })),
+    } as never;
+    const workspace = globals.workspaces[0];
+    const workArea = vi.spyOn(workspace, "get_work_area_for_monitor");
+    const staleWindow = createMockWindow({ workspace, monitor: 1 });
+    const shadow = new TilingShadow(createMockSettings() as never);
+
+    shadow.bootstrap([staleWindow], () => true);
+
+    expect(shadow.inspect().surfaces).toHaveLength(1);
+    expect(shadow.inspect().windows).toHaveLength(0);
+    expect(workArea).not.toHaveBeenCalledWith(1);
+    globals.cleanup();
+  });
+
   it("removes withdrawn windows from the GNOME identity resolver", () => {
     const globals = installGnomeGlobals();
     const window = createMockWindow({ workspace: globals.workspaces[0] });
@@ -366,7 +386,7 @@ describe("TilingShadow", () => {
     shadow.bootstrap([], () => true);
     const replacementWorkspace = new globals.workspaces[0].constructor({ index: 0 });
     globals.workspaceManager.get_workspace_by_index.mockReturnValue(replacementWorkspace);
-    globals.display.get_monitor_neighbor_index.mockReturnValue(1);
+    globals.display.get_monitor_neighbor_index.mockReturnValue(0);
 
     shadow.observeTopology();
     expect(shadow.compareObservedGeometry()).toMatchObject({
