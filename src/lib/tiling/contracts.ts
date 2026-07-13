@@ -105,8 +105,19 @@ export type WindowInspection = Readonly<{
   surfaceId: SurfaceId;
   parentId?: ContainerId;
   participating: boolean;
+  policyParticipation: boolean;
+  policyParticipationSource: string;
+  manualParticipation?: boolean;
+  participationSource: string;
   available: boolean;
   frame: Rect;
+  capabilities: PlatformCapabilities;
+  applicationId?: string;
+  title?: string;
+  role?: string;
+  transientParentId?: WindowId;
+  resizable?: boolean;
+  tags: readonly string[];
 }>;
 
 export type ContainerInspection = Readonly<{
@@ -243,6 +254,11 @@ export type TilingCommand =
       type: "SwapDirection";
       windowId: WindowId;
       direction: Direction;
+    }>
+  | Readonly<{
+      type: "SetParticipation";
+      windowId: WindowId;
+      participating: boolean | null;
     }>;
 
 export type OperationStart = Readonly<{

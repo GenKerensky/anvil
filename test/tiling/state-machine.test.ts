@@ -483,4 +483,81 @@ describe("TilingStateMachine", () => {
       evacuationHints: [],
     });
   });
+
+  it("keeps manual participation separate from ordered rule classification", () => {
+    const pipPolicy: TilingPolicy = {
+      ...policy,
+      participationRules: [{ id: "float-pip", action: "float", role: "picture-in-picture" }],
+    };
+    const machine = createTilingStateMachine(pipPolicy);
+    const primary = surfaceId("primary");
+    const pip = windowId("pip");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1200, height: 900 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [
+          {
+            id: pip,
+            surfaceId: primary,
+            frame: { x: 900, y: 600, width: 300, height: 300 },
+            available: true,
+            capabilities,
+            applicationId: "org.example.Player",
+            role: "picture-in-picture",
+          },
+        ],
+      },
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [
+        {
+          id: pip,
+          participating: false,
+          policyParticipation: false,
+          participationSource: "rule:float-pip",
+        },
+      ],
+    });
+
+    const forced = machine.dispatch({
+      type: "CommandRequested",
+      command: { type: "SetParticipation", windowId: pip, participating: true },
+    });
+    expect(forced).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        {
+          type: "WindowParticipationChanged",
+          windowId: pip,
+          participating: true,
+        },
+        {
+          type: "PlaceWindow",
+          windowId: pip,
+          frame: { x: 0, y: 0, width: 1200, height: 900 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [
+        {
+          id: pip,
+          manualParticipation: true,
+          policyParticipation: false,
+          participationSource: "manual",
+          participating: true,
+        },
+      ],
+    });
+  });
 });

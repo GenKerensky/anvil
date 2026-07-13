@@ -43,7 +43,12 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
     ...inspection,
     policy: copyPolicy(inspection.policy),
     surfaces: inspection.surfaces.map(copySurface),
-    windows: inspection.windows.map((window) => ({ ...window, frame: copyRect(window.frame) })),
+    windows: inspection.windows.map((window) => ({
+      ...window,
+      frame: copyRect(window.frame),
+      capabilities: { ...window.capabilities },
+      tags: [...window.tags],
+    })),
     containers: inspection.containers.map(copyContainer),
     operations: inspection.operations.map((operation) => ({
       ...operation,

@@ -7,32 +7,14 @@ import type {
   TilingPolicy,
   TilingStateMachine,
   TilingTransition,
-  WindowFact,
   WindowInspection,
 } from "./contracts.js";
 import { copyInspection, copyPolicy } from "./copy.js";
 import { copyRect, deriveContainerPlans, deriveWindowPlans, sameRect } from "./geometry.js";
 import { changedPlacementIntentions } from "./intentions.js";
 import { applyOperation } from "./operations.js";
+import { classifyParticipation, effectiveParticipation } from "./participation.js";
 import { validateSurfaces } from "./validation.js";
-
-function shouldParticipate(
-  window: WindowFact,
-  policy: TilingPolicy,
-  availableSurfaces: ReadonlySet<string>
-): boolean {
-  if (!policy.enabled || !availableSurfaces.has(window.surfaceId)) return false;
-  return policy.surfaceTiling[window.surfaceId] !== false;
-}
-
-function inspectionShouldParticipate(
-  window: WindowInspection,
-  policy: TilingPolicy,
-  availableSurfaces: ReadonlySet<string>
-): boolean {
-  if (!policy.enabled || !availableSurfaces.has(window.surfaceId)) return false;
-  return policy.surfaceTiling[window.surfaceId] !== false;
-}
 
 export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingStateMachine {
   const policy = copyPolicy(initialPolicy);
@@ -72,6 +54,122 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
       if (event.type === "CommandRequested") {
         const command = event.command;
+        if (command.type === "SetParticipation") {
+          const windowIndex = inspection.windows.findIndex(
+            (candidate) => candidate.id === command.windowId
+          );
+          if (windowIndex < 0) {
+            return {
+              status: "rejected",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [
+                {
+                  code: "unknown-window",
+                  message: "SetParticipation requires a known window",
+                  identity: command.windowId,
+                },
+              ],
+            };
+          }
+          const current = inspection.windows[windowIndex];
+          const manualParticipation = command.participating ?? undefined;
+          if (manualParticipation === current.manualParticipation) {
+            return {
+              status: "ignored",
+              revision: inspection.revision,
+              intentions: [],
+              diagnostics: [],
+            };
+          }
+          const availableSurfaces = new Set(inspection.surfaces.map((surface) => surface.id));
+          const candidate: WindowInspection = {
+            ...current,
+            manualParticipation,
+            participationSource:
+              manualParticipation === undefined ? current.policyParticipationSource : "manual",
+          };
+          const participating = effectiveParticipation(
+            candidate,
+            inspection.policy,
+            availableSurfaces
+          );
+          let placementHints = [...inspection.placementHints];
+          if (current.participating && !participating) {
+            placementHints = placementHints.filter((hint) => hint.windowId !== current.id);
+            placementHints.push({
+              windowId: current.id,
+              surfaceId: current.surfaceId,
+              ...(current.parentId ? { parentId: current.parentId } : {}),
+              selected: false,
+            });
+          }
+          const surface = inspection.surfaces.find(
+            (candidateSurface) => candidateSurface.id === current.surfaceId
+          );
+          const nextWindow: WindowInspection = {
+            ...candidate,
+            participating,
+            ...(participating && surface ? { parentId: surface.rootId } : { parentId: undefined }),
+          };
+          const windows = [...inspection.windows];
+          windows[windowIndex] = nextWindow;
+          const containers = inspection.containers.map((container) => {
+            const childIds = container.childIds.filter((id) => id !== current.id);
+            return container.id === nextWindow.parentId
+              ? { ...container, childIds: [...childIds, current.id] }
+              : { ...container, childIds };
+          });
+          const revision = inspection.revision + 1;
+          const windowPlans = deriveWindowPlans(
+            inspection.surfaces,
+            windows,
+            containers,
+            inspection.policy
+          );
+          const participationIntentions =
+            participating === current.participating
+              ? []
+              : [
+                  {
+                    type: "WindowParticipationChanged" as const,
+                    revision,
+                    ordinal: 0,
+                    windowId: current.id,
+                    participating,
+                  },
+                ];
+          const placementIntentions = changedPlacementIntentions(
+            inspection.renderPlan.windows,
+            windowPlans,
+            revision,
+            participationIntentions.length
+          );
+          inspection = {
+            ...inspection,
+            revision,
+            windows,
+            containers,
+            operations: inspection.operations.filter(
+              (operation) =>
+                operation.windowId !== current.id && operation.neighborWindowId !== current.id
+            ),
+            placementHints,
+            renderPlan: {
+              ...inspection.renderPlan,
+              revision,
+              windows: windowPlans,
+              containers: deriveContainerPlans(inspection.surfaces, containers),
+            },
+          };
+          return {
+            status: "committed",
+            revision,
+            intentions: [...participationIntentions, ...placementIntentions],
+            diagnostics: [],
+          };
+        }
+
         if (command.type === "FocusDirection") {
           const window = inspection.windows.find((candidate) => candidate.id === command.windowId);
           const containerIndex = inspection.containers.findIndex(
@@ -127,7 +225,12 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             status: "committed",
             revision,
             intentions: [
-              { type: "FocusWindow", revision, ordinal: 0, windowId: targetId as WindowFact["id"] },
+              {
+                type: "FocusWindow",
+                revision,
+                ordinal: 0,
+                windowId: targetId as WindowInspection["id"],
+              },
             ],
             diagnostics: [],
           };
@@ -303,8 +406,22 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         }> = [];
         const placementHints = [...inspection.placementHints];
         const windows = inspection.windows.map((window) => {
-          const participating = inspectionShouldParticipate(window, nextPolicy, availableSurfaces);
-          if (participating === window.participating) return window;
+          const classification = classifyParticipation(window, nextPolicy);
+          const classifiedWindow = {
+            ...window,
+            policyParticipation: classification.participating,
+            policyParticipationSource: classification.source,
+            participationSource:
+              window.manualParticipation === undefined ? classification.source : "manual",
+          };
+          const participating = effectiveParticipation(
+            classifiedWindow,
+            nextPolicy,
+            availableSurfaces
+          );
+          if (participating === window.participating) {
+            return { ...classifiedWindow, participating };
+          }
           participationChanges.push({ windowId: window.id, participating });
           if (!participating) {
             placementHints.push({
@@ -313,12 +430,12 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               ...(window.parentId ? { parentId: window.parentId } : {}),
               selected: false,
             });
-            return { ...window, participating: false, parentId: undefined };
+            return { ...classifiedWindow, participating: false, parentId: undefined };
           }
           const surface = inspection.surfaces.find(
             (candidate) => candidate.id === window.surfaceId
           );
-          return { ...window, participating: true, parentId: surface?.rootId };
+          return { ...classifiedWindow, participating: true, parentId: surface?.rootId };
         });
         const containers = inspection.containers.map((container) => ({
           ...container,
@@ -522,7 +639,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             for (let index = 0; index < windows.length; index += 1) {
               const window = windows[index];
               if (window.surfaceId !== fact.surface.id) continue;
-              const participating = inspectionShouldParticipate(
+              const participating = effectiveParticipation(
                 window,
                 inspection.policy,
                 availableSurfaces
@@ -632,7 +749,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
           containers.push({
             id: rootId,
             surfaceId: surface.id,
-            layout: policy.defaultLayout,
+            layout: inspection.policy.defaultLayout,
             childIds: [],
             weights: {},
           });
@@ -643,7 +760,29 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
         const windows: WindowInspection[] = [...event.snapshot.windows]
           .sort((a, b) => a.id.localeCompare(b.id))
           .map((window) => {
-            const participating = shouldParticipate(window, policy, surfaceIds);
+            const classification = classifyParticipation(window, inspection.policy);
+            const classifiedWindow: WindowInspection = {
+              id: window.id,
+              surfaceId: window.surfaceId,
+              participating: false,
+              policyParticipation: classification.participating,
+              policyParticipationSource: classification.source,
+              participationSource: classification.source,
+              available: window.available,
+              frame: copyRect(window.frame),
+              capabilities: { ...window.capabilities },
+              ...(window.applicationId ? { applicationId: window.applicationId } : {}),
+              ...(window.title ? { title: window.title } : {}),
+              ...(window.role ? { role: window.role } : {}),
+              ...(window.transientParentId ? { transientParentId: window.transientParentId } : {}),
+              ...(window.resizable !== undefined ? { resizable: window.resizable } : {}),
+              tags: [...(window.tags ?? [])],
+            };
+            const participating = effectiveParticipation(
+              classifiedWindow,
+              inspection.policy,
+              surfaceIds
+            );
             const parentId = participating ? surfaceRoots.get(window.surfaceId) : undefined;
             if (parentId) {
               const parentIndex = containers.findIndex((container) => container.id === parentId);
@@ -651,16 +790,13 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
               containers[parentIndex] = { ...parent, childIds: [...parent.childIds, window.id] };
             }
             return {
-              id: window.id,
-              surfaceId: window.surfaceId,
+              ...classifiedWindow,
               ...(parentId ? { parentId } : {}),
               participating,
-              available: window.available,
-              frame: copyRect(window.frame),
             };
           });
 
-        const windowPlans = deriveWindowPlans(surfaces, windows, containers, policy);
+        const windowPlans = deriveWindowPlans(surfaces, windows, containers, inspection.policy);
 
         const intentions = [
           ...windows
