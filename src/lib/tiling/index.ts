@@ -10,6 +10,7 @@ export type {
   OperationInspection,
   ParticipationRule,
   PlatformCapabilities,
+  PlatformFact,
   PlacementHintInspection,
   PlatformSnapshot,
   PreviewPlan,

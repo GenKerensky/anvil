@@ -114,6 +114,35 @@ function splitFrames(
   });
 }
 
+function deriveWindowPlans(
+  surfaces: readonly SurfaceInspection[],
+  windows: readonly WindowInspection[],
+  containers: readonly ContainerInspection[],
+  policy: TilingPolicy
+): WindowPlan[] {
+  return surfaces.flatMap((surface) => {
+    const surfaceWindows = windows.filter(
+      (window) => window.participating && window.surfaceId === surface.id
+    );
+    const availableCount = surfaceWindows.filter((window) => window.available).length;
+    const gap = policy.hideGapWhenSingle && availableCount === 1 ? 0 : policy.gap;
+    const root = containers.find((container) => container.id === surface.rootId);
+    return splitFrames(surface.workArea, surfaceWindows, root?.layout ?? policy.defaultLayout, gap);
+  });
+}
+
+function sameRect(
+  left: Readonly<{ x: number; y: number; width: number; height: number }>,
+  right: Readonly<{ x: number; y: number; width: number; height: number }>
+): boolean {
+  return (
+    left.x === right.x &&
+    left.y === right.y &&
+    left.width === right.width &&
+    left.height === right.height
+  );
+}
+
 function copyPolicy(policy: TilingPolicy): TilingPolicy {
   return {
     ...policy,
@@ -154,6 +183,59 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
   return {
     dispatch(event: TilingEvent): TilingTransition {
+      if (event.type === "FactsObserved") {
+        const windows: WindowInspection[] = [...inspection.windows];
+        let changed = false;
+        for (const fact of event.facts) {
+          if (fact.type === "WindowAvailabilityObserved") {
+            const index = windows.findIndex((window) => window.id === fact.windowId);
+            if (index < 0 || windows[index].available === fact.available) continue;
+            windows[index] = { ...windows[index], available: fact.available };
+            changed = true;
+          }
+        }
+        if (!changed) {
+          return {
+            status: "ignored",
+            revision: inspection.revision,
+            intentions: [],
+            diagnostics: [],
+          };
+        }
+
+        const revision = inspection.revision + 1;
+        const windowPlans = deriveWindowPlans(
+          inspection.surfaces,
+          windows,
+          inspection.containers,
+          inspection.policy
+        );
+        const intentions = windowPlans
+          .filter((plan) => {
+            const previous = inspection.renderPlan.windows.find((window) => window.id === plan.id);
+            return (
+              !previous ||
+              previous.surfaceId !== plan.surfaceId ||
+              !sameRect(previous.frame, plan.frame)
+            );
+          })
+          .map((plan, ordinal) => ({
+            type: "PlaceWindow" as const,
+            revision,
+            ordinal,
+            windowId: plan.id,
+            surfaceId: plan.surfaceId,
+            frame: copyRect(plan.frame),
+          }));
+        inspection = {
+          ...inspection,
+          revision,
+          windows,
+          renderPlan: { ...inspection.renderPlan, revision, windows: windowPlans },
+        };
+        return { status: "committed", revision, intentions, diagnostics: [] };
+      }
+
       if (event.type === "PlatformSnapshotObserved") {
         const invalid = validateSurfaces(event.snapshot.surfaces);
         if (invalid) {
@@ -210,17 +292,7 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
             };
           });
 
-        const windowPlans = surfaces.flatMap((surface) => {
-          const surfaceWindows = windows.filter(
-            (window) => window.participating && window.surfaceId === surface.id
-          );
-          const gap =
-            policy.hideGapWhenSingle &&
-            surfaceWindows.filter((window) => window.available).length === 1
-              ? 0
-              : policy.gap;
-          return splitFrames(surface.workArea, surfaceWindows, policy.defaultLayout, gap);
-        });
+        const windowPlans = deriveWindowPlans(surfaces, windows, containers, policy);
 
         const intentions = [
           ...windows

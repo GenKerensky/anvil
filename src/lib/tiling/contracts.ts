@@ -192,10 +192,21 @@ export type PlatformSnapshot = Readonly<{
   focusedWindowId?: WindowId;
 }>;
 
-export type TilingEvent = Readonly<{
-  type: "PlatformSnapshotObserved";
-  snapshot: PlatformSnapshot;
+export type PlatformFact = Readonly<{
+  type: "WindowAvailabilityObserved";
+  windowId: WindowId;
+  available: boolean;
 }>;
+
+export type TilingEvent =
+  | Readonly<{
+      type: "PlatformSnapshotObserved";
+      snapshot: PlatformSnapshot;
+    }>
+  | Readonly<{
+      type: "FactsObserved";
+      facts: readonly PlatformFact[];
+    }>;
 
 type IntentionToken = Readonly<{
   revision: TilingRevision;

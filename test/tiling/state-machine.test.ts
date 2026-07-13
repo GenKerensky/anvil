@@ -201,4 +201,73 @@ describe("TilingStateMachine", () => {
       },
     });
   });
+
+  it("retains placement while an unavailable window leaves allocation", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const left = windowId("left");
+    const right = windowId("right");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1000, height: 800 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [left, right].map((id) => ({
+          id,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 500, height: 800 },
+          available: true,
+          capabilities,
+        })),
+      },
+    });
+
+    const transition = machine.dispatch({
+      type: "FactsObserved",
+      facts: [{ type: "WindowAvailabilityObserved", windowId: left, available: false }],
+    });
+
+    expect(transition).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        {
+          type: "PlaceWindow",
+          windowId: right,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 1000, height: 800 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [
+        { id: left, participating: true, available: false, parentId: "container:1" },
+        { id: right, participating: true, available: true, parentId: "container:1" },
+      ],
+      containers: [{ childIds: [left, right] }],
+      renderPlan: {
+        windows: [
+          {
+            id: right,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 1000, height: 800 },
+          },
+        ],
+      },
+    });
+
+    expect(
+      machine.dispatch({
+        type: "FactsObserved",
+        facts: [{ type: "WindowAvailabilityObserved", windowId: left, available: false }],
+      })
+    ).toEqual({ status: "ignored", revision: 2, intentions: [], diagnostics: [] });
+  });
 });
