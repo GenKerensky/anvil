@@ -206,6 +206,7 @@ describe("AnvilRuntime - Lifecycle", () => {
     it("should not throw for missing actor properties", () => {
       const actor = {
         border: null,
+        cornerShadow: null,
         splitBorder: null,
         actorSignals: null,
         connect: vi.fn(),

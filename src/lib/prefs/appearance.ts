@@ -11,6 +11,13 @@ import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensio
 // Shared state
 import { ConfigManager } from "../shared/settings.js";
 import { PrefsThemeManager } from "./prefs-theme-manager.js";
+import {
+  DEFAULT_FOCUSED_SHADOW,
+  DEFAULT_UNFOCUSED_SHADOW,
+  formatBoxShadow,
+  parseBoxShadow,
+  type ShadowStyle,
+} from "./shadow-style.js";
 
 // Prefs UI
 import { ColorRow, PreferencesPage, ResetButton, SpinButtonRow, SwitchRow } from "./widgets.js";
@@ -79,6 +86,8 @@ export class AppearancePage extends PreferencesPage {
       ".window-tilepreview-stacked",
       ".window-tilepreview-swap",
       ".window-tilepreview-tabbed",
+      ".window-focused-shadow",
+      ".window-unfocused-shadow",
     ];
 
     const currentRadius = parseInt(
@@ -159,6 +168,87 @@ export class AppearancePage extends PreferencesPage {
         "window-split-border",
       ].map((x) => this._createColorOptionWidget(x)),
     });
+    this.add_group({
+      title: _("Shadows"),
+      description: _("Customize shadows for focused and unfocused windows"),
+      children: [
+        this._createShadowOptionWidget(
+          ".window-focused-shadow",
+          _("Focused window"),
+          DEFAULT_FOCUSED_SHADOW
+        ),
+        this._createShadowOptionWidget(
+          ".window-unfocused-shadow",
+          _("Unfocused window"),
+          DEFAULT_UNFOCUSED_SHADOW
+        ),
+      ],
+    });
+  }
+
+  _createShadowOptionWidget(
+    selector: string,
+    title: string,
+    defaults: Readonly<ShadowStyle>
+  ): Adw.ExpanderRow {
+    const theme = this.themeMgr;
+    const value = theme.getCssProperty(selector, "box-shadow")?.value ?? "";
+    let shadow = parseBoxShadow(value) ?? { ...defaults };
+    const row = new Adw.ExpanderRow({ title });
+    const update = () => theme.setCssProperty(selector, "box-shadow", formatBoxShadow(shadow));
+
+    const colorRow = new ColorRow({
+      title: _("Color and opacity"),
+      init: shadow.color,
+      onChange: (color) => {
+        shadow = { ...shadow, color };
+        update();
+      },
+    });
+    colorRow.add_suffix(
+      new ResetButton({
+        onReset: () => {
+          shadow = { ...shadow, color: defaults.color };
+          update();
+          const rgba = new Gdk.RGBA();
+          if (rgba.parse(defaults.color)) colorRow.colorButton.set_rgba(rgba);
+        },
+      })
+    );
+    row.add_row(colorRow);
+
+    const addNumberRow = (
+      field: "xOffset" | "yOffset" | "blurRadius" | "spreadRadius",
+      label: string,
+      range: [number, number, number]
+    ) => {
+      const numberRow = new SpinButtonRow({
+        title: label,
+        range,
+        init: shadow[field],
+        onChange: (number) => {
+          shadow = { ...shadow, [field]: number };
+          update();
+        },
+      });
+      numberRow.add_suffix(
+        new ResetButton({
+          onReset: () => {
+            shadow = { ...shadow, [field]: defaults[field] };
+            update();
+            (numberRow.activatable_widget! as Gtk.SpinButton).value = defaults[field];
+          },
+        })
+      );
+      row.add_row(numberRow);
+    };
+
+    addNumberRow("xOffset", _("Horizontal offset"), [-32, 32, 1]);
+    addNumberRow("yOffset", _("Vertical offset"), [-32, 32, 1]);
+    addNumberRow("blurRadius", _("Blur radius"), [0, 64, 1]);
+    addNumberRow("spreadRadius", _("Spread radius"), [-32, 32, 1]);
+
+    return row;
   }
 
   _createColorOptionWidget(prefix: string) {

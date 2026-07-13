@@ -64,7 +64,7 @@ export class ThemeManagerBase extends GObject.Object {
     //  since the schema css-last-update might be triggered when there is a
     //  code change on the schema unrelated to css updates.
     //  For now tagging works. See @this.patchCss() and @this._needUpdate().
-    this.cssTag = 37;
+    this.cssTag = 38;
 
     // TODO: should the patchCss() call be done here?
   }

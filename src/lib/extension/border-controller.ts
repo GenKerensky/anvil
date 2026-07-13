@@ -53,7 +53,13 @@ export class BorderController {
       windowActor.border = border;
       border.show();
     }
+    if (!windowActor.cornerShadow) {
+      const shadow = new St.Bin({ style_class: "window-unfocused-shadow" });
+      if (global.window_group) global.window_group.insert_child_below(shadow, windowActor);
+      windowActor.cornerShadow = shadow;
+    }
     this.updateWindowMask(windowActor);
+    this.updateWindowShadow(windowActor);
   }
 
   ensureAllBorderActors() {
@@ -77,6 +83,11 @@ export class BorderController {
       actor.border.hide();
       actor.border = undefined;
     }
+    if (actor.cornerShadow) {
+      if (global.window_group) global.window_group.remove_child(actor.cornerShadow);
+      actor.cornerShadow.hide();
+      actor.cornerShadow = undefined;
+    }
     if (actor.splitBorder) {
       if (global.window_group) global.window_group.remove_child(actor.splitBorder);
       actor.splitBorder.hide();
@@ -86,21 +97,20 @@ export class BorderController {
 
   updateWindowMask(actor: AnvilWindowActor) {
     const metaWindow = actor.get_meta_window?.() ?? actor.meta_window ?? null;
-    const target = actor.get_first_child?.() ?? null;
-    if (!metaWindow || !target) return;
+    if (!metaWindow) return;
 
     const maximized = this._isMaximized(metaWindow);
     const fullscreen = metaWindow.is_fullscreen();
     if (!shouldMaskWindow({ hintsEnabled: this.bordersEnabled(), maximized, fullscreen })) {
-      target.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
+      actor.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
       return;
     }
 
     try {
-      let effect = target.get_effect(WINDOW_MASK_EFFECT_NAME) as WindowCornerMaskEffect | null;
+      let effect = actor.get_effect(WINDOW_MASK_EFFECT_NAME) as WindowCornerMaskEffect | null;
       if (!effect) {
         effect = new WindowCornerMaskEffect();
-        target.add_effect_with_name(WINDOW_MASK_EFFECT_NAME, effect);
+        actor.add_effect_with_name(WINDOW_MASK_EFFECT_NAME, effect);
       }
 
       const themeNode = actor.border?.get_theme_node();
@@ -114,7 +124,7 @@ export class BorderController {
         radius
       );
     } catch (error) {
-      target.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
+      actor.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
       if (!this._maskFailureLogged) {
         Logger.warn(`window corner mask unavailable: ${error}`);
         this._maskFailureLogged = true;
@@ -123,7 +133,36 @@ export class BorderController {
   }
 
   removeWindowMask(actor: AnvilWindowActor) {
-    actor.get_first_child?.()?.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
+    actor.remove_effect_by_name?.(WINDOW_MASK_EFFECT_NAME);
+  }
+
+  updateWindowShadow(actor: AnvilWindowActor) {
+    const shadow = actor.cornerShadow;
+    const metaWindow = actor.get_meta_window?.() ?? actor.meta_window ?? null;
+    if (!shadow || !metaWindow) return;
+
+    const showShadow = shouldMaskWindow({
+      hintsEnabled: this.bordersEnabled(),
+      maximized: this._isMaximized(metaWindow),
+      fullscreen: metaWindow.is_fullscreen(),
+    });
+    if (!showShadow) {
+      shadow.hide();
+      return;
+    }
+
+    shadow.set_style_class_name(
+      this._appearsFocused(metaWindow) ? "window-focused-shadow" : "window-unfocused-shadow"
+    );
+    const rect = metaWindow.get_frame_rect();
+    shadow.set_size(rect.width + DEFAULT_BORDER_INSET * 2, rect.height + DEFAULT_BORDER_INSET * 2);
+    shadow.set_position(rect.x - DEFAULT_BORDER_INSET, rect.y - DEFAULT_BORDER_INSET);
+    shadow.show();
+
+    if (global.window_group?.contains(shadow)) {
+      global.window_group.remove_child(shadow);
+      global.window_group.insert_child_below(shadow, actor);
+    }
   }
 
   private _isMaximized(metaWindow: Meta.Window): boolean {
@@ -132,6 +171,11 @@ export class BorderController {
     } catch {
       return (metaWindow as AnvilMetaWindow).get_maximized() !== 0;
     }
+  }
+
+  private _appearsFocused(metaWindow: Meta.Window): boolean {
+    const value = metaWindow.appears_focused as boolean | (() => boolean);
+    return typeof value === "function" ? value.call(metaWindow) : value;
   }
 
   hideActorBorder(actor: AnvilWindowActor | null) {

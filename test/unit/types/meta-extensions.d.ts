@@ -23,6 +23,8 @@ declare module "gi://Meta" {
     actorSignals?: number[];
     /** Focus hint border St.Bin */
     border?: import("gi://St").Bin;
+    /** Rounded shadow rendered below the masked window */
+    cornerShadow?: import("gi://St").Bin;
     /** Split direction hint border St.Bin */
     splitBorder?: import("gi://St").Bin;
   }

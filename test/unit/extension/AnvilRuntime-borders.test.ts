@@ -60,8 +60,10 @@ describe("AnvilRuntime - Borders", () => {
       const actor = window.get_compositor_private();
 
       expect(actor.border).not.toBeNull();
+      expect(actor.cornerShadow).not.toBeNull();
       expect(ctx.windowGroup.contains(actor.border)).toBe(true);
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(ctx.windowGroup.contains(actor.cornerShadow)).toBe(true);
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
     });
 
     it("should continuously mask unfocused tracked windows while hints are enabled", () => {
@@ -75,12 +77,8 @@ describe("AnvilRuntime - Borders", () => {
       const first = trackTestWindow(ctx);
       const second = trackTestWindow(ctx);
 
-      expect(
-        first.get_compositor_private().get_first_child().get_effect("anvil-window-corner-mask")
-      ).toBeTruthy();
-      expect(
-        second.get_compositor_private().get_first_child().get_effect("anvil-window-corner-mask")
-      ).toBeTruthy();
+      expect(first.get_compositor_private().get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(second.get_compositor_private().get_effect("anvil-window-corner-mask")).toBeTruthy();
     });
 
     it("keeps the mask radius in the theme node's actor coordinate space", () => {
@@ -148,8 +146,9 @@ describe("AnvilRuntime - Borders", () => {
       ctx.anvilRuntime.destroyAllBorderActors();
 
       expect(actor.border).toBeUndefined();
+      expect(actor.cornerShadow).toBeUndefined();
       expect(ctx.windowGroup._children).not.toContain(actor.border);
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
     });
 
     it("should remove masks from maximized and fullscreen windows", () => {
@@ -169,18 +168,52 @@ describe("AnvilRuntime - Borders", () => {
 
       window.maximize();
       ctx.anvilRuntime._borders.updateBorderLayout();
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
       expect(actor.border.visible).toBe(false);
+      expect(actor.cornerShadow.visible).toBe(false);
 
       window.unmaximize();
       ctx.anvilRuntime._borders.updateBorderLayout();
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
       expect(actor.border.visible).toBe(true);
+      expect(actor.cornerShadow.visible).toBe(true);
 
       window.make_fullscreen();
       ctx.anvilRuntime._borders.updateBorderLayout();
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
       expect(actor.border.visible).toBe(false);
+      expect(actor.cornerShadow.visible).toBe(false);
+    });
+
+    it("keeps rounded shadows visible and reflects window focus", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: {
+          "focus-border-toggle": true,
+          "split-border-toggle": false,
+        },
+      });
+      const first = trackTestWindow(ctx);
+      const second = trackTestWindow(ctx);
+      const firstActor = first.get_compositor_private();
+      const secondActor = second.get_compositor_private();
+
+      first.appears_focused_value = true;
+      second.appears_focused_value = false;
+      ctx.display.get_focus_window.mockReturnValue(first);
+      ctx.anvilRuntime._borders.updateBorderLayout();
+
+      expect(firstActor.cornerShadow.visible).toBe(true);
+      expect(firstActor.cornerShadow.style_class).toBe("window-focused-shadow");
+      expect(secondActor.cornerShadow.visible).toBe(true);
+      expect(secondActor.cornerShadow.style_class).toBe("window-unfocused-shadow");
+
+      first.appears_focused_value = false;
+      second.appears_focused_value = true;
+      ctx.display.get_focus_window.mockReturnValue(second);
+      ctx.anvilRuntime._borders.updateBorderLayout();
+
+      expect(firstActor.cornerShadow.style_class).toBe("window-unfocused-shadow");
+      expect(secondActor.cornerShadow.style_class).toBe("window-focused-shadow");
     });
 
     it("should keep the border and mask enabled for a normal zero-gap window", () => {
@@ -202,7 +235,7 @@ describe("AnvilRuntime - Borders", () => {
       ctx.anvilRuntime._borders.updateBorderLayout();
 
       expect(actor.border.visible).toBe(true);
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
     });
 
     it("should remove the mask when a tracked window is destroyed", () => {
@@ -214,11 +247,11 @@ describe("AnvilRuntime - Borders", () => {
       });
       const window = trackTestWindow(ctx);
       const actor = window.get_compositor_private();
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
 
       ctx.anvilRuntime._tracker.windowDestroy(actor);
 
-      expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
     });
 
     it("should preserve borders and log once when mask setup fails", () => {
@@ -235,12 +268,12 @@ describe("AnvilRuntime - Borders", () => {
       ];
       for (const window of failingWindows) {
         const actor = window.get_compositor_private();
-        vi.spyOn(actor.get_first_child(), "add_effect_with_name").mockImplementation(() => {
+        vi.spyOn(actor, "add_effect_with_name").mockImplementation(() => {
           throw new Error("shader unavailable");
         });
         trackTestWindow(ctx, window);
         expect(actor.border).toBeTruthy();
-        expect(actor.get_first_child().get_effect("anvil-window-corner-mask")).toBeNull();
+        expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
       }
 
       expect(warn).toHaveBeenCalledTimes(1);

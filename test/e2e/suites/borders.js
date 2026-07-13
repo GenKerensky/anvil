@@ -78,25 +78,30 @@ describe("Borders and Gaps", function () {
     const window = global.display.get_focus_window();
     expect(window).not.toBeNull();
     const actor = /** @type {any} */ (window.get_compositor_private());
-    const surface = /** @type {any} */ (actor.get_first_child());
-    const mask = () => surface.get_effect("anvil-window-corner-mask");
+    const mask = () => actor.get_effect("anvil-window-corner-mask");
 
     expect(mask()).not.toBeNull();
+    expect(actor.cornerShadow).not.toBeNull();
+    expect(actor.cornerShadow.visible).toBe(true);
+    expect(actor.cornerShadow.style_class).toBe("window-focused-shadow");
 
     maximizeWindow(window);
     await sleep(400);
     expect(mask()).toBeNull();
     expect(actor.border.visible).toBe(false);
+    expect(actor.cornerShadow.visible).toBe(false);
 
     unmaximizeWindow(window);
     await sleep(400);
     expect(mask()).not.toBeNull();
     expect(actor.border.visible).toBe(true);
+    expect(actor.cornerShadow.visible).toBe(true);
 
     window.make_fullscreen();
     await sleep(400);
     expect(mask()).toBeNull();
     expect(actor.border.visible).toBe(false);
+    expect(actor.cornerShadow.visible).toBe(false);
 
     window.unmake_fullscreen();
     await sleep(400);

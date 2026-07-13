@@ -10,10 +10,12 @@ uniform vec4 anvilMaskBounds;
 uniform float anvilMaskRadius;
 uniform vec2 anvilMaskPixelStep;
 
-float anvilRoundedRectCoverage(vec2 point, vec4 bounds, float radius) {
-  if (point.x < bounds.x || point.x > bounds.z ||
-      point.y < bounds.y || point.y > bounds.w)
-    return 1.0;
+bool anvilPointInsideBounds(vec2 point, vec4 bounds) {
+  return point.x >= bounds.x && point.x <= bounds.z &&
+         point.y >= bounds.y && point.y <= bounds.w;
+}
+
+float anvilInnerFrameCoverage(vec2 point, vec4 bounds, float radius) {
   if (radius <= 0.0)
     return 1.0;
   if ((point.x >= bounds.x + radius && point.x <= bounds.z - radius) ||
@@ -24,11 +26,14 @@ float anvilRoundedRectCoverage(vec2 point, vec4 bounds, float radius) {
   vec2 delta = point - center;
   return 1.0 - smoothstep(radius - 0.5, radius + 0.5, length(delta));
 }
+
 `;
 
 const MASK_CODE = `
 vec2 point = cogl_tex_coord0_in.xy / anvilMaskPixelStep;
-float coverage = anvilRoundedRectCoverage(point, anvilMaskBounds, anvilMaskRadius);
+float coverage = anvilPointInsideBounds(point, anvilMaskBounds)
+  ? anvilInnerFrameCoverage(point, anvilMaskBounds, anvilMaskRadius)
+  : 0.0;
 cogl_color_out *= coverage;
 `;
 
@@ -36,7 +41,11 @@ cogl_color_out *= coverage;
 export const WindowCornerMaskEffect = GObject.registerClass(
   { GTypeName: "AnvilWindowCornerMaskEffect" },
   class WindowCornerMaskEffect extends Shell.GLSLEffect {
-    _uniforms: { bounds: number; radius: number; pixelStep: number } | null = null;
+    _uniforms: {
+      bounds: number;
+      radius: number;
+      pixelStep: number;
+    } | null = null;
     _bounds: [number, number, number, number] = [0, 0, 0, 0];
     _radius = 0;
 
