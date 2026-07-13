@@ -27,6 +27,13 @@ describe("AnvilRuntime - Lifecycle", () => {
   const wm = () => ctx.anvilRuntime;
   const configMgr = () => ctx.configMgr;
 
+  it("embeds the portable inspection in the runtime test probe", () => {
+    const state = JSON.parse(wm().getTestStateJson());
+
+    expect(state.portableTiling.schemaVersion).toBe(1);
+    expect(state.portableTiling.surfaces).toHaveLength(1);
+  });
+
   describe("_validWindow", () => {
     it("should accept NORMAL windows", () => {
       const window = createMockWindow({ window_type: Meta.WindowType.NORMAL });
@@ -137,6 +144,19 @@ describe("AnvilRuntime - Lifecycle", () => {
   });
 
   describe("windowDestroy", () => {
+    it("withdraws the portable fact before mutating the legacy tree", () => {
+      const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      const withdraw = vi.spyOn(wm()._tilingShadow, "withdrawWindow");
+      const remove = vi.spyOn(ctx.tree, "removeNode");
+
+      wm()._tracker.windowDestroy(metaWindow.get_compositor_private());
+
+      expect(withdraw).toHaveBeenCalledWith(metaWindow);
+      expect(withdraw.mock.invocationCallOrder[0]).toBeLessThan(remove.mock.invocationCallOrder[0]);
+    });
+
     it("should clean up border and remove node from tree", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const { monitor } = getWorkspaceAndMonitor(ctx);
@@ -219,6 +239,31 @@ describe("AnvilRuntime - Lifecycle", () => {
   });
 
   describe("trackWindow", () => {
+    it("observes the portable fact before mutating the legacy tree", () => {
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const observe = vi.spyOn(wm()._tilingShadow, "observeWindow");
+      const createNode = vi.spyOn(ctx.tree, "createNode");
+
+      wm()._tracker.trackWindow(ctx.display, window);
+
+      expect(observe).toHaveBeenCalledWith(window);
+      expect(observe.mock.invocationCallOrder[0]).toBeLessThan(
+        createNode.mock.invocationCallOrder.at(-1)!
+      );
+    });
+
+    it("observes frame signals before legacy geometry handling", () => {
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const observe = vi.spyOn(wm()._tilingShadow, "observeFrame");
+      const legacy = vi.spyOn(wm(), "updateMetaPositionSize").mockImplementation(() => {});
+      wm()._tracker.trackWindow(ctx.display, window);
+
+      window.emit("position-changed", window);
+
+      expect(observe).toHaveBeenCalledWith(window);
+      expect(observe.mock.invocationCallOrder[0]).toBeLessThan(legacy.mock.invocationCallOrder[0]);
+    });
+
     it("should not add invalid window types to tree", () => {
       const window = createMockWindow({
         window_type: Meta.WindowType.UTILITY,

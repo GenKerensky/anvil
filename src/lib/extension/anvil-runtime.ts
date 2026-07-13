@@ -59,6 +59,7 @@ import type { AnvilWindowActor, AnvilExtension } from "./window/types.js";
 import type { AnvilAction, FloatAction } from "./window/actions.js";
 import { createSessionFlags, type SessionFlagsState } from "./window/session-flags.js";
 import { EventScheduler } from "./event-scheduler.js";
+import { TilingShadow } from "./tiling-shadow.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -115,6 +116,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private theme: import("./extension-theme-manager.js").ExtensionThemeManager | null = null;
   private _pointerPolicy: PointerPolicy | null = null;
   private _tilingRender: TilingRender | null = null;
+  private _tilingShadow: TilingShadow | null = null;
   private _tracker: WindowTracker | null = null;
   private _layout: LayoutEngine | null = null;
   private _grab: GrabResizeSession | null = null;
@@ -140,6 +142,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private _initializeGraph(): void {
     this._rules = new RulesEngine();
+    this._tilingShadow = new TilingShadow(this.ext.settings);
     this.reloadWindowOverrides();
     this._session = createSessionFlags();
     // Keybindings are wired separately; host getters remain valid across graph activation.
@@ -305,6 +308,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       removeFloatOverride: (w, withWmId) => self.removeFloatOverride(w, withWmId),
       trackCurrentMonWs: () => self.trackCurrentMonWs(),
       autoSplitFromFocus: () => self.layoutEngine.autoSplitFromFocus(),
+      observePortableWindow: (w) => self._tilingShadow!.observeWindow(w),
+      observePortableFrame: (w) => self._tilingShadow!.observeFrame(w),
+      withdrawPortableWindow: (w) => self._tilingShadow!.withdrawWindow(w),
     });
     this._settingsBridge = new SettingsBridge({
       get settings() {
@@ -441,6 +447,10 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         return self2.ext.settings;
       },
     });
+
+    this._tilingShadow.bootstrap(this.windowsAllWorkspaces, (window) =>
+      this._tracker!.validWindow(window)
+    );
 
     Logger.info("anvil runtime graph initialized");
   }
@@ -689,6 +699,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._tree = null;
     this._eventScheduler = null;
     this._tilingRender = null;
+    this._tilingShadow = null;
     this._tracker = null;
     this._layout = null;
     this._grab = null;
@@ -1093,6 +1104,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       stackedEnabled: this.ext.settings.get_boolean("stacked-tiling-mode-enabled"),
       tabbedEnabled: this.ext.settings.get_boolean("tabbed-tiling-mode-enabled"),
       tree: this._tree ? this._tree!.serializeForTest() : null,
+      portableTiling: this._tilingShadow?.inspect() ?? null,
     });
   }
 

@@ -61,6 +61,9 @@ export interface WindowTrackerHost {
   trackCurrentMonWs(): void;
   /** LayoutEngine.autoSplitFromFocus — no command re-entry. */
   autoSplitFromFocus(): boolean;
+  observePortableWindow(metaWindow: Meta.Window): void;
+  observePortableFrame(metaWindow: Meta.Window): void;
+  withdrawPortableWindow(metaWindow: Meta.Window): void;
 }
 
 /** Reconcile backoff (B4-2): start at 16ms, double until max; stop when stable or budget. */
@@ -323,9 +326,10 @@ export class WindowTracker {
    */
   trackWindow(_display: Meta.Display, metaWindow: Meta.Window) {
     const host = this._host;
-    host.autoSplitFromFocus();
     // Make window types configurable
     if (this.validWindow(metaWindow)) {
+      host.observePortableWindow(metaWindow);
+      host.autoSplitFromFocus();
       const existNodeWindow = host.tree.findNode(metaWindow);
       Logger.debug(`Meta Window ${metaWindow.get_title()} ${metaWindow.get_window_type()}`);
       if (!existNodeWindow) {
@@ -386,21 +390,26 @@ export class WindowTracker {
           const windowSignals = [
             metaWindow.connect("position-changed", (_metaWindow: Meta.Window) => {
               const from = "position-changed";
+              host.observePortableFrame(_metaWindow);
               host.updateMetaPositionSize(_metaWindow, from);
             }),
             metaWindow.connect("size-changed", (_metaWindow: Meta.Window) => {
               const from = "size-changed";
+              host.observePortableFrame(_metaWindow);
               host.updateMetaPositionSize(_metaWindow, from);
             }),
             // Re-classify on property changes so late-arriving metadata (for
             // Inkscape, Brave, etc.) causes a re-render + processFloats.
             metaWindow.connect("notify::wm-class", () => {
+              host.observePortableWindow(metaWindow);
               host.renderTree("wm-class-notify", true);
             }),
             metaWindow.connect("notify::title", () => {
+              host.observePortableWindow(metaWindow);
               host.renderTree("title-notify", true);
             }),
             metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
+              host.withdrawPortableWindow(_metaWindow);
               host.hideActorBorder(windowActor);
             }),
             metaWindow.connect("focus", (_metaWindowFocus: Meta.Window) => {
@@ -436,6 +445,7 @@ export class WindowTracker {
               host.renderTree("focus", true);
             }),
             metaWindow.connect("workspace-changed", (_metaWindow: Meta.Window) => {
+              host.observePortableWindow(_metaWindow);
               host.updateMetaWorkspaceMonitor("metawindow-workspace-changed", null, _metaWindow);
               host.trackCurrentMonWs();
             }),
@@ -518,12 +528,15 @@ export class WindowTracker {
    */
   windowDestroy(actor: AnvilWindowActor) {
     const host = this._host;
+    const nodeWindow = host.tree.findNodeByActor(actor) as unknown as Node<any> | null;
+    const metaWindow = (nodeWindow?.nodeValue ?? actor.meta_window ?? actor.get_meta_window?.()) as
+      | Meta.Window
+      | undefined;
+    if (metaWindow) host.withdrawPortableWindow(metaWindow);
 
     // 1. Border actors
     host.destroyWindowActors(actor);
 
-    const nodeWindow = host.tree.findNodeByActor(actor) as unknown as Node<any> | null;
-    const metaWindow = nodeWindow?.nodeValue as Meta.Window | undefined;
     const hadFocus = !!metaWindow && host.focusMetaWindow === metaWindow;
 
     let needRelayout = false;
