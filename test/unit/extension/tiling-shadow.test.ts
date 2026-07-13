@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import Meta from "gi://Meta";
 
 import {
   GnomeTilingIdentityRegistry,
@@ -276,6 +277,64 @@ describe("TilingShadow", () => {
     expect(shadow.inspect()).toMatchObject({
       containers: [{ selectedChildId: secondId }],
     });
+    globals.cleanup();
+  });
+
+  it("translates a cardinal GNOME resize grab into one portable operation", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    const [firstId, secondId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeGrabBegin(first, Meta.GrabOp.RESIZING_E);
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({
+        id: "operation:1",
+        kind: "resize",
+        windowId: firstId,
+        neighborWindowId: secondId,
+        direction: "right",
+      }),
+    ]);
+
+    first._rect.width = 1152;
+    shadow.observeGrabUpdate(first);
+    expect(shadow.inspect().operations[0].overlayWeights).toEqual({
+      [firstId]: 0.6,
+      [secondId]: 0.4,
+    });
+
+    shadow.observeGrabEnd(first, false);
+    expect(shadow.inspect()).toMatchObject({
+      operations: [],
+      containers: [{ weights: { [firstId]: 0.6, [secondId]: 0.4 } }],
+    });
+    globals.cleanup();
+  });
+
+  it("uses the opposite sibling when a resize starts on an outer edge", () => {
+    const first = createMockWindow({ rect: { x: 0, y: 0, width: 960, height: 1080 } });
+    const second = createMockWindow({ rect: { x: 960, y: 0, width: 960, height: 1080 } });
+    const globals = installGnomeGlobals();
+    first._workspace = globals.workspaces[0];
+    second._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([first, second], () => true);
+    const [firstId, secondId] = shadow.inspect().windows.map((window) => window.id);
+
+    shadow.observeGrabBegin(second, Meta.GrabOp.RESIZING_E);
+
+    expect(shadow.inspect().operations).toEqual([
+      expect.objectContaining({
+        windowId: secondId,
+        neighborWindowId: firstId,
+        direction: "left",
+      }),
+    ]);
     globals.cleanup();
   });
 

@@ -63,6 +63,7 @@ export interface GrabResizeHost {
   moveWindowToPointer(node: Node<any>, previewOnly?: boolean): void;
   updateStackedFocus(node: Node<any> | null | undefined): void;
   updateTabbedFocus(node: Node<any> | null | undefined): void;
+  observePortableResize(metaWindow: Meta.Window): void;
 }
 
 /**
@@ -110,6 +111,7 @@ export class GrabResizeSession {
   cancelGrab = false;
   resizedWindows: Map<number, number> = new Map();
   private _lastResizePair: Node<any> | null = null;
+  private _grabbedMetaWindow: Meta.Window | null = null;
   private _liveResizeSrcId = 0;
   private _draggedNodeWindow: Node<any> | null = null;
   /** Session-owned grab fields (B8-6); mirrored onto Node for residual readers. */
@@ -175,6 +177,7 @@ export class GrabResizeSession {
 
   dispose(): void {
     this._stopLiveResizeLoop();
+    this._grabbedMetaWindow = null;
   }
 
   resizeByAmount(grabOp: Meta.GrabOp, amount: number) {
@@ -221,6 +224,7 @@ export class GrabResizeSession {
   begin(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
     const host = this._host;
     this.grabOp = grabOp;
+    this._grabbedMetaWindow = _metaWindow;
     host.trackCurrentMonWs();
     const focusMetaWindow = host.focusMetaWindow;
 
@@ -265,6 +269,7 @@ export class GrabResizeSession {
   end(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
     const host = this._host;
     this._stopLiveResizeLoop();
+    this._grabbedMetaWindow = null;
     host.unfreezeRender();
     const focusMetaWindow = host.focusMetaWindow;
 
@@ -382,6 +387,8 @@ export class GrabResizeSession {
 
   handleResizing(focusNodeWindow: Node<any> | null) {
     const host = this._host;
+    const observedWindow = this._grabbedMetaWindow ?? host.focusMetaWindow;
+    if (observedWindow) host.observePortableResize(observedWindow);
     if (!focusNodeWindow || focusNodeWindow.isFloat()) {
       return;
     }

@@ -112,6 +112,38 @@ describe("AnvilRuntime - Resize", () => {
 
       expect(ctx.anvilRuntime._grab.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
     });
+
+    it("mirrors resize lifecycle before the legacy grab writer", () => {
+      const metaWindow = setupFocusWindow(ctx);
+      const shadowBegin = vi.spyOn(wm()._tilingShadow, "observeGrabBegin");
+      const shadowUpdate = vi.spyOn(wm()._tilingShadow, "observeGrabUpdate");
+      const shadowEnd = vi.spyOn(wm()._tilingShadow, "observeGrabEnd");
+      const legacyBegin = vi.spyOn(wm()._grab, "begin");
+      const legacyEnd = vi.spyOn(wm()._grab, "end");
+
+      wm()._handleGrabOpBegin(ctx.display, metaWindow, Meta.GrabOp.RESIZING_E);
+      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.RESIZING_E);
+
+      expect(shadowBegin).toHaveBeenCalledWith(metaWindow, Meta.GrabOp.RESIZING_E);
+      expect(shadowBegin.mock.invocationCallOrder[0]).toBeLessThan(
+        legacyBegin.mock.invocationCallOrder[0]
+      );
+      expect(shadowUpdate).toHaveBeenCalledWith(metaWindow);
+      expect(shadowEnd).toHaveBeenCalledWith(metaWindow, false);
+      expect(shadowEnd.mock.invocationCallOrder[0]).toBeLessThan(
+        legacyEnd.mock.invocationCallOrder[0]
+      );
+    });
+
+    it("mirrors live resize observations from the grab session", () => {
+      const metaWindow = setupFocusWindow(ctx);
+      const shadowUpdate = vi.spyOn(wm()._tilingShadow, "observeGrabUpdate");
+      wm()._handleGrabOpBegin(ctx.display, metaWindow, Meta.GrabOp.RESIZING_E);
+
+      wm()._grab.handleResizing(null);
+
+      expect(shadowUpdate).toHaveBeenCalledWith(metaWindow);
+    });
   });
 
   describe("resize - queued event", () => {

@@ -284,6 +284,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       moveWindowToPointer: (n, preview) => self._dragDrop!.moveWindowToPointer(n, preview),
       updateStackedFocus: (n) => self.updateStackedFocus(n),
       updateTabbedFocus: (n) => self.updateTabbedFocus(n),
+      observePortableResize: (window) =>
+        self._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(window)),
     });
     this._tracker = new WindowTracker({
       get tree() {
@@ -1077,10 +1079,15 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private _handleGrabOpBegin(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
+    this._withTilingShadow("grab-begin", (shadow) => shadow.observeGrabBegin(metaWindow, grabOp));
     this._grab!.begin(display, metaWindow, grabOp);
   }
 
   private _handleGrabOpEnd(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
+    this._withTilingShadow("grab-update", (shadow) => shadow.observeGrabUpdate(metaWindow));
+    this._withTilingShadow("grab-end", (shadow) =>
+      shadow.observeGrabEnd(metaWindow, this._grab!.cancelGrab)
+    );
     this._grab!.end(display, metaWindow, grabOp);
   }
 
