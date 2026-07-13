@@ -45,7 +45,11 @@ export function copyInspection(inspection: TilingInspection): TilingInspection {
     surfaces: inspection.surfaces.map(copySurface),
     windows: inspection.windows.map((window) => ({ ...window, frame: copyRect(window.frame) })),
     containers: inspection.containers.map(copyContainer),
-    operations: inspection.operations.map((operation) => ({ ...operation })),
+    operations: inspection.operations.map((operation) => ({
+      ...operation,
+      baseWeights: { ...operation.baseWeights },
+      overlayWeights: { ...operation.overlayWeights },
+    })),
     placementHints: inspection.placementHints.map((hint) => ({ ...hint })),
     evacuationHints: inspection.evacuationHints.map((hint) => ({
       ...hint,

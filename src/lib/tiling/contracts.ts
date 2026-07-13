@@ -122,6 +122,13 @@ export type ContainerInspection = Readonly<{
 export type OperationInspection = Readonly<{
   id: OperationId;
   kind: "resize" | "drag";
+  windowId: WindowId;
+  neighborWindowId?: WindowId;
+  containerId: ContainerId;
+  direction: Direction;
+  baseWeights: Readonly<Record<string, number>>;
+  overlayWeights: Readonly<Record<string, number>>;
+  topologyRevision: TilingRevision;
 }>;
 
 export type PlacementHintInspection = Readonly<{
@@ -238,6 +245,17 @@ export type TilingCommand =
       direction: Direction;
     }>;
 
+export type OperationStart = Readonly<{
+  id: OperationId;
+  kind: "resize";
+  windowId: WindowId;
+  direction: Direction;
+}>;
+
+export type OperationUpdate = Readonly<{
+  shareDelta: number;
+}>;
+
 export type TilingEvent =
   | Readonly<{
       type: "PlatformSnapshotObserved";
@@ -254,6 +272,19 @@ export type TilingEvent =
   | Readonly<{
       type: "CommandRequested";
       command: TilingCommand;
+    }>
+  | Readonly<{
+      type: "OperationStarted";
+      operation: OperationStart;
+    }>
+  | Readonly<{
+      type: "OperationUpdated";
+      operationId: OperationId;
+      update: OperationUpdate;
+    }>
+  | Readonly<{
+      type: "OperationCommitted" | "OperationCancelled";
+      operationId: OperationId;
     }>;
 
 type IntentionToken = Readonly<{

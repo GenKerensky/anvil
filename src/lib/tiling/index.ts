@@ -8,6 +8,8 @@ export type {
   Layout,
   OperationId,
   OperationInspection,
+  OperationStart,
+  OperationUpdate,
   ParticipationRule,
   PlatformCapabilities,
   PlatformFact,

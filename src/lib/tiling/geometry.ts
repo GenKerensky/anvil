@@ -35,7 +35,8 @@ function splitFrames(
   workArea: Rect,
   windows: readonly WindowInspection[],
   layout: TilingPolicy["defaultLayout"],
-  gap: number
+  gap: number,
+  weights: Readonly<Record<string, number>>
 ): WindowPlan[] {
   const available = windows.filter((window) => window.available);
   if (available.length === 0) return [];
@@ -48,10 +49,15 @@ function splitFrames(
   }
   const horizontal = layout === "horizontal";
   const total = horizontal ? workArea.width : workArea.height;
-  const base = Math.floor(total / available.length);
+  const rawWeights = available.map((window) => weights[window.id] ?? 1);
+  const totalWeight = rawWeights.reduce((sum, weight) => sum + weight, 0);
   let cursor = horizontal ? workArea.x : workArea.y;
   return available.map((window, index) => {
-    const size = index === available.length - 1 ? total - base * index : base;
+    const consumed = cursor - (horizontal ? workArea.x : workArea.y);
+    const size =
+      index === available.length - 1
+        ? total - consumed
+        : Math.floor((total * rawWeights[index]) / totalWeight);
     const frame = horizontal
       ? { x: cursor, y: workArea.y, width: size, height: workArea.height }
       : { x: workArea.x, y: cursor, width: workArea.width, height: size };
@@ -80,7 +86,8 @@ export function deriveWindowPlans(
       surface.workArea,
       surfaceWindows,
       root?.layout ?? policy.defaultLayout,
-      gap
+      gap,
+      root?.weights ?? {}
     ).sort((left, right) => left.id.localeCompare(right.id));
   });
 }

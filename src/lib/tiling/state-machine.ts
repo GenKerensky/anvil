@@ -13,6 +13,7 @@ import type {
 import { copyInspection, copyPolicy } from "./copy.js";
 import { copyRect, deriveContainerPlans, deriveWindowPlans, sameRect } from "./geometry.js";
 import { changedPlacementIntentions } from "./intentions.js";
+import { applyOperation } from "./operations.js";
 import { validateSurfaces } from "./validation.js";
 
 function shouldParticipate(
@@ -58,6 +59,17 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
   return {
     dispatch(event: TilingEvent): TilingTransition {
+      if (
+        event.type === "OperationStarted" ||
+        event.type === "OperationUpdated" ||
+        event.type === "OperationCommitted" ||
+        event.type === "OperationCancelled"
+      ) {
+        const result = applyOperation(inspection, event);
+        inspection = result.inspection;
+        return result.transition;
+      }
+
       if (event.type === "CommandRequested") {
         const command = event.command;
         if (command.type === "FocusDirection") {
