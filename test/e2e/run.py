@@ -133,6 +133,7 @@ def install_extension_files() -> None:
 def start_gnome_shell(
     dbus_addr: str,
     automation_script: pathlib.Path,
+    virtual_monitors: int = 1,
     extra_env: dict[str, str] | None = None,
 ) -> subprocess.Popen:
     """
@@ -159,14 +160,12 @@ def start_gnome_shell(
     if extra_env:
         env |= extra_env
 
+    command = ["/usr/bin/gnome-shell", "--wayland", "--headless"]
+    for _ in range(virtual_monitors):
+        command.extend(["--virtual-monitor", "1920x1080"])
+    command.extend(["--automation-script", str(automation_script)])
     return subprocess.Popen(
-        [
-            "/usr/bin/gnome-shell",
-            "--wayland",
-            "--headless",
-            "--virtual-monitor", "1920x1080",
-            "--automation-script", str(automation_script),
-        ],
+        command,
         stderr=subprocess.PIPE,
         text=True,
         env=env,
@@ -298,7 +297,9 @@ class DevkitSession:
         # cleanup happens automatically on exit, even if an exception is raised
     """
 
-    def __init__(self, tag_filter: str = "", engine: str = "legacy") -> None:
+    def __init__(
+        self, tag_filter: str = "", engine: str = "legacy", virtual_monitors: int = 1
+    ) -> None:
         self.dbus_proc: subprocess.Popen | None = None
         self.dbus_addr: str = ""
         self.mocks: list[subprocess.Popen] = []
@@ -307,6 +308,7 @@ class DevkitSession:
         self.x11_display: str = ""
         self.tag_filter: str = tag_filter
         self.engine: str = engine
+        self.virtual_monitors: int = virtual_monitors
 
     def __enter__(self) -> "DevkitSession":
         # 1. Isolated D-Bus
@@ -335,11 +337,13 @@ class DevkitSession:
         self.shell_proc = start_gnome_shell(
             self.dbus_addr,
             E2E_DIR / "runner.js",
+            virtual_monitors=self.virtual_monitors,
             extra_env={
                 "ANVIL_E2E_DIR": str(E2E_DIR),
                 "ANVIL_E2E_TAG": self.tag_filter,
                 "ANVIL_E2E_OUTPUT_DIR": str(OUTPUT_DIR),
                 "ANVIL_TILING_ENGINE": "core" if self.engine == "core" else "shadow",
+                "ANVIL_E2E_VIRTUAL_MONITORS": str(self.virtual_monitors),
             },
         )
 
@@ -403,6 +407,14 @@ def main() -> int:
         default="legacy",
         help="Tiling writer used by the extension (default: legacy)",
     )
+    parser.add_argument(
+        "--virtual-monitors",
+        type=int,
+        default=1,
+        choices=range(1, 5),
+        metavar="COUNT",
+        help="Persistent virtual monitors to create (default: 1)",
+    )
     args = parser.parse_args()
 
     print("")
@@ -424,7 +436,11 @@ def main() -> int:
 
     install_extension_files()
 
-    with DevkitSession(tag_filter=tag_filter, engine=args.engine) as session:
+    with DevkitSession(
+        tag_filter=tag_filter,
+        engine=args.engine,
+        virtual_monitors=args.virtual_monitors,
+    ) as session:
         _info("Running E2E tests inside headless gnome-shell…")
         results = wait_for_results(
             RESULTS_PATH, timeout=900.0, watched_process=session.shell_proc

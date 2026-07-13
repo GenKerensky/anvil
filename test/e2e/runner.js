@@ -311,6 +311,8 @@ export async function run() {
     "./suites/workspace.js",
     "./suites/borders.js",
     "./suites/minimize.js",
+    "./suites/monitor-churn.js",
+    "./suites/session-mode.js",
     "./suites/constraints.js",
     "./suites/extension.js",
   ];
