@@ -437,6 +437,12 @@ export function getAnvilRuntime() {
 }
 
 /** @returns {any} */
+export function getPortableShadowComparison() {
+  const state = JSON.parse(getAnvilRuntime().getStateJson());
+  return state.portableTilingShadow;
+}
+
+/** @returns {any} */
 export function getAnvilSettings() {
   const g = /** @type {any} */ (global);
   if (g.__anvil_settings) return g.__anvil_settings;

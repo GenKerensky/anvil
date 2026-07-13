@@ -14,6 +14,7 @@ import {
   waitForWindowCount,
   waitForGeometryStable,
   getNodePercents,
+  getPortableShadowComparison,
 } from "../../lib/shared-commands.js";
 
 beforeEach(async function () {
@@ -77,6 +78,22 @@ describe("Window Tiling", function () {
     }
     const percents = getNodePercents();
     expect(percents.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("settled two-window geometry matches the portable shadow plan", async function () {
+    await launchApp("org.gnome.Nautilus.desktop");
+    await launchApp("org.gnome.Nautilus.desktop");
+    await waitForWindowCount(2, 5000);
+    await waitForGeometryStable(2500);
+
+    // A forced render is the official comparison settle boundary.
+    /** @type {any} */ (global).__anvil_runtime.forceRender("e2e-shadow-comparison");
+    await waitForGeometryStable(1500);
+    const comparison = getPortableShadowComparison();
+
+    expect(comparison).not.toBeNull();
+    expect(comparison.rejectedEventCount).toBe(0);
+    expect(comparison.mismatches).toEqual([]);
   });
 
   it("three windows tile without overlap", async function () {
