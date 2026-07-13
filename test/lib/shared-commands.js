@@ -442,6 +442,13 @@ export function getPortableShadowComparison() {
   return state.portableTilingShadow;
 }
 
+/** @returns {Promise<any>} */
+export async function refreshPortableShadowComparison() {
+  getAnvilRuntime().forceRender("e2e-shadow-comparison");
+  await sleep(250);
+  return getPortableShadowComparison();
+}
+
 /** @returns {any} */
 export function getAnvilSettings() {
   const g = /** @type {any} */ (global);

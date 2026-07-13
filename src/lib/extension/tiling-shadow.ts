@@ -633,7 +633,10 @@ export class TilingShadow {
   }> {
     const inspection = this.machine.inspect();
     const mismatches = inspection.renderPlan.windows.flatMap((plan) => {
-      const observed = inspection.windows.find((window) => window.id === plan.id);
+      const metaWindow = this.identities.resolveWindow(plan.id);
+      const observed = metaWindow
+        ? this.windowFact(metaWindow)
+        : inspection.windows.find((window) => window.id === plan.id);
       if (!observed || JSON.stringify(observed.frame) === JSON.stringify(plan.frame)) return [];
       return [{ windowId: plan.id, expected: plan.frame, observed: observed.frame }];
     });

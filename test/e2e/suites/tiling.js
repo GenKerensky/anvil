@@ -14,7 +14,7 @@ import {
   waitForWindowCount,
   waitForGeometryStable,
   getNodePercents,
-  getPortableShadowComparison,
+  refreshPortableShadowComparison,
 } from "../../lib/shared-commands.js";
 
 beforeEach(async function () {
@@ -24,6 +24,13 @@ beforeEach(async function () {
 afterEach(async function () {
   await closeAllWindows();
 });
+
+async function expectPortableShadowParity() {
+  const comparison = await refreshPortableShadowComparison();
+  expect(comparison).not.toBeNull();
+  expect(comparison.rejectedEvents).toEqual([]);
+  expect(comparison.mismatches).toEqual([]);
+}
 
 describe("Window Tiling", function () {
   it("tiling-mode-enabled is true by default", function () {
@@ -87,13 +94,8 @@ describe("Window Tiling", function () {
     await waitForGeometryStable(2500);
 
     // A forced render is the official comparison settle boundary.
-    /** @type {any} */ (global).__anvil_runtime.forceRender("e2e-shadow-comparison");
     await waitForGeometryStable(1500);
-    const comparison = getPortableShadowComparison();
-
-    expect(comparison).not.toBeNull();
-    expect(comparison.rejectedEventCount).toBe(0);
-    expect(comparison.mismatches).toEqual([]);
+    await expectPortableShadowParity();
   });
 
   it("three windows tile without overlap", async function () {

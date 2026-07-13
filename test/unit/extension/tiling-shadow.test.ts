@@ -786,4 +786,22 @@ describe("TilingShadow", () => {
     });
     globals.cleanup();
   });
+
+  it("samples live GNOME frames at the settled comparison boundary", () => {
+    const window = createMockWindow({ rect: { x: 10, y: 20, width: 300, height: 200 } });
+    const globals = installGnomeGlobals();
+    window._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([window], () => true);
+    const expected = shadow.inspect().renderPlan.windows[0].frame;
+
+    window._rect.x = expected.x;
+    window._rect.y = expected.y;
+    window._rect.width = expected.width;
+    window._rect.height = expected.height;
+
+    expect(shadow.inspect().windows[0].frame).not.toEqual(expected);
+    expect(shadow.compareObservedGeometry().mismatches).toEqual([]);
+    globals.cleanup();
+  });
 });
