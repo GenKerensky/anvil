@@ -298,7 +298,7 @@ class DevkitSession:
         # cleanup happens automatically on exit, even if an exception is raised
     """
 
-    def __init__(self, tag_filter: str = "") -> None:
+    def __init__(self, tag_filter: str = "", engine: str = "legacy") -> None:
         self.dbus_proc: subprocess.Popen | None = None
         self.dbus_addr: str = ""
         self.mocks: list[subprocess.Popen] = []
@@ -306,6 +306,7 @@ class DevkitSession:
         self.display_name: str = ""
         self.x11_display: str = ""
         self.tag_filter: str = tag_filter
+        self.engine: str = engine
 
     def __enter__(self) -> "DevkitSession":
         # 1. Isolated D-Bus
@@ -338,6 +339,7 @@ class DevkitSession:
                 "ANVIL_E2E_DIR": str(E2E_DIR),
                 "ANVIL_E2E_TAG": self.tag_filter,
                 "ANVIL_E2E_OUTPUT_DIR": str(OUTPUT_DIR),
+                "ANVIL_TILING_ENGINE": "core" if self.engine == "core" else "shadow",
             },
         )
 
@@ -395,6 +397,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Anvil Devkit E2E Test Runner")
     parser.add_argument("--no-build", action="store_true", help="Skip make dist")
     parser.add_argument("--tag", action="append", default=[], help="Suite tag filter")
+    parser.add_argument(
+        "--engine",
+        choices=("legacy", "core"),
+        default="legacy",
+        help="Tiling writer used by the extension (default: legacy)",
+    )
     args = parser.parse_args()
 
     print("")
@@ -416,9 +424,11 @@ def main() -> int:
 
     install_extension_files()
 
-    with DevkitSession(tag_filter=tag_filter) as _session:
+    with DevkitSession(tag_filter=tag_filter, engine=args.engine) as session:
         _info("Running E2E tests inside headless gnome-shell…")
-        results = wait_for_results(RESULTS_PATH, timeout=900.0)
+        results = wait_for_results(
+            RESULTS_PATH, timeout=900.0, watched_process=session.shell_proc
+        )
         exit_code = print_results(results, title="Anvil E2E Results")
 
     return exit_code

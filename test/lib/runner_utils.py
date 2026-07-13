@@ -177,7 +177,11 @@ def wait_for_shell_dbus(dbus_addr: str, timeout: float = 40.0) -> None:
 # ── Results file polling ──────────────────────────────────────────────────────
 
 
-def wait_for_results(results_path: pathlib.Path, timeout: float = 600.0) -> dict:
+def wait_for_results(
+    results_path: pathlib.Path,
+    timeout: float = 600.0,
+    watched_process: subprocess.Popen | None = None,
+) -> dict:
     """
     Poll until the JS test runner writes a results JSON file at ``results_path``.
 
@@ -200,6 +204,13 @@ def wait_for_results(results_path: pathlib.Path, timeout: float = 600.0) -> dict
                 return data
             except (json.JSONDecodeError, OSError):
                 pass
+        if watched_process is not None:
+            return_code = watched_process.poll()
+            if return_code is not None:
+                raise RuntimeError(
+                    "GNOME Shell exited before writing E2E results "
+                    f"(status {return_code})"
+                )
         time.sleep(0.5)
     raise TimeoutError(f"Results file {results_path} did not appear within {timeout}s")
 

@@ -255,7 +255,6 @@ export async function run() {
     // workspace-skip-tile or constraint-suite run would otherwise leave the
     // active workspace skip-tiled (windows float at preferred size) or clamped.
     settings.set_string("workspace-skip-tile", "");
-    settings.set_string("monitor-skip-tile", "");
     const empty = new GLib.Variant("a(suubb)", []);
     settings.set_value("monitor-constraints", empty);
     clearMonitorConstraints();
@@ -299,6 +298,7 @@ export async function run() {
   // extension.js is last: disable/re-enable can leave the WM half-initialized and
   // would poison later suites if run first.
   const allSuites = [
+    "./suites/core-smoke.js",
     "./suites/tiling.js",
     "./suites/keyboard.js",
     "./suites/operations.js",
