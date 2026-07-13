@@ -73,6 +73,24 @@ describe("AnvilRuntime - Commands", () => {
   });
 
   describe("Move", () => {
+    it("keeps the legacy writer running if shadow dispatch fails", () => {
+      const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      ctx.display.get_focus_window.mockReturnValue(metaWindow);
+      vi.spyOn(wm()._tilingShadow, "observeCommand").mockImplementation(() => {
+        throw new Error("shadow invariant");
+      });
+      const legacy = vi.spyOn(wm().layoutEngine, "move");
+
+      expect(() => wm().command({ name: "Move", direction: "UP" })).not.toThrow();
+
+      expect(legacy).toHaveBeenCalled();
+      expect(JSON.parse(wm().getTestStateJson()).portableTilingShadowFailure).toContain(
+        "shadow invariant"
+      );
+    });
+
     it("should move window in the given direction", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const { monitor } = getWorkspaceAndMonitor(ctx);

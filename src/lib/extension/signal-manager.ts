@@ -58,6 +58,8 @@ export interface SignalManagerHost {
 
   readonly scheduler: EventSchedulerPort;
   observePortableTopology(): void;
+  observePortableWindow(metaWindow: Meta.Window): void;
+  observePortableWindows(): void;
 }
 
 export class SignalManager {
@@ -97,6 +99,7 @@ export class SignalManager {
       }),
       extDisplay.connect("grab-op-begin", (_d, m, g) => host.handleGrabOpBegin(_d, m, g)),
       extDisplay.connect("window-entered-monitor", (_, monitor, metaWindow) => {
+        host.observePortableWindow(metaWindow);
         host.updateMetaWorkspaceMonitor("window-entered-monitor", monitor, metaWindow);
         host.trackCurrentMonWs();
       }),
@@ -106,6 +109,7 @@ export class SignalManager {
         host.updateDecorationLayout();
       }),
       extDisplay.connect("in-fullscreen-changed", () => {
+        host.observePortableWindows();
         host.renderTree("full-screen-changed");
       }),
       extDisplay.connect("workareas-changed", (_display) => {

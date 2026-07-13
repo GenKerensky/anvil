@@ -138,6 +138,60 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("translates the legacy orientation default into portable layout policy", () => {
+    const globals = installGnomeGlobals({
+      display: {
+        monitorGeometries: [{ x: 0, y: 0, width: 800, height: 1200 }],
+      },
+    });
+    const shadow = new TilingShadow(createMockSettings() as never);
+
+    shadow.bootstrap([], () => true);
+
+    expect(shadow.inspect().policy.defaultLayout).toBe("vertical");
+    globals.cleanup();
+  });
+
+  it("translates Surface-scoped settings without exposing workspace or output ids", () => {
+    const globals = installGnomeGlobals();
+    (global as unknown as { backend: unknown }).backend = {
+      get_monitor_manager: vi.fn(() => ({
+        get_logical_monitors: () => [{ get_monitors: () => [{ get_connector: () => "eDP-1" }] }],
+      })),
+    };
+    const settings = createMockSettings({
+      "workspace-skip-tile": "0",
+      "showtab-decoration-enabled": false,
+      "monitor-constraints": [["eDP-1", 900, 700, true, true]],
+    });
+    const shadow = new TilingShadow(settings as never);
+
+    shadow.bootstrap([], () => true);
+
+    const inspection = shadow.inspect();
+    const surface = inspection.surfaces[0].id;
+    expect(inspection.policy).toMatchObject({
+      surfaceTiling: { [surface]: false },
+      constraints: { [surface]: { maxWidth: 900, maxHeight: 700, resizeExempt: true } },
+      headerExtent: 0,
+    });
+    expect(JSON.stringify(inspection.policy)).not.toContain("workspace");
+    globals.cleanup();
+  });
+
+  it("buffers normalized facts until the bootstrap snapshot commits", () => {
+    const globals = installGnomeGlobals();
+    const window = createMockWindow({ workspace: globals.workspaces[0] });
+    const shadow = new TilingShadow(createMockSettings() as never);
+
+    shadow.observeWindow(window);
+    expect(shadow.inspect().windows).toHaveLength(0);
+    shadow.bootstrap([], () => true);
+
+    expect(shadow.inspect().windows).toHaveLength(1);
+    globals.cleanup();
+  });
+
   it("translates Anvil overrides and built-ins into portable participation rules", () => {
     const globals = installGnomeGlobals();
     const override = createMockWindow({
@@ -185,6 +239,28 @@ describe("TilingShadow", () => {
     globals.cleanup();
   });
 
+  it("retains topology bookkeeping when a candidate observation is rejected", () => {
+    const globals = installGnomeGlobals();
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([], () => true);
+    const replacementWorkspace = new globals.workspaces[0].constructor({ index: 0 });
+    globals.workspaceManager.get_workspace_by_index.mockReturnValue(replacementWorkspace);
+    globals.display.get_monitor_neighbor_index.mockReturnValue(1);
+
+    shadow.observeTopology();
+    expect(shadow.compareObservedGeometry()).toMatchObject({
+      rejectedEventCount: 1,
+      rejectedEvents: [{ eventType: "FactsObserved" }],
+    });
+
+    globals.workspaceManager.get_n_workspaces.mockReturnValue(0);
+    globals.display.get_monitor_neighbor_index.mockReturnValue(-1);
+    shadow.observeTopology();
+
+    expect(shadow.inspect().surfaces).toEqual([]);
+    globals.cleanup();
+  });
+
   it("translates tiling actions without applying their intentions", () => {
     const first = createMockWindow();
     const globals = installGnomeGlobals({ display: { getFocusWindow: () => first } });
@@ -199,6 +275,24 @@ describe("TilingShadow", () => {
 
     expect(shadow.inspect()).toMatchObject({
       containers: [{ selectedChildId: secondId }],
+    });
+    globals.cleanup();
+  });
+
+  it("reports structured desired-versus-observed geometry mismatches", () => {
+    const window = createMockWindow({ rect: { x: 10, y: 20, width: 300, height: 200 } });
+    const globals = installGnomeGlobals();
+    window._workspace = globals.workspaces[0];
+    const shadow = new TilingShadow(createMockSettings() as never);
+    shadow.bootstrap([window], () => true);
+
+    const comparison = shadow.compareObservedGeometry();
+
+    expect(comparison.mismatchCount).toBe(1);
+    expect(comparison.rejectedEventCount).toBe(0);
+    expect(comparison.mismatches[0]).toMatchObject({
+      windowId: shadow.inspect().windows[0].id,
+      observed: { x: 10, y: 20, width: 300, height: 200 },
     });
     globals.cleanup();
   });

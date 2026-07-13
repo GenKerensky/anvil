@@ -19,6 +19,7 @@ export interface RenderSchedulerHost {
   updateDecorationLayout(): void;
   updateBorderLayout(): void;
   tilingRenderRender(from: string): void;
+  recordSettledTilingComparison(): void;
   trackCurrentWindows(): void;
   treeReinitializeWorkspaces(): void;
   treeResetRoot(): void;
@@ -38,6 +39,7 @@ export class RenderScheduler {
     if (this.host.isRenderFrozen() || !this.host.tilingModeEnabled) {
       this.host.updateDecorationLayout();
       this.host.updateBorderLayout();
+      this.host.recordSettledTilingComparison();
     } else {
       if (!this._renderSrcId) {
         this._renderSrcId = GLib.idle_add(GLib.PRIORITY_DEFAULT, () => {
@@ -45,6 +47,7 @@ export class RenderScheduler {
           this._renderSrcId = 0;
           this.host.updateDecorationLayout();
           this.host.updateBorderLayout();
+          this.host.recordSettledTilingComparison();
           if (wasFrozen) this.host.freezeRender();
           return false;
         });

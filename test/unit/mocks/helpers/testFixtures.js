@@ -143,6 +143,9 @@ export function createAnvilRuntimeFixture(options = {}) {
   // Owner-focused unit tests need the graph without binding real Shell signals.
   // Runtime lifecycle behavior is covered separately through enable()/disable().
   anvilRuntime._initializeGraph();
+  anvilRuntime._tilingShadow.bootstrap(anvilRuntime.windowsAllWorkspaces, (window) =>
+    anvilRuntime._tracker.validWindow(window)
+  );
   anvilRuntime.tree.initialize();
   anvilRuntime.tree._initWorkspaces();
   anvilRuntime.disabled = false;

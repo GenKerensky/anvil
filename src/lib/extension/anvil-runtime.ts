@@ -117,6 +117,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private _pointerPolicy: PointerPolicy | null = null;
   private _tilingRender: TilingRender | null = null;
   private _tilingShadow: TilingShadow | null = null;
+  private _tilingShadowFailure: string | null = null;
+  private _tilingShadowComparison: ReturnType<TilingShadow["compareObservedGeometry"]> | null =
+    null;
   private _tracker: WindowTracker | null = null;
   private _layout: LayoutEngine | null = null;
   private _grab: GrabResizeSession | null = null;
@@ -147,6 +150,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       this.ext.settings,
       () => this._rules?.windowProps.overrides ?? []
     );
+    this._tilingShadowFailure = null;
+    this._tilingShadowComparison = null;
     this._session = createSessionFlags();
     // Keybindings are wired separately; host getters remain valid across graph activation.
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -208,7 +213,14 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       get scheduler() {
         return self._eventScheduler!;
       },
-      observePortableTopology: () => self._tilingShadow!.observeTopology(),
+      observePortableTopology: () =>
+        self._withTilingShadow("topology", (shadow) => shadow.observeTopology()),
+      observePortableWindow: (window) =>
+        self._withTilingShadow("window", (shadow) => shadow.observeWindow(window)),
+      observePortableWindows: () =>
+        self._withTilingShadow("windows", (shadow) => {
+          for (const window of self.windowsAllWorkspaces) shadow.observeWindow(window);
+        }),
     });
     this._tree = new Tree({
       get settings() {
@@ -312,10 +324,14 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       removeFloatOverride: (w, withWmId) => self.removeFloatOverride(w, withWmId),
       trackCurrentMonWs: () => self.trackCurrentMonWs(),
       autoSplitFromFocus: () => self.layoutEngine.autoSplitFromFocus(),
-      observePortableWindow: (w) => self._tilingShadow!.observeWindow(w),
-      observePortableFrame: (w) => self._tilingShadow!.observeFrame(w),
-      observePortableFocus: (w) => self._tilingShadow!.observeFocus(w),
-      withdrawPortableWindow: (w) => self._tilingShadow!.withdrawWindow(w),
+      observePortableWindow: (w) =>
+        self._withTilingShadow("window", (shadow) => shadow.observeWindow(w)),
+      observePortableFrame: (w) =>
+        self._withTilingShadow("frame", (shadow) => shadow.observeFrame(w)),
+      observePortableFocus: (w) =>
+        self._withTilingShadow("focus", (shadow) => shadow.observeFocus(w)),
+      withdrawPortableWindow: (w) =>
+        self._withTilingShadow("withdraw", (shadow) => shadow.withdrawWindow(w)),
     });
     this._settingsBridge = new SettingsBridge({
       get settings() {
@@ -343,7 +359,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       cleanupAlwaysFloat: () => self.cleanupAlwaysFloat(),
       restoreAlwaysFloat: () => self.restoreAlwaysFloat(),
       clearResizedWindows: () => self._grab!.clearResizedWindows(),
-      observePortablePolicy: () => self._tilingShadow!.observePolicy(),
+      observePortablePolicy: () =>
+        self._withTilingShadow("policy", (shadow) => shadow.observePolicy()),
     });
     this._focus = new FocusController({
       get layoutEngine() {
@@ -433,6 +450,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       updateDecorationLayout: () => self2.updateDecorationLayout(),
       updateBorderLayout: () => self2.updateBorderLayout(),
       tilingRenderRender: (from) => self2._tilingRender!.render(from),
+      recordSettledTilingComparison: () => self2._recordSettledTilingComparison(),
       trackCurrentWindows: () => self2._tracker!.trackCurrentWindows(),
       treeReinitializeWorkspaces: () => self2.tree._initWorkspaces(),
       treeResetRoot: () => self2.tree.reset(),
@@ -453,10 +471,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         return self2.ext.settings;
       },
     });
-
-    this._tilingShadow.bootstrap(this.windowsAllWorkspaces, (window) =>
-      this._tracker!.validWindow(window)
-    );
 
     Logger.info("anvil runtime graph initialized");
   }
@@ -538,6 +552,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private notifyWorkspaceSettled() {
     this._pointerPolicy?.onWorkspaceSettled();
+    this._recordSettledTilingComparison();
   }
 
   private addFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
@@ -649,8 +664,29 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   /** Dispatch a typed user action via CommandBus (B3-1). */
   command(action: AnvilAction) {
     this._assertEnabled("command");
-    this._tilingShadow!.observeCommand(action, this.focusMetaWindow);
+    this._withTilingShadow("command", (shadow) =>
+      shadow.observeCommand(action, this.focusMetaWindow)
+    );
     this._commandBus!.dispatch(action);
+  }
+
+  private _withTilingShadow(name: string, callback: (shadow: TilingShadow) => void): void {
+    const shadow = this._tilingShadow;
+    if (!shadow) return;
+    try {
+      callback(shadow);
+    } catch (error) {
+      this._tilingShadowFailure = `${name}: ${error}`;
+      this._tilingShadow = null;
+      this._tilingShadowComparison = null;
+      Logger.warn(`portable tiling shadow disabled (${this._tilingShadowFailure})`);
+    }
+  }
+
+  private _recordSettledTilingComparison(): void {
+    this._withTilingShadow("comparison", (shadow) => {
+      this._tilingShadowComparison = shadow.compareObservedGeometry();
+    });
   }
 
   /** Injectable command bus for tests / keybinding service (B10-2). */
@@ -707,6 +743,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._eventScheduler = null;
     this._tilingRender = null;
     this._tilingShadow = null;
+    this._tilingShadowComparison = null;
     this._tracker = null;
     this._layout = null;
     this._grab = null;
@@ -729,6 +766,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       rollback.push(() => this._tree?.dispose());
       this._signalManager!.bindAll();
       rollback.push(() => this._signalManager?.unbindAll());
+      this._withTilingShadow("bootstrap", (shadow) =>
+        shadow.bootstrap(this.windowsAllWorkspaces, (window) => this._tracker!.validWindow(window))
+      );
       this.reloadTree("enable");
       rollback.push(() => this._renderScheduler?.dispose());
       this._state = "enabled";
@@ -1112,6 +1152,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       tabbedEnabled: this.ext.settings.get_boolean("tabbed-tiling-mode-enabled"),
       tree: this._tree ? this._tree!.serializeForTest() : null,
       portableTiling: this._tilingShadow?.inspect() ?? null,
+      portableTilingShadow: this._tilingShadowComparison,
+      portableTilingShadowFailure: this._tilingShadowFailure,
     });
   }
 

@@ -11,6 +11,7 @@ function installActivationStubs(runtime: any) {
   const subject = runtime;
   subject._tree = { initialize: vi.fn(), dispose: vi.fn() };
   subject._signalManager = { bindAll: vi.fn(), unbindAll: vi.fn() };
+  subject._tilingShadow = { bootstrap: vi.fn() };
   vi.spyOn(runtime, "reloadTree").mockImplementation(() => {});
 }
 
@@ -38,6 +39,10 @@ describe("AnvilRuntime lifecycle", () => {
     expect(initializeGraph).toHaveBeenCalledOnce();
     expect((runtime as any)._tree.initialize).toHaveBeenCalledOnce();
     expect((runtime as any)._signalManager.bindAll).toHaveBeenCalledOnce();
+    expect((runtime as any)._tilingShadow.bootstrap).toHaveBeenCalledOnce();
+    expect((runtime as any)._signalManager.bindAll.mock.invocationCallOrder[0]).toBeLessThan(
+      (runtime as any)._tilingShadow.bootstrap.mock.invocationCallOrder[0]
+    );
     expect(runtime.state).toBe("enabled");
     expect(runtime.disabled).toBe(false);
   });
@@ -147,6 +152,22 @@ describe("AnvilRuntime lifecycle", () => {
     expect(() => runtime.command({ name: "WindowClose" })).toThrow(
       "AnvilRuntime.command used while disabled"
     );
+  });
+
+  it("caches shadow comparison only when a settle boundary records it", () => {
+    const runtime = runtimeFixture();
+    const comparison = {
+      mismatchCount: 0,
+      mismatches: [],
+      rejectedEventCount: 0,
+      rejectedEvents: [],
+    };
+    runtime._tilingShadow = { compareObservedGeometry: vi.fn(() => comparison) };
+
+    expect(runtime._tilingShadowComparison).toBeNull();
+    runtime._recordSettledTilingComparison();
+
+    expect(runtime._tilingShadowComparison).toBe(comparison);
   });
 
   it("disposes an enabled graph once and treats repeated disable as a no-op", () => {

@@ -13,11 +13,15 @@ import {
   type PlatformSnapshot,
   type ParticipationRule,
   type SurfaceFact,
+  type SurfaceConstraint,
   type SurfaceId,
+  type TilingDiagnostic,
+  type TilingEvent,
   type TilingInspection,
   type TilingCommand,
   type TilingPolicy,
   type TilingStateMachine,
+  type TilingTransition,
   type WindowFact,
   type WindowId,
 } from "../tiling/index.js";
@@ -71,6 +75,14 @@ function uintSetting(settings: Gio.Settings, key: string, fallback: number): num
   }
 }
 
+function stringSetting(settings: Gio.Settings, key: string, fallback: string): string {
+  try {
+    return settings.get_string(key);
+  } catch {
+    return fallback;
+  }
+}
+
 export class GnomeTilingIdentityRegistry {
   private nextWindow = 1;
   private nextSurface = 1;
@@ -108,6 +120,15 @@ export class TilingShadow {
   private readonly identities = new GnomeTilingIdentityRegistry();
   private machine: TilingStateMachine;
   private activeSurfaces = new Set<SurfaceId>();
+  private bootstrapped = false;
+  private pendingEvents: TilingEvent[] = [];
+  private rejectedEvents: Array<
+    Readonly<{
+      eventType: TilingEvent["type"];
+      revision: number;
+      diagnostics: readonly TilingDiagnostic[];
+    }>
+  > = [];
   private readonly windowOverrides: () => readonly WindowOverride[];
 
   constructor(settings: Gio.Settings, windowOverrides: () => readonly WindowOverride[] = () => []) {
@@ -127,17 +148,64 @@ export class TilingShadow {
     if (booleanSetting(this.settings, "tabbed-tiling-mode-enabled", true)) {
       allowedLayouts.push("tabbed");
     }
+    const skippedWorkspaces = new Set(
+      stringSetting(this.settings, "workspace-skip-tile", "")
+        .split(",")
+        .map((item) => Number.parseInt(item, 10))
+        .filter(Number.isFinite)
+    );
+    const surfaceTiling: Record<string, boolean> = {};
+    const constraints: Record<string, SurfaceConstraint> = {};
+    let rawConstraints: Array<[string, number, number, boolean, boolean]> = [];
+    try {
+      rawConstraints = this.settings
+        .get_value("monitor-constraints")
+        .deep_unpack() as typeof rawConstraints;
+    } catch {
+      rawConstraints = [];
+    }
+    const constraintsByOutput = new Map(
+      rawConstraints
+        .filter(([, , , enabled]) => enabled)
+        .map(([output, maxWidth, maxHeight, , resizeExempt]) => [
+          output,
+          { maxWidth, maxHeight, resizeExempt },
+        ])
+    );
+    let defaultLayout: Layout = "horizontal";
+    try {
+      const geometry = global.display.get_monitor_geometry(global.display.get_current_monitor());
+      defaultLayout = geometry.width < geometry.height ? "vertical" : "horizontal";
+    } catch {
+      // The adapter can start before monitor geometry is available. Match the
+      // legacy landscape fallback until a later policy observation refreshes it.
+    }
+    const workspaceManager = global.workspace_manager;
+    for (
+      let workspaceIndex = 0;
+      workspaceIndex < workspaceManager.get_n_workspaces();
+      workspaceIndex += 1
+    ) {
+      const workspace = workspaceManager.get_workspace_by_index(workspaceIndex);
+      if (!workspace) continue;
+      for (let monitor = 0; monitor < global.display.get_n_monitors(); monitor += 1) {
+        const id = this.surfaceIdentity(workspace, monitor);
+        surfaceTiling[id] = !skippedWorkspaces.has(workspaceIndex);
+        const constraint = constraintsByOutput.get(this.outputKey(monitor));
+        if (constraint) constraints[id] = constraint;
+      }
+    }
     return {
       enabled: booleanSetting(this.settings, "tiling-mode-enabled", true),
-      surfaceTiling: {},
+      surfaceTiling,
       allowedLayouts,
-      defaultLayout: "horizontal",
+      defaultLayout,
       gap,
       hideGapWhenSingle: booleanSetting(this.settings, "window-gap-hidden-on-single", false),
       autoSplit: booleanSetting(this.settings, "auto-split-enabled", false),
       singleTabExit: booleanSetting(this.settings, "auto-exit-tabbed", true) ? "split" : "preserve",
-      headerExtent: 0,
-      constraints: {},
+      headerExtent: booleanSetting(this.settings, "showtab-decoration-enabled", true) ? 35 : 0,
+      constraints,
       participationRules: createPortableParticipationRules(this.windowOverrides()),
       reconcileAttempts: 3,
     };
@@ -217,7 +285,7 @@ export class TilingShadow {
         width: frame.width,
         height: frame.height,
       },
-      available: !metaWindow.minimized,
+      available: !metaWindow.minimized && !metaWindow.fullscreen,
       capabilities: {
         focus: true,
         raise: true,
@@ -233,8 +301,30 @@ export class TilingShadow {
     };
   }
 
+  private submit(event: TilingEvent): TilingTransition | undefined {
+    if (!this.bootstrapped) {
+      this.pendingEvents.push(event);
+      return undefined;
+    }
+    return this.dispatch(event);
+  }
+
+  private dispatch(event: TilingEvent): TilingTransition {
+    const transition = this.machine.dispatch(event);
+    if (transition.status === "rejected") {
+      this.rejectedEvents.push({
+        eventType: event.type,
+        revision: transition.revision,
+        diagnostics: transition.diagnostics,
+      });
+      if (this.rejectedEvents.length > 20) this.rejectedEvents.shift();
+    }
+    return transition;
+  }
+
   bootstrap(windows: readonly Meta.Window[], validWindow: (window: Meta.Window) => boolean): void {
     this.machine = createTilingStateMachine(this.policy());
+    this.rejectedEvents = [];
     const surfaces = this.surfaceFacts();
     this.activeSurfaces = new Set(surfaces.map((surface) => surface.id));
     const observedWindows = windows
@@ -248,13 +338,20 @@ export class TilingShadow {
       windows: observedWindows,
       ...(focusedWindowId ? { focusedWindowId } : {}),
     };
-    this.machine.dispatch({ type: "PlatformSnapshotObserved", snapshot });
+    const transition = this.dispatch({ type: "PlatformSnapshotObserved", snapshot });
+    if (transition.status !== "committed") {
+      throw new Error(`portable tiling bootstrap ${transition.status}`);
+    }
+    this.bootstrapped = true;
+    const pending = this.pendingEvents;
+    this.pendingEvents = [];
+    for (const event of pending) this.dispatch(event);
   }
 
   observeWindow(metaWindow: Meta.Window): void {
     const window = this.windowFact(metaWindow);
     if (!window) return;
-    this.machine.dispatch({
+    this.submit({
       type: "FactsObserved",
       facts: [{ type: "WindowObserved", window }],
     });
@@ -263,7 +360,7 @@ export class TilingShadow {
   observeFrame(metaWindow: Meta.Window): void {
     const fact = this.windowFact(metaWindow);
     if (!fact) return;
-    this.machine.dispatch({
+    this.submit({
       type: "FactsObserved",
       facts: [{ type: "FrameObserved", windowId: fact.id, frame: fact.frame }],
     });
@@ -271,20 +368,20 @@ export class TilingShadow {
 
   observeFocus(metaWindow: Meta.Window | null): void {
     const focusedWindowId = metaWindow ? this.identities.knownWindow(metaWindow) : undefined;
-    this.machine.dispatch({
+    this.submit({
       type: "FactsObserved",
       facts: [{ type: "FocusObserved", windowId: focusedWindowId }],
     });
   }
 
   observePolicy(): void {
-    this.machine.dispatch({ type: "PolicyReplaced", policy: this.policy() });
+    this.submit({ type: "PolicyReplaced", policy: this.policy() });
   }
 
   observeTopology(): void {
     const surfaces = this.surfaceFacts();
     const nextSurfaces = new Set(surfaces.map((surface) => surface.id));
-    this.machine.dispatch({
+    const transition = this.submit({
       type: "FactsObserved",
       facts: [
         ...surfaces.map((surface) => ({ type: "SurfaceObserved" as const, surface })),
@@ -293,7 +390,10 @@ export class TilingShadow {
           .map((surfaceId) => ({ type: "SurfaceWithdrawn" as const, surfaceId })),
       ],
     });
-    this.activeSurfaces = nextSurfaces;
+    if (this.bootstrapped && transition?.status !== "rejected") {
+      this.activeSurfaces = nextSurfaces;
+    }
+    this.observePolicy();
   }
 
   observeCommand(action: AnvilAction, focusedWindow: Meta.Window | null): void {
@@ -355,14 +455,47 @@ export class TilingShadow {
       }
       command = { type: "SetLayout", windowId: focusedWindowId, layout };
     }
-    if (command) this.machine.dispatch({ type: "CommandRequested", command });
+    if (command) this.submit({ type: "CommandRequested", command });
   }
 
   withdrawWindow(metaWindow: Meta.Window): void {
-    this.machine.dispatch({
+    const knownWindow = this.identities.knownWindow(metaWindow);
+    if (!knownWindow) return;
+    this.submit({
       type: "FactsObserved",
-      facts: [{ type: "WindowWithdrawn", windowId: this.identities.window(metaWindow) }],
+      facts: [{ type: "WindowWithdrawn", windowId: knownWindow }],
     });
+  }
+
+  compareObservedGeometry(): Readonly<{
+    mismatchCount: number;
+    mismatches: readonly Readonly<{
+      windowId: WindowId;
+      expected: WindowFact["frame"];
+      observed: WindowFact["frame"];
+    }>[];
+    rejectedEventCount: number;
+    rejectedEvents: readonly Readonly<{
+      eventType: TilingEvent["type"];
+      revision: number;
+      diagnostics: readonly TilingDiagnostic[];
+    }>[];
+  }> {
+    const inspection = this.machine.inspect();
+    const mismatches = inspection.renderPlan.windows.flatMap((plan) => {
+      const observed = inspection.windows.find((window) => window.id === plan.id);
+      if (!observed || JSON.stringify(observed.frame) === JSON.stringify(plan.frame)) return [];
+      return [{ windowId: plan.id, expected: plan.frame, observed: observed.frame }];
+    });
+    return {
+      mismatchCount: mismatches.length,
+      mismatches,
+      rejectedEventCount: this.rejectedEvents.length,
+      rejectedEvents: this.rejectedEvents.map((event) => ({
+        ...event,
+        diagnostics: event.diagnostics.map((diagnostic) => ({ ...diagnostic })),
+      })),
+    };
   }
 
   inspect(): TilingInspection {
