@@ -72,6 +72,15 @@ function shouldParticipate(
   return policy.surfaceTiling[window.surfaceId] !== false;
 }
 
+function inspectionShouldParticipate(
+  window: WindowInspection,
+  policy: TilingPolicy,
+  availableSurfaces: ReadonlySet<string>
+): boolean {
+  if (!policy.enabled || !availableSurfaces.has(window.surfaceId)) return false;
+  return policy.surfaceTiling[window.surfaceId] !== false;
+}
+
 function inset(
   rect: Readonly<{ x: number; y: number; width: number; height: number }>,
   gap: number
@@ -183,6 +192,97 @@ export function createTilingStateMachine(initialPolicy: TilingPolicy): TilingSta
 
   return {
     dispatch(event: TilingEvent): TilingTransition {
+      if (event.type === "PolicyReplaced") {
+        if (JSON.stringify(event.policy) === JSON.stringify(inspection.policy)) {
+          return {
+            status: "ignored",
+            revision: inspection.revision,
+            intentions: [],
+            diagnostics: [],
+          };
+        }
+
+        const nextPolicy = copyPolicy(event.policy);
+        const availableSurfaces = new Set(inspection.surfaces.map((surface) => surface.id));
+        const participationChanges: Array<{
+          windowId: WindowInspection["id"];
+          participating: boolean;
+        }> = [];
+        const placementHints = [...inspection.placementHints];
+        const windows = inspection.windows.map((window) => {
+          const participating = inspectionShouldParticipate(window, nextPolicy, availableSurfaces);
+          if (participating === window.participating) return window;
+          participationChanges.push({ windowId: window.id, participating });
+          if (!participating) {
+            placementHints.push({
+              windowId: window.id,
+              surfaceId: window.surfaceId,
+              ...(window.parentId ? { parentId: window.parentId } : {}),
+              selected: false,
+            });
+            return { ...window, participating: false, parentId: undefined };
+          }
+          const surface = inspection.surfaces.find(
+            (candidate) => candidate.id === window.surfaceId
+          );
+          return { ...window, participating: true, parentId: surface?.rootId };
+        });
+        const containers = inspection.containers.map((container) => ({
+          ...container,
+          childIds: windows
+            .filter((window) => window.participating && window.parentId === container.id)
+            .map((window) => window.id),
+        }));
+        const revision = inspection.revision + 1;
+        const windowPlans = deriveWindowPlans(inspection.surfaces, windows, containers, nextPolicy);
+        const intentions = [
+          ...participationChanges.map((change) => ({
+            type: "WindowParticipationChanged" as const,
+            revision,
+            ordinal: 0,
+            ...change,
+          })),
+          ...windowPlans
+            .filter((plan) => {
+              const previous = inspection.renderPlan.windows.find(
+                (window) => window.id === plan.id
+              );
+              return (
+                !previous ||
+                previous.surfaceId !== plan.surfaceId ||
+                !sameRect(previous.frame, plan.frame)
+              );
+            })
+            .map((plan) => ({
+              type: "PlaceWindow" as const,
+              revision,
+              ordinal: 0,
+              windowId: plan.id,
+              surfaceId: plan.surfaceId,
+              frame: copyRect(plan.frame),
+            })),
+        ].map((intention, ordinal) => ({ ...intention, ordinal }));
+
+        inspection = {
+          ...inspection,
+          revision,
+          policy: nextPolicy,
+          windows,
+          containers,
+          placementHints,
+          renderPlan: {
+            ...inspection.renderPlan,
+            revision,
+            windows: windowPlans,
+            containers: inspection.renderPlan.containers.map((container) => {
+              const stateContainer = containers.find((candidate) => candidate.id === container.id)!;
+              return { ...container, layout: stateContainer.layout };
+            }),
+          },
+        };
+        return { status: "committed", revision, intentions, diagnostics: [] };
+      }
+
       if (event.type === "FactsObserved") {
         const windows: WindowInspection[] = [...inspection.windows];
         let changed = false;

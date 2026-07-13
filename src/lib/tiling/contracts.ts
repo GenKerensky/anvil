@@ -206,6 +206,10 @@ export type TilingEvent =
   | Readonly<{
       type: "FactsObserved";
       facts: readonly PlatformFact[];
+    }>
+  | Readonly<{
+      type: "PolicyReplaced";
+      policy: TilingPolicy;
     }>;
 
 type IntentionToken = Readonly<{

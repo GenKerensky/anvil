@@ -270,4 +270,81 @@ describe("TilingStateMachine", () => {
       })
     ).toEqual({ status: "ignored", revision: 2, intentions: [], diagnostics: [] });
   });
+
+  it("preserves participation intent across per-Surface policy changes", () => {
+    const machine = createTilingStateMachine(policy);
+    const primary = surfaceId("primary");
+    const terminal = windowId("terminal");
+    const capabilities = { focus: true, raise: true, move: true, resize: true };
+    machine.dispatch({
+      type: "PlatformSnapshotObserved",
+      snapshot: {
+        surfaces: [
+          {
+            id: primary,
+            workArea: { x: 0, y: 0, width: 1200, height: 900 },
+            neighbors: {},
+            capabilities,
+          },
+        ],
+        windows: [
+          {
+            id: terminal,
+            surfaceId: primary,
+            frame: { x: 0, y: 0, width: 1200, height: 900 },
+            available: true,
+            capabilities,
+          },
+        ],
+      },
+    });
+
+    const disabled = machine.dispatch({
+      type: "PolicyReplaced",
+      policy: { ...policy, surfaceTiling: { [primary]: false } },
+    });
+
+    expect(disabled).toMatchObject({
+      status: "committed",
+      revision: 2,
+      intentions: [
+        {
+          type: "WindowParticipationChanged",
+          windowId: terminal,
+          participating: false,
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [{ id: terminal, participating: false }],
+      containers: [{ childIds: [] }],
+      placementHints: [
+        { windowId: terminal, surfaceId: primary, parentId: "container:1", selected: false },
+      ],
+      renderPlan: { windows: [] },
+    });
+
+    const enabled = machine.dispatch({ type: "PolicyReplaced", policy });
+    expect(enabled).toMatchObject({
+      status: "committed",
+      revision: 3,
+      intentions: [
+        {
+          type: "WindowParticipationChanged",
+          windowId: terminal,
+          participating: true,
+        },
+        {
+          type: "PlaceWindow",
+          windowId: terminal,
+          surfaceId: primary,
+          frame: { x: 0, y: 0, width: 1200, height: 900 },
+        },
+      ],
+    });
+    expect(machine.inspect()).toMatchObject({
+      windows: [{ id: terminal, participating: true, parentId: "container:1" }],
+      containers: [{ childIds: [terminal] }],
+    });
+  });
 });
