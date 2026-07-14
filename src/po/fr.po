@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-28 13:06-0400\n"
+"POT-Creation-Date: 2026-07-14 04:16-0400\n"
 "PO-Revision-Date: 2023-02-28 17:16-0500\n"
 "Last-Translator: Wedone <wedoneofficiel@outlook.fr>\n"
 "Language-Team: French - Canada <wroy@proton.me>\n"
@@ -17,34 +17,34 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 "X-Generator: Gtranslator 42.0\n"
 
-#: src/lib/extension/indicator.ts:63 src/lib/prefs/settings.ts:87
+#: src/lib/extension/anvil-runtime.ts:153 src/lib/extension/indicator.ts:118
+msgid "Settings"
+msgstr "Paramètres"
+
+#: src/lib/extension/indicator.ts:71 src/lib/prefs/settings.ts:87
 msgid "Tiling"
 msgstr "Mise en mosaîque"
 
-#: src/lib/extension/indicator.ts:82 src/lib/prefs/settings.ts:45
+#: src/lib/extension/indicator.ts:90 src/lib/prefs/settings.ts:45
 msgid "Anvil"
 msgstr "Anvil"
 
-#: src/lib/extension/indicator.ts:82
+#: src/lib/extension/indicator.ts:90
 msgid "Tiling Window Management"
 msgstr "Gestion de Fenêtres en Mosaïque"
 
-#: src/lib/extension/indicator.ts:86
+#: src/lib/extension/indicator.ts:94
 msgid "Gaps Hidden when Single"
 msgstr "Marges masquées lorsqu'il y a une seule fenêtre"
 
-#: src/lib/extension/indicator.ts:94
+#: src/lib/extension/indicator.ts:102
 #, fuzzy
 msgid "Show Focus Hint Border"
 msgstr "Indice de focus flottant"
 
-#: src/lib/extension/indicator.ts:102
+#: src/lib/extension/indicator.ts:110
 msgid "Move Pointer with the Focus"
 msgstr "Déplacer le pointeur avec le Focus"
-
-#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:150
-msgid "Settings"
-msgstr "Paramètres"
 
 #: src/lib/prefs/appearance.ts:31
 #, fuzzy
@@ -441,6 +441,26 @@ msgid "Remove Item"
 msgstr ""
 
 #, fuzzy
+#~ msgid "Customize shadows for focused and unfocused windows"
+#~ msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
+
+#, fuzzy
+#~ msgid "Focused window"
+#~ msgstr "Mode de tuiles empilées"
+
+#, fuzzy
+#~ msgid "Unfocused window"
+#~ msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
+
+#, fuzzy
+#~ msgid "Blur radius"
+#~ msgstr "Taille de la bordure"
+
+#, fuzzy
+#~ msgid "Spread radius"
+#~ msgstr "Taille de la bordure"
+
+#, fuzzy
 #~ msgid "Minimum tiled windows"
 #~ msgstr "Mode d'affichage par onglets"
 
@@ -466,10 +486,6 @@ msgstr ""
 
 #~ msgid "Skip Workspace Tiling"
 #~ msgstr "Désactiver la disposition en mosaïque de l'espace de travail"
-
-#, fuzzy
-#~ msgid "Show border around focused window"
-#~ msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
 
 #~ msgid "Legend"
 #~ msgstr "légende"

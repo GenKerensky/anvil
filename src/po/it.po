@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-28 13:06-0400\n"
+"POT-Creation-Date: 2026-07-14 04:16-0400\n"
 "PO-Revision-Date: 2024-09-15 20:16+0100\n"
 "Last-Translator: Albano Battistella <albanobattistella@gmail.com>\n"
 "Language-Team: Italian <albanobattistella@gmail.com>\n"
@@ -16,33 +16,33 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 "X-Generator: Gtranslator 42.0\n"
 
-#: src/lib/extension/indicator.ts:63 src/lib/prefs/settings.ts:87
+#: src/lib/extension/anvil-runtime.ts:153 src/lib/extension/indicator.ts:118
+msgid "Settings"
+msgstr "Impostazioni"
+
+#: src/lib/extension/indicator.ts:71 src/lib/prefs/settings.ts:87
 msgid "Tiling"
 msgstr "Affiancamento"
 
-#: src/lib/extension/indicator.ts:82 src/lib/prefs/settings.ts:45
+#: src/lib/extension/indicator.ts:90 src/lib/prefs/settings.ts:45
 msgid "Anvil"
 msgstr ""
 
-#: src/lib/extension/indicator.ts:82
+#: src/lib/extension/indicator.ts:90
 msgid "Tiling Window Management"
 msgstr "Gestione delle finestre di affiancamento"
 
-#: src/lib/extension/indicator.ts:86
+#: src/lib/extension/indicator.ts:94
 msgid "Gaps Hidden when Single"
 msgstr "Margini nascosti quando c'è una sola finestra"
 
-#: src/lib/extension/indicator.ts:94
+#: src/lib/extension/indicator.ts:102
 msgid "Show Focus Hint Border"
 msgstr "Mostra suggerimento del bordo di messa a fuoco"
 
-#: src/lib/extension/indicator.ts:102
+#: src/lib/extension/indicator.ts:110
 msgid "Move Pointer with the Focus"
 msgstr "Sposta il puntatore con il focus"
-
-#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:150
-msgid "Settings"
-msgstr "Impostazioni"
 
 #: src/lib/prefs/appearance.ts:31
 #, fuzzy
@@ -435,6 +435,28 @@ msgid "Remove Item"
 msgstr ""
 
 #, fuzzy
+#~ msgid "Customize shadows for focused and unfocused windows"
+#~ msgstr ""
+#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#, fuzzy
+#~ msgid "Focused window"
+#~ msgstr "Modalità di affiancamento in pila"
+
+#, fuzzy
+#~ msgid "Unfocused window"
+#~ msgstr ""
+#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
+
+#, fuzzy
+#~ msgid "Blur radius"
+#~ msgstr "Bordi"
+
+#, fuzzy
+#~ msgid "Spread radius"
+#~ msgstr "Bordi"
+
+#, fuzzy
 #~ msgid "Minimum tiled windows"
 #~ msgstr "Modalità di affiancamento a schede"
 
@@ -460,11 +482,6 @@ msgstr ""
 
 #~ msgid "Skip Workspace Tiling"
 #~ msgstr "Disabilita l'affiancamento dell'area di lavoro"
-
-#, fuzzy
-#~ msgid "Show border around focused window"
-#~ msgstr ""
-#~ "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
 
 #~ msgid "Legend"
 #~ msgstr "leggenda"

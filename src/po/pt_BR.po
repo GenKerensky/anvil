@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-06-28 13:06-0400\n"
+"POT-Creation-Date: 2026-07-14 04:16-0400\n"
 "PO-Revision-Date: 2021-09-18 16:25-0400\n"
 "Last-Translator: Juarez Rudsatz <juarezr@gmail.com>\n"
 "Language-Team: \n"
@@ -12,34 +12,34 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: src/lib/extension/indicator.ts:63 src/lib/prefs/settings.ts:87
+#: src/lib/extension/anvil-runtime.ts:153 src/lib/extension/indicator.ts:118
+msgid "Settings"
+msgstr "Configurações"
+
+#: src/lib/extension/indicator.ts:71 src/lib/prefs/settings.ts:87
 msgid "Tiling"
 msgstr "Emparelhamento"
 
-#: src/lib/extension/indicator.ts:82 src/lib/prefs/settings.ts:45
+#: src/lib/extension/indicator.ts:90 src/lib/prefs/settings.ts:45
 msgid "Anvil"
 msgstr "Anvil"
 
-#: src/lib/extension/indicator.ts:82
+#: src/lib/extension/indicator.ts:90
 msgid "Tiling Window Management"
 msgstr "Gerenciamento de Janelas Emparelhadas"
 
-#: src/lib/extension/indicator.ts:86
+#: src/lib/extension/indicator.ts:94
 msgid "Gaps Hidden when Single"
 msgstr "Espaçamento Omitido quando Sozinho"
 
-#: src/lib/extension/indicator.ts:94
+#: src/lib/extension/indicator.ts:102
 #, fuzzy
 msgid "Show Focus Hint Border"
 msgstr "Sinalizador de Foco Flutuante"
 
-#: src/lib/extension/indicator.ts:102
+#: src/lib/extension/indicator.ts:110
 msgid "Move Pointer with the Focus"
 msgstr "Mover o Ponteiro com o Foco"
-
-#: src/lib/extension/indicator.ts:110 src/lib/extension/window.ts:150
-msgid "Settings"
-msgstr "Configurações"
 
 #: src/lib/prefs/appearance.ts:31
 #, fuzzy
@@ -430,6 +430,26 @@ msgid "Remove Item"
 msgstr "Remover Item"
 
 #, fuzzy
+#~ msgid "Customize shadows for focused and unfocused windows"
+#~ msgstr "Exibir a borda de divisão na janela com foco"
+
+#, fuzzy
+#~ msgid "Focused window"
+#~ msgstr "Modo empilhado"
+
+#, fuzzy
+#~ msgid "Unfocused window"
+#~ msgstr "Exibir a borda de divisão na janela com foco"
+
+#, fuzzy
+#~ msgid "Blur radius"
+#~ msgstr "Tamanho de Borda"
+
+#, fuzzy
+#~ msgid "Spread radius"
+#~ msgstr "Tamanho de Borda"
+
+#, fuzzy
 #~ msgid "Minimum tiled windows"
 #~ msgstr "Modo em Blocos"
 
@@ -455,10 +475,6 @@ msgstr "Remover Item"
 
 #~ msgid "Skip Workspace Tiling"
 #~ msgstr "Ignorar Emparelhamento de Área de Trabalho"
-
-#, fuzzy
-#~ msgid "Show border around focused window"
-#~ msgstr "Exibir a borda de divisão na janela com foco"
 
 #~ msgid "Legend"
 #~ msgstr "Legenda"
