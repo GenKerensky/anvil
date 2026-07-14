@@ -147,7 +147,7 @@ describe("AnvilRuntime - Borders", () => {
       expect(repaint).not.toHaveBeenCalled();
     });
 
-    it("defers masking until the window texture exists", () => {
+    it("defers masking until the window surface actor exists", () => {
       const ctx = createAnvilRuntimeFixture({
         settings: { "focus-border-toggle": true, "split-border-toggle": false },
       });
@@ -163,20 +163,22 @@ describe("AnvilRuntime - Borders", () => {
       expect(mask(actor)).toBeTruthy();
     });
 
-    it("moves the mask when Mutter replaces a window texture", () => {
+    it("moves the mask when Mutter replaces a window surface actor", () => {
       const ctx = createAnvilRuntimeFixture({
         settings: { "focus-border-toggle": true, "split-border-toggle": false },
       });
       const window = trackTestWindow(ctx);
       const actor = window.get_compositor_private();
-      const previousTexture = actor.get_first_child();
-      const nextTexture = new Clutter.Actor();
+      const previousSurface = actor.get_first_child();
+      const nextSurface = new Clutter.Actor();
+      const disconnect = vi.spyOn(previousSurface, "disconnect");
 
-      actor._children = [nextTexture];
+      actor._children = [nextSurface];
       ctx.anvilRuntime._borders.reconcileWindow(window);
 
-      expect(previousTexture.get_effect("anvil-window-corner-mask")).toBeNull();
-      expect(nextTexture.get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(previousSurface.get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(disconnect).toHaveBeenCalledOnce();
+      expect(nextSurface.get_effect("anvil-window-corner-mask")).toBeTruthy();
     });
 
     it("forgets a mask target when Mutter destroys the surface actor", () => {

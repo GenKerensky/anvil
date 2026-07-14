@@ -468,7 +468,7 @@ export class WindowTracker {
                   host.scheduler.enqueue({
                     name: "raise-float",
                     callback: () => {
-                      host.renderTree("raise-float-queue");
+                      host.renderTree("raise-float-queue", false, "skip");
                     },
                   });
                 }

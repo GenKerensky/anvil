@@ -284,6 +284,27 @@ describe("AnvilRuntime - Lifecycle", () => {
       expect(observe.mock.invocationCallOrder[0]).toBeLessThan(legacy.mock.invocationCallOrder[0]);
     });
 
+    it("keeps floating-window focus raises on the active-only decoration path", () => {
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const enqueue = vi.spyOn(wm()._eventScheduler, "enqueue");
+      const render = vi.spyOn(wm(), "renderTree");
+      wm()._tracker.trackWindow(ctx.display, window);
+      ctx.tree.findNode(window).mode = WINDOW_MODES.FLOAT;
+      ctx.display.get_focus_window.mockReturnValue(window);
+      enqueue.mockClear();
+      render.mockClear();
+
+      window.emit("focus", window);
+      const raise = enqueue.mock.calls
+        .map(([event]) => event as { name: string; callback: () => void })
+        .find((event) => event.name === "raise-float");
+      expect(raise).toBeDefined();
+
+      render.mockClear();
+      raise!.callback();
+      expect(render).toHaveBeenCalledExactlyOnceWith("raise-float-queue", false, "skip");
+    });
+
     it("uses the surgical active-decoration update for core focus changes", () => {
       const window = createMockWindow({ workspace: ctx.workspaces[0] });
       const setActiveDecoration = vi.spyOn(wm()._borders, "setActiveWindow");

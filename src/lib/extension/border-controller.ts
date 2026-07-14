@@ -25,6 +25,7 @@ interface DecorationRecord {
   readonly window: Meta.Window;
   readonly actor: AnvilWindowActor;
   maskTarget: Clutter.Actor | null;
+  maskTargetDestroyId: number | null;
 }
 
 export interface BorderControllerHost {
@@ -62,7 +63,12 @@ export class BorderController {
     }
     if (existing) this.unregisterWindow(metaWindow);
 
-    this._records.set(metaWindow, { window: metaWindow, actor, maskTarget: null });
+    this._records.set(metaWindow, {
+      window: metaWindow,
+      actor,
+      maskTarget: null,
+      maskTargetDestroyId: null,
+    });
     this.reconcileWindow(metaWindow);
     if (this._host.focusMetaWindow === metaWindow) this.setActiveWindow(metaWindow);
   }
@@ -86,8 +92,12 @@ export class BorderController {
     // Mutter has already disposed the surface and its effects by the actor's
     // destroy signal. The earlier `unmanaged` path performs explicit removal;
     // touching either GObject here would itself trigger a GJS critical.
-    if (actorDestroyed) return;
-    this._removeWindowMask(record);
+    if (actorDestroyed) {
+      record.maskTarget = null;
+      record.maskTargetDestroyId = null;
+      return;
+    }
+    this._detachMaskTarget(record);
     record.actor.border = undefined;
     record.actor.splitBorder = undefined;
   }
@@ -154,13 +164,17 @@ export class BorderController {
   }
 
   private _reconcileMask(record: DecorationRecord, drawable: boolean): void {
-    const target = this._getMaskTarget(record.actor);
+    const target = this._getWindowSurfaceActor(record.actor);
     if (record.maskTarget !== target) {
-      this._removeWindowMask(record);
+      this._detachMaskTarget(record);
       record.maskTarget = target;
-      target?.connect("destroy", () => {
-        if (record.maskTarget === target) record.maskTarget = null;
-      });
+      if (target) {
+        record.maskTargetDestroyId = target.connect("destroy", () => {
+          if (record.maskTarget !== target) return;
+          record.maskTarget = null;
+          record.maskTargetDestroyId = null;
+        });
+      }
     }
     if (!drawable || !target) {
       this._removeWindowMask(record);
@@ -379,11 +393,22 @@ export class BorderController {
     }
   }
 
-  private _getMaskTarget(actor: AnvilWindowActor): Clutter.Actor | null {
+  private _detachMaskTarget(record: DecorationRecord): void {
+    this._removeWindowMask(record);
+    if (record.maskTarget && record.maskTargetDestroyId !== null) {
+      record.maskTarget.disconnect(record.maskTargetDestroyId);
+    }
+    record.maskTarget = null;
+    record.maskTargetDestroyId = null;
+  }
+
+  private _getWindowSurfaceActor(actor: AnvilWindowActor): Clutter.Actor | null {
     // Meta.WindowActor.get_texture() returns Meta.ShapedTexture (Clutter.Content),
-    // which cannot own a Clutter.Effect. The first child is Mutter's surface
-    // actor and keeps the effect below Mutter's X11 shadow paint.
-    return actor.get_first_child?.() ?? null;
+    // which cannot own a Clutter.Effect. Mutter's first child is the surface
+    // actor and keeps the effect below its X11 shadow paint. Fail open if that
+    // scene-graph contract no longer yields a Clutter actor.
+    const target = actor.get_first_child?.() ?? null;
+    return target instanceof Clutter.Actor ? target : null;
   }
 
   private _removeActor(actor: Clutter.Actor): void {
