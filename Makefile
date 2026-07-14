@@ -5,7 +5,7 @@ MSGSRC = $(wildcard src/po/*.po)
 .PHONY: all build install uninstall clean dist debug \
         enable disable restart purge log journal \
         potfile compilemsgs metadata schemas format lint check \
-        test-unit test-e2e test-debug-loop-lib
+        test-unit test-e2e test-e2e-monitor-churn test-debug-loop-lib
 
 all: build install
 
@@ -117,6 +117,12 @@ test-unit:
 #        python3 test/e2e/run.py --no-build
 test-e2e: dist
 	python3 test/e2e/run.py
+
+# Mutter 50.1 mirror churn must run in a fresh Shell process. Accumulated window
+# move/resize state can crash its logical-monitor neighbor lookup during collapse.
+test-e2e-monitor-churn: dist
+	python3 test/e2e/run.py --no-build --tag monitor-churn --virtual-monitors 2
+	python3 test/e2e/run.py --no-build --engine core --tag monitor-churn --virtual-monitors 2
 
 # Agent debug loop shared library (stdlib unittest; smoke tests skip without gnome-shell)
 test-debug-loop-lib:
