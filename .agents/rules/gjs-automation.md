@@ -8,8 +8,8 @@ When writing scripts for `gnome-shell --automation-script`:
 - **`GLib.Variant('(s)', value)`** for tuple types must wrap the string in an array: `['pong']` not
   `'pong'`. GJS 1.88 iterates a bare string, producing only the first character.
 - **`Main.extensionManager.lookup(UUID).runtime`** can be `null` when state is ACTIVE; use
-  `global.__anvil_test_state.runtime` or `global.__anvil_runtime` (requires `test-mode=true` via
-  Gio.Settings before enable for test state).
+  `global.__anvil_runtime`. The narrow `global.__anvil_test_state` probe exposes snapshots and
+  lifecycle assertions only (requires `test-mode=true` via Gio.Settings before enable).
 - **`Gio.Settings({ schema_id })`** works when `GSETTINGS_SCHEMA_DIR` points to extension schemas.
 - **jasmine-gjs bootstrap**: Import `file:///usr/share/jasmine-gjs/jasmineBoot.js`. Set
   `globalThis.jasmineImporter = imports['jasmine-gjs']` with correct `imports.searchPath`. Call

@@ -154,11 +154,6 @@ export function sendKeyCombo(combo) {
   const g = /** @type {any} */ (global);
   let wm = g.__anvil_runtime;
 
-  // Fallback: global.__anvil_test_state (set when test-mode is enabled)
-  if (!wm) {
-    if (g.__anvil_test_state && g.__anvil_test_state.runtime) wm = g.__anvil_test_state.runtime;
-  }
-
   if (!wm) {
     log(
       "[E2E] sendKeyCombo: __anvil_runtime=" +
@@ -246,10 +241,6 @@ export function getAnvilRuntime() {
   // The extension always sets global.__anvil_runtime in enable() for E2E access.
   const g = /** @type {any} */ (global);
   if (g.__anvil_runtime) return g.__anvil_runtime;
-
-  // Fallback: global.__anvil_test_state (set when test-mode is enabled)
-  const state = g.__anvil_test_state;
-  if (state && state.runtime) return state.runtime;
 
   throw new Error("Anvil runtime not available");
 }

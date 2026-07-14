@@ -20,9 +20,10 @@ declare module "@girs/shell-18" {
     __anvil_settings: object;
     __anvil_test_state:
       | {
-          runtime: object;
-          getTestState(): string;
+          getTestState(): string | null;
+          isIndicatorVisible(): boolean;
         }
+      | null
       | undefined;
   }
 }

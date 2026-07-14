@@ -65,7 +65,7 @@ make test-e2e
     → gnome-shell --wayland --headless --virtual-monitor 1920x1080
          --automation-script test/e2e/runner.js
       → export async function run()
-        → test-mode=true, wait ACTIVE + __anvil_test_state.runtime
+        → test-mode=true, wait ACTIVE + __anvil_test_state + __anvil_runtime
         → boot Jasmine, import suites/*.js, execute
         → write /tmp/anvil-e2e-results.json
     ← poll results, print summary

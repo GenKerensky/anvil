@@ -1,5 +1,11 @@
 # Architecture Decisions
 
+## Unsafe mode ownership (2026-07-14)
+
+- Anvil never writes `global.context.unsafe_mode`. The `test-mode` setting only exposes
+  `global.__anvil_test_state` for in-process automation, which uses direct GJS APIs instead of
+  `Shell.Eval`.
+
 ## Anvil Runtime replacement (2026-07-12)
 
 - **`AnvilRuntime` replaces `WindowManager`** as the active GNOME-aware tiling system. It owns the
@@ -241,7 +247,8 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 
 ### Residual Stage 9 — hygiene (2026-07-11)
 
-- Documented **test-mode / unsafe_mode** danger (B1-1); never for end users.
+- Documented the former **test-mode / unsafe_mode** danger (B1-1); the write was removed on
+  2026-07-14 and superseded by the unsafe mode ownership decision above.
 - **wireKeybindings()** after Keybindings construct; `kbd` getter no longer lazy-creates (B4-9, B2-2 partial).
 - **enable()** sets `disabled = false` (B4-8).
 - Empty **show-tile-preview** handler documented (suppress Mutter default preview) (B4-6).

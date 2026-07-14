@@ -48,7 +48,7 @@ CI runs unit only. Prefer `--tag` for PR-local E2E; full suite before release (D
 
 `test/e2e/runner.js` is loaded by `--automation-script`. Exports `async function run()`
 (called by gnome-shell). Sets `test-mode=true`, waits for ACTIVE extension with
-`__anvil_test_state.runtime`, bootstraps Jasmine from `/usr/share/jasmine-gjs/`, writes
+`__anvil_test_state` and `__anvil_runtime`, bootstraps Jasmine from `/usr/share/jasmine-gjs/`, writes
 `/tmp/anvil-e2e-results.json`.
 
 Requires `gnome-shell` + `jasmine-gjs` + `glib2-devel`. The core-default Xwayland soak also requires

@@ -203,7 +203,8 @@ Use project terms in code and APIs:
   - GSettings keys handled by **SettingsBridge**
   - Explicit reload triggers (e.g. `window-overrides-reload-trigger`, `css-updated`)
 - Shared persistence: ConfigManager + `windows.json` + shared `WindowConfig` types.
-- `test-mode` + `unsafe_mode` is **test-only / dangerous** — never enable for end users.
+- `test-mode` exposes in-process automation state only. The extension must never write
+  `global.context.unsafe_mode`; E2E uses direct GJS APIs rather than `Shell.Eval`.
 
 ---
 

@@ -33,6 +33,8 @@ testing, and ongoing maintainability.
 
 #### Fixed
 
+- **Unsafe mode ownership** — Test mode no longer sets GNOME Shell's global
+  `context.unsafe_mode`; automation continues through direct in-process GJS APIs.
 - **4-window focus cycle test navigation** — The 4-window focus test now
   uses a proper 2×2 grid navigation cycle (Right → Down → Left → Up)
   instead of an incorrect linear pattern, ensuring all four directions are
@@ -53,10 +55,9 @@ testing, and ongoing maintainability.
 - **E2E test suite** — 12 tests running a headless GNOME Shell session in a
   Podman container; tests lifecycle, tiling, settings, disable/re-enable,
   and preferences dialog.
-- **Test-mode setting** — `test-mode` gschema key enables `unsafe_mode` when
-  set, allowing `org.gnome.Shell.Eval` D-Bus calls in ESM context.
-- **`getTestState()`** — D-Bus-accessible method on extension for E2E
-  assertions.
+- **Test-mode setting** — `test-mode` gschema key exposes a narrow in-process
+  automation probe without enabling GNOME Shell unsafe mode.
+- **`getTestState()`** — In-process test-probe method for E2E assertions.
 - **TypeScript type checking** — Added `tsconfig.json` with GNOME 50 GIRS
   type definitions; JSDoc type annotations added throughout.
 - **ESLint** — Added eslint flat config with Prettier integration.

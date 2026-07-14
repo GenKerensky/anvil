@@ -46,7 +46,7 @@ describe("Unlock Dialog Session Mode", function () {
 
     expect(isExtensionActive()).toBe(true);
     expect(getExtensionErrors()).toEqual([]);
-    expect(/** @type {any} */ (global).__anvil_test_state.indicator).toBeNull();
+    expect(/** @type {any} */ (global).__anvil_test_state.isIndicatorVisible()).toBe(false);
 
     Main.sessionMode.popMode("unlock-dialog");
     await waitForSessionMode("user");
@@ -54,7 +54,7 @@ describe("Unlock Dialog Session Mode", function () {
 
     expect(isExtensionActive()).toBe(true);
     expect(getExtensionErrors()).toEqual([]);
-    expect(/** @type {any} */ (global).__anvil_test_state.indicator).not.toBeNull();
+    expect(/** @type {any} */ (global).__anvil_test_state.isIndicatorVisible()).toBe(true);
     const after = JSON.parse(getAnvilRuntime().getStateJson());
     if (after.tilingEngineMode === "core") {
       expect(after.portableTilingShadowFailure).toBeNull();

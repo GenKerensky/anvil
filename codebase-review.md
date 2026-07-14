@@ -145,11 +145,11 @@ extension.ts
 
 **Findings:**
 
-| ID   | Sev | Location                | Observation                                                                                | Recommendation                                                                                                        | Effort |
-| ---- | --- | ----------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- | ------ |
-| B1-1 | P2  | `enable` L104–111       | `test-mode` sets `global.context.unsafe_mode = true` and hangs whole extension on `global` | Keep test-only; never enable for users. Document as dangerous. Prefer test harness flags over shell globals long-term | S      |
-| B1-2 | P2  | `disable` L199–204      | Nulling fields via `null as unknown as T`                                                  | Prefer optional fields (`WindowManager \| null`) for honest types                                                     | S      |
-| B1-3 | P3  | `getTestState` L253–296 | Serialization walks private `_tree` / `_nodes`                                             | Official test API on a `TestProbe` interface, not digging private fields                                              | M      |
+| ID   | Sev | Location                  | Observation                                                                                        | Recommendation                                                               | Effort |
+| ---- | --- | ------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ------ |
+| B1-1 | P2  | `enable` (resolved)       | Resolved 2026-07-14: `test-mode` exposes only the in-process test probe and never sets unsafe mode | Keep automation on direct GJS APIs; never write `global.context.unsafe_mode` | S      |
+| B1-2 | P2  | `disable` (resolved)      | Resolved 2026-07-11: lifecycle-owned fields are nullable and cleared with honest `null` values     | Keep throwing getters at the enabled/disabled lifecycle boundary             | S      |
+| B1-3 | P3  | `getTestState` (resolved) | Resolved 2026-07-11: `AnvilTestProbe` delegates to runtime and tree-owned serialization APIs       | Keep automation on the public probe; never inspect `_tree` or `_nodes`       | M      |
 
 **If we only do one thing here:** Keep lifecycle discipline; never add Meta listeners in constructor.
 

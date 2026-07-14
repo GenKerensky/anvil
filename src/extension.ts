@@ -80,9 +80,10 @@ const SETTINGS_OVERRIDES: {
  */
 export interface AnvilTestProbe {
   getTestState(): string | null;
+  isIndicatorVisible(): boolean;
 }
 
-export default class AnvilExtension extends Extension implements AnvilTestProbe {
+export default class AnvilExtension extends Extension {
   /** Present only while enabled; null after disable (B1-2). */
   private _settings: Gio.Settings | null = null;
   private _kbdSettings: Gio.Settings | null = null;
@@ -94,6 +95,7 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
   private _sessionId: number | null = null;
   private _savedSettings: SavedSetting[] | null = null;
   private _gnomeSettings: Map<string, Gio.Settings> | null = null;
+  private _testProbe: AnvilTestProbe | null = null;
 
   /** GSettings for the extension — throws if used outside enable/disable cycle. */
   get settings(): Gio.Settings {
@@ -145,18 +147,16 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
       g.__anvil_settings = this.settings;
     }
 
-    // DANGEROUS — test-mode only. Sets GNOME Shell `global.context.unsafe_mode`
-    // so automation can Eval/drive the session. Must NEVER be enabled for
-    // end users (security: allows unrestricted shell evaluation). Prefer
-    // harness flags over hanging production behavior on this global long-term.
-    // @see codebase-review.md B1-1
+    // Test mode exposes a narrow probe for in-process automation. It must
+    // never modify GNOME Shell's global unsafe mode; the E2E harness uses
+    // direct GJS APIs and does not need Shell.Eval.
     if (this.settings.get_boolean("test-mode")) {
-      const g = global as unknown as {
-        context: { unsafe_mode: boolean };
-        __anvil_test_state: unknown;
+      this._testProbe = {
+        getTestState: () => this.getTestState(),
+        isIndicatorVisible: () => this.indicator !== null,
       };
-      g.context.unsafe_mode = true;
-      g.__anvil_test_state = this;
+      const g = global as unknown as { __anvil_test_state: AnvilTestProbe | null };
+      g.__anvil_test_state = this._testProbe;
     }
 
     // Credit: jcrussell/forge — disable GNOME features and keybindings that
@@ -223,10 +223,11 @@ export default class AnvilExtension extends Extension implements AnvilTestProbe 
       g.__anvil_settings = null;
     }
 
-    const g = global as unknown as { __anvil_test_state: unknown };
-    if (g.__anvil_test_state === this) {
+    const g = global as unknown as { __anvil_test_state: AnvilTestProbe | null };
+    if (g.__anvil_test_state === this._testProbe) {
       g.__anvil_test_state = null;
     }
+    this._testProbe = null;
 
     if (this._sessionId) {
       Main.sessionMode.disconnect(this._sessionId);
