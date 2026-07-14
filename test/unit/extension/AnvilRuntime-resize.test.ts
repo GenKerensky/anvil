@@ -474,6 +474,29 @@ describe("AnvilRuntime - Resize", () => {
       expect(node2.percent).toBeCloseTo(860 / parentW, 3);
     });
 
+    it("does not resize sibling percentages while tiling is disabled", () => {
+      const { metaWin1, node1, node2 } = setupTwoWindows(ctx);
+      ctx.settings.set_boolean("tiling-mode-enabled", false);
+
+      wm()._handleGrabOpBegin(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
+      metaWin1.move_resize_frame(true, 0, 0, 1060, 1080);
+      wm()._grab.handleResizing(node1);
+
+      expect(node1.percent).toBe(0.5);
+      expect(node2.percent).toBe(0.5);
+    });
+
+    it("does not start a tiling grab session while tiling is disabled", () => {
+      const { metaWin1, node1 } = setupTwoWindows(ctx);
+      ctx.settings.set_boolean("tiling-mode-enabled", false);
+
+      wm()._handleGrabOpBegin(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
+
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
+      expect(node1.initRect).toBeUndefined();
+      expect(node1.grabMode).toBeUndefined();
+    });
+
     it("should persist percent after grab end", () => {
       const { metaWin1, node1, node2 } = setupTwoWindows(ctx);
 

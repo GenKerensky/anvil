@@ -228,6 +228,7 @@ export class GrabResizeSession {
 
   begin(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
     const host = this._host;
+    if (!host.settings.get_boolean("tiling-mode-enabled")) return;
     this.grabOp = grabOp;
     this._grabbedMetaWindow = _metaWindow;
     host.trackCurrentMonWs();
@@ -392,6 +393,7 @@ export class GrabResizeSession {
 
   handleResizing(focusNodeWindow: Node<any> | null) {
     const host = this._host;
+    if (!host.settings.get_boolean("tiling-mode-enabled")) return;
     const observedWindow = this._grabbedMetaWindow ?? host.focusMetaWindow;
     if (observedWindow) host.observeGrabResizeUpdate(observedWindow);
     if (!focusNodeWindow || focusNodeWindow.isFloat()) {
@@ -642,6 +644,7 @@ export class GrabResizeSession {
   _startLiveResizeLoop(focusNodeWindow: Node<any>) {
     const host = this._host;
     this._stopLiveResizeLoop();
+    if (!host.settings.get_boolean("tiling-mode-enabled")) return;
 
     // Cache gaps once — they don't change during a resize
     const gaps = host.calculateGaps(focusNodeWindow);
@@ -649,6 +652,10 @@ export class GrabResizeSession {
     let lastHeight = focusNodeWindow.initRect?.height;
 
     this._liveResizeSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
+      if (!host.settings.get_boolean("tiling-mode-enabled")) {
+        this._liveResizeSrcId = 0;
+        return GLib.SOURCE_REMOVE;
+      }
       const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
       if (!metaWindow || !focusNodeWindow.grabMode) {
         this._liveResizeSrcId = 0;
