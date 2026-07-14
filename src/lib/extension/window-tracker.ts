@@ -14,7 +14,7 @@
  * Residual Meta connects still on AnvilRuntime (not Stage 4): grab-op, settings,
  * overview, workspace manager, minimize/unminimize.
  *
- * @see codebase-review.md F5 Stage 4, architecture rule 2
+ * @see .agents/rules/architecture.md rule 2
  */
 
 import GLib from "gi://GLib";
@@ -41,7 +41,8 @@ export interface WindowTrackerHost {
 
   isFloatingExempt(w: Meta.Window): boolean;
   isActiveWindowWorkspaceTiled(w: Meta.Window): boolean;
-  floatingWindow(node: Node<any>): boolean;
+  floatingWindow(node: Node): boolean;
+  findNodeWindowByActor(actor: AnvilWindowActor): Node | null;
 
   reloadTree(from: string): void;
   updateMetaWorkspaceMonitor(from: string, monitor: number | null, metaWindow: Meta.Window): void;
@@ -57,9 +58,9 @@ export interface WindowTrackerHost {
   reconcileWindowDecoration(metaWindow: Meta.Window): void;
   reconcileActiveWindowDecoration(): void;
   updateDecorationLayout(): void;
-  updateStackedFocus(focusNodeWindow: Node<any> | null | undefined): void;
-  updateTabbedFocus(focusNodeWindow: Node<any> | null | undefined): void;
-  notifyFocusChanged(node: Node<any> | null, source: PointerFocusSource): void;
+  updateStackedFocus(focusNodeWindow: Node | null | undefined): void;
+  updateTabbedFocus(focusNodeWindow: Node | null | undefined): void;
+  notifyFocusChanged(node: Node | null, source: PointerFocusSource): void;
   moveCenter(metaWindow: Meta.Window): void;
   removeFloatOverride(metaWindow: Meta.Window, withWmId: boolean): void;
   trackCurrentMonWs(): void;
@@ -508,7 +509,7 @@ export class WindowTracker {
           windowActor.connect("first-frame", reclassify);
         }
 
-        this.postProcessWindow(nodeWindow as Node<any> | null);
+        this.postProcessWindow(nodeWindow as Node | null);
         this._unmaximizeWindow(metaWindow);
         host.renderTree("window-create", true);
 
@@ -593,7 +594,7 @@ export class WindowTracker {
     }
   }
 
-  postProcessWindow(nodeWindow: Node<any> | null) {
+  postProcessWindow(nodeWindow: Node | null) {
     if (!nodeWindow) return;
     const host = this._host;
     const metaWindow = nodeWindow.nodeValue as Meta.Window;
@@ -645,7 +646,7 @@ export class WindowTracker {
       }
       return;
     }
-    const nodeWindow = host.tree.findNodeByActor(actor) as unknown as Node<any> | null;
+    const nodeWindow = host.findNodeWindowByActor(actor);
     const metaWindow = (nodeWindow?.nodeValue ?? knownMetaWindow) as Meta.Window | undefined;
     if (metaWindow) host.withdrawPortableWindow(metaWindow);
 
@@ -685,17 +686,17 @@ export class WindowTracker {
    * Restore focus to another window after one is closed (#258)
    * Ported from jcrussell/forge
    */
-  restoreFocusAfterWindowClosed(closedNodeWindow: Node<any>) {
+  restoreFocusAfterWindowClosed(closedNodeWindow: Node) {
     this._restoreFocusAfterWindowClosed(closedNodeWindow);
   }
 
-  private _restoreFocusAfterWindowClosed(closedNodeWindow: Node<any>) {
+  private _restoreFocusAfterWindowClosed(closedNodeWindow: Node) {
     if (!closedNodeWindow || !closedNodeWindow.parentNode) return;
 
     // Try to find a sibling window in the same container
     const parent = closedNodeWindow.parentNode;
     const siblings = parent.childNodes.filter(
-      (node: Node<any>) => node.isWindow() && node !== closedNodeWindow && node.nodeValue
+      (node: Node) => node.isWindow() && node !== closedNodeWindow && node.nodeValue
     );
 
     if (siblings.length > 0) {

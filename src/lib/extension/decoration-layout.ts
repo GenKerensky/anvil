@@ -3,7 +3,7 @@
  *
  * Extracted from AnvilRuntime.updateDecorationLayout.
  * Reads tree, focusMetaWindow, settings via host. Calls into
- * tab-decoration.ts functions for actor show/hide as needed.
+ * Uses the production presentation port for actor show/hide as needed.
  *
  * Extraction rationale: `.agents/memory/decisions.md`.
  */
@@ -13,12 +13,14 @@ import type Gio from "gi://Gio";
 
 import { Tree, Node, NODE_TYPES } from "./tree.js";
 import type { AnvilMetaWindow } from "./window/types.js";
+import type { TreePresentationPort } from "./tree-presentation.js";
 
 export interface DecorationLayoutHost {
   isRenderFrozen(): boolean;
   readonly tree: Tree;
   focusMetaWindow: Meta.Window | null;
   readonly settings: Gio.Settings;
+  readonly presentation: TreePresentationPort;
 }
 
 export class DecorationLayout {
@@ -30,16 +32,14 @@ export class DecorationLayout {
     const allCons = this.host.tree.getNodeByType(NODE_TYPES.CON);
 
     // First, hide all decorations:
-    allCons.forEach((con: any) => {
-      if (con.decoration) {
-        con.decoration.hide();
-      }
+    allCons.forEach((con: Node) => {
+      this.host.presentation.hideDecoration(con);
     });
 
     // Next, handle showing-desktop usually by Super + D
     if (!activeWsNode) return;
     const allWindows = activeWsNode.getNodeByType(NODE_TYPES.WINDOW);
-    const allHiddenWindows = allWindows.filter((w: any) => {
+    const allHiddenWindows = allWindows.filter((w: Node) => {
       const metaWindow = w.nodeValue as Meta.Window;
       return !metaWindow.showing_on_its_workspace() || metaWindow.minimized;
     });
@@ -53,9 +53,9 @@ export class DecorationLayout {
     // So it needs to be fully filtered:
     const monWsNoMaxWindows = activeWsNode
       .getNodeByType(NODE_TYPES.MONITOR)
-      .filter((monitor: any) => {
+      .filter((monitor: Node) => {
         return (
-          monitor.getNodeByType(NODE_TYPES.WINDOW).filter((w: any) => {
+          monitor.getNodeByType(NODE_TYPES.WINDOW).filter((w: Node) => {
             return (() => {
               try {
                 return (
@@ -73,31 +73,23 @@ export class DecorationLayout {
         );
       });
 
-    monWsNoMaxWindows.forEach((monitorWs: any) => {
+    monWsNoMaxWindows.forEach((monitorWs: Node) => {
       const activeMonWsCons = monitorWs.getNodeByType(NODE_TYPES.CON);
-      activeMonWsCons.forEach((con: any) => {
+      activeMonWsCons.forEach((con: Node) => {
         const tiled = this.host.tree.getTiledChildren(con.childNodes);
         const showTabs = this.host.settings.get_boolean("showtab-decoration-enabled");
-        if (con.decoration && tiled.length > 0 && showTabs) {
-          con.decoration.show();
+        if (tiled.length > 0 && showTabs) {
           const focusMetaWindow = this.host.focusMetaWindow;
-          if (global.window_group.contains(con.decoration) && focusMetaWindow) {
-            global.window_group.remove_child(con.decoration);
-            // Show it below the focused window
-            global.window_group.insert_child_below(
-              con.decoration,
-              focusMetaWindow.get_compositor_private()
-            );
-          }
-          con.childNodes.forEach((cn: any) => {
-            cn.render();
+          if (focusMetaWindow) this.host.presentation.showDecorationBelow(con, focusMetaWindow);
+          con.childNodes.forEach((cn: Node) => {
+            this.host.presentation.refreshTabTitle(cn);
           });
         }
       });
     });
   }
 
-  private getActiveWsNode(): Node<any> | null {
+  private getActiveWsNode(): Node | null {
     const display = global.display;
     const wsMgr = display.get_workspace_manager();
     const wsIndex = wsMgr.get_active_workspace_index();

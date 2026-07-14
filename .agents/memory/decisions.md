@@ -91,9 +91,9 @@ briefly focuses `wl-clipboard` at the compositor level; the extension cannot sup
 
 ## Architecture direction (2026-07-10)
 
-Full findings in **`codebase-review.md`** (repo root). Extractions modules (CommandBus, RulesEngine,
-WindowTracker, LayoutEngine, TilingRender, …) are the preferred owners; rules live in
-**`.agents/rules/architecture.md`**.
+The original review findings drove the extraction modules (CommandBus, RulesEngine, WindowTracker,
+LayoutEngine, TilingRender, …). The completed review was removed on 2026-07-14; its durable rules
+live in **`.agents/rules/architecture.md`**.
 
 ### window.ts freeze lifted (2026-07-11)
 
@@ -104,7 +104,7 @@ WindowTracker, LayoutEngine, TilingRender, …) are the preferred owners; rules 
 
 ### Architecture rules synthesis (2026-07-11)
 
-Full review (`codebase-review.md` F3–F4 + F5/residual extractions) synthesized into
+The full review and its extraction roadmap were synthesized into
 **`.agents/rules/architecture.md`** — the agent-facing source of truth for:
 
 - Owner table (CommandBus, RulesEngine, WindowTracker, LayoutEngine, TilingRender, …)
@@ -112,7 +112,8 @@ Full review (`codebase-review.md` F3–F4 + F5/residual extractions) synthesized
 - Tree/render invariants, feature checklist, anti-patterns
 - Prefs↔shell contract and dependency direction
 
-`codebase-review.md` remains historical. Route: `AGENTS.md` → architecture rules on tiling-core work.
+The source review was retired after completion on 2026-07-14. Route:
+`AGENTS.md` → architecture rules on tiling-core work.
 
 ### F5 Stage 0 — rules adopted (2026-07-10)
 
@@ -427,8 +428,8 @@ suite is **125 passed / 125 passed** (stable across two consecutive runs).
 - **E2E resize cleanup (Spec-P1)**: `test/lib/shared-commands.js` `clearResizedWindows` calls
   the owner `wm._grab.clearResizedWindows()`. Removed the duplicate helper from
   `test/e2e/lib/commands.js` (suites import the shared one).
-- **History**: `codebase-review.md` is left as a historical snapshot (C7); the living module map
-  is `.agents/context/architecture.md`.
+- **History**: at this point the review was retained as a snapshot; it was removed after its final
+  finding was completed on 2026-07-14. The living module map is `.agents/context/architecture.md`.
 
 ### window.ts refactor review fixes (2026-07-11)
 
@@ -454,7 +455,7 @@ Follow-up to the unstaged code review (`window-ts-refactor-code-review.md`). All
 - **S4 (transition flag)**: `SignalManager.unbindAll()` resets `host.workspaceChanging = false` when
   it cancels the 300ms timer; `WindowManager.enable()` also resets it before `bindAll()`. Covered by
   `SignalManager.test.ts` + a lifecycle test.
-- **S5 (docs)**: Restored `codebase-review.md` (was erroneously deleted). Removed all
+- **S5 (docs)**: Restored the then-active codebase review (later retired on 2026-07-14). Removed all
   `@see window-ts-refactor.md` references from the six new modules (pointed at architecture rules +
   decisions instead). Restored the multi-monitor rationale comment in `decoration-layout.ts`.
 - **S6 (middle-man cycles / unused seams / honest interface)**: `handleFloat` and
@@ -589,3 +590,16 @@ A second audit of the refactor found remaining work; all resolved.
   command/operation or handled as a Runtime-only platform effect. An unhandled core action is
   diagnosed and stopped; it cannot fall through to CommandBus. Keyboard resize converts pixel
   amounts into share deltas, and last-active swaps cross the boundary as `SwapWindows` identities.
+
+### Production Tree presentation ownership (2026-07-14)
+
+- **Production `Node` is structural state only**: it stores typed node identity, topology, layout,
+  geometry, mode, and percent state. It does not import St, Clutter, or Shell and does not retain
+  compositor actors, tabs, decorations, or drag previews.
+- **`TreePresentation` owns legacy production presentation**: the runtime-injected presentation
+  port maps structural nodes to compositor/structural actors, tab strips, decorations, and app
+  metadata. Tree lifecycle operations explicitly create and release presentation records.
+- **`DragPreviewPresenter` owns the legacy preview actor**: drag/drop and grab-resize request
+  show/hide/destroy through that presenter instead of hanging preview state on a node.
+- **The portable core remains separate and experimental**: this production cleanup does not reuse,
+  alter, or advance the portable presenters and does not change the default tiling engine.

@@ -11,6 +11,7 @@ import { installGnomeGlobals } from "./globalSetup.js";
 import { AnvilRuntime } from "../../../../src/lib/extension/anvil-runtime.js";
 import { Tree, LAYOUT_TYPES } from "../../../../src/lib/extension/tree.js";
 import { LayoutEngine } from "../../../../src/lib/extension/layout-engine.js";
+import { TreePresentation } from "../../../../src/lib/extension/tree-presentation.js";
 
 export const DEFAULT_SETTINGS = {
   "tiling-mode-enabled": true,
@@ -185,6 +186,7 @@ export function createTreeFixture(options = {}) {
     determineSplitLayout: vi.fn(() => LAYOUT_TYPES[defaultLayout] || LAYOUT_TYPES.HSPLIT),
     floatingWindow: vi.fn(() => false),
     bindWorkspaceSignals: vi.fn(),
+    presentation: new TreePresentation(),
   };
 
   if (fullExtWm) {

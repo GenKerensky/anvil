@@ -61,7 +61,7 @@ allowed** (split, rewrite, rename) as long as ownership (§2) and behavior/tests
 | `focus-controller.ts`    | Directional focus + stacked/tabbed focus helpers               |
 | `grab-resize-session.ts` | Grab begin/end, Wayland live poll, keyboard resize, exemptions |
 | `border-controller.ts`   | Focus / split border actors                                    |
-| `tab-decoration.ts`      | Tab strip + tabbed container St UI (not in tree.ts)            |
+| `tree-presentation.ts`   | Production Tree actors, tabs/decorations, and drag preview     |
 | `keybinding-table.ts`    | Schema key → AnvilAction table                                 |
 | `settings-bridge.ts`     | GSettings changed → host handler map (prefs→shell bus)         |
 | `TilingRender`           | Sole geometry owner (gaps, constraints, frames)                |

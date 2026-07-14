@@ -27,6 +27,20 @@ describe("AnvilRuntime lifecycle", () => {
     expect(() => runtime.tree).toThrow("AnvilRuntime tree unavailable while disabled");
   });
 
+  it("recreates presentation owners for each runtime graph", () => {
+    const runtime = runtimeFixture();
+    runtime._initializeGraph();
+    const firstTreePresentation = runtime._treePresentation;
+    const firstPreviewPresenter = runtime._dragPreviewPresenter;
+
+    runtime._disposeGraph();
+    runtime._initializeGraph();
+
+    expect(runtime._treePresentation).not.toBe(firstTreePresentation);
+    expect(runtime._dragPreviewPresenter).not.toBe(firstPreviewPresenter);
+    runtime._disposeGraph();
+  });
+
   it("activates the graph once and treats repeated enable as a no-op", () => {
     const runtime = runtimeFixture();
     const initializeGraph = vi

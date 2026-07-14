@@ -7,6 +7,31 @@ import { Node, NODE_TYPES, LAYOUT_TYPES } from "../../../../src/lib/extension/tr
 // eslint-disable-next-line vitest/no-mocks-import
 import { Window, Rectangle, WindowType } from "../../__mocks__/gi/Meta.js";
 
+export function createTreePresentationStub() {
+  return {
+    ensure() {},
+    remove() {},
+    isRenderable() {
+      return true;
+    },
+    setRect() {},
+    clearDecoration() {},
+    hideDecoration() {},
+    showDecorationBelow() {},
+    layoutTabbedDecoration() {},
+    topBorderWidth() {
+      return 0;
+    },
+    refreshTabTitle() {},
+    syncActiveTab() {},
+    detachTab() {},
+    findWindowNodeByActor() {
+      return null;
+    },
+    destroy() {},
+  };
+}
+
 export function createWindowNode(tree, overrides = {}) {
   const win = new Window({
     id: overrides.id ?? `win-${Date.now()}`,
@@ -44,6 +69,7 @@ export function getWorkspaceAndMonitor(source, wsIndex = 0, monIndex = 0) {
 }
 
 export default {
+  createTreePresentationStub,
   createWindowNode,
   createConNode,
   createMonitorNode,

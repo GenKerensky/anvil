@@ -10,7 +10,7 @@ describe("Tiling Tree lifecycle", () => {
     ctx.tree.dispose();
     expect(ctx.windowGroup._children).toHaveLength(0);
     expect(ctx.tree.childNodes).toHaveLength(0);
-    expect(ctx.tree.nodeValue).toBeNull();
+    expect(ctx.tree.nodeValue).toBe("root");
 
     ctx.tree.initialize();
     ctx.tree._initWorkspaces();

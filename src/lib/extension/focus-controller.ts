@@ -28,19 +28,19 @@ export class FocusController {
   }
 
   /** Directional focus via LayoutEngine (single entry for keyboard Focus). */
-  focusDirection(node: Node<any> | null, direction: Meta.MotionDirection): Node<any> | null {
+  focusDirection(node: Node | null, direction: Meta.MotionDirection): Node | null {
     return this._host.layoutEngine.focus(node, direction);
   }
 
-  updateStackedFocus(focusNodeWindow: Node<any> | null | undefined): void {
+  updateStackedFocus(focusNodeWindow: Node | null | undefined): void {
     if (!focusNodeWindow?.parentNode) return;
     if (this._host.isRenderFrozen()) return;
     const parentNode = focusNodeWindow.parentNode;
     if (parentNode.layout === LAYOUT_TYPES.STACKED) {
       parentNode.appendChild(focusNodeWindow);
       parentNode.childNodes
-        .filter((child: Node<any>) => child.isWindow())
-        .forEach((child: Node<any>) => safeRaise(child.nodeValue as Meta.Window));
+        .filter((child: Node) => child.isWindow())
+        .forEach((child: Node) => safeRaise(child.nodeValue as Meta.Window));
       this._host.scheduler.enqueue({
         name: "render-focus-stack",
         callback: () => {
@@ -50,7 +50,7 @@ export class FocusController {
     }
   }
 
-  updateTabbedFocus(focusNodeWindow: Node<any> | null | undefined): void {
+  updateTabbedFocus(focusNodeWindow: Node | null | undefined): void {
     if (!focusNodeWindow?.parentNode) return;
     if (this._host.isRenderFrozen()) return;
     if (focusNodeWindow.parentNode.layout === LAYOUT_TYPES.TABBED) {

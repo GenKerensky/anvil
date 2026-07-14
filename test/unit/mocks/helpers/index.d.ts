@@ -4,6 +4,7 @@ export function createMockExtension(options?: Record<string, unknown>): any;
 export function createMockSettings(options?: Record<string, unknown>): any;
 export function installGnomeGlobals(options?: Record<string, unknown>): any;
 export function createTreeFixture(options?: Record<string, unknown>): any;
+export function createTreePresentationStub(): any;
 export function getWorkspaceAndMonitor(
   source: any,
   wsIndex?: number,

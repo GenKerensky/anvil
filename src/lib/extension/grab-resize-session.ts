@@ -9,14 +9,13 @@
  *
  * Geometry apply for neighbors uses TilingRender via host; percent delta math is pure.
  *
- * @see codebase-review.md F5 Stage 6, B8
+ * @see .agents/rules/architecture.md rules 2 and 5
  */
 
 import GLib from "gi://GLib";
 import Gio from "gi://Gio";
 import Clutter from "gi://Clutter";
 import Meta from "gi://Meta";
-import St from "gi://St";
 
 import { Logger } from "../shared/logger.js";
 import * as Utils from "./utils.js";
@@ -25,13 +24,13 @@ import {
   POSITION,
   NODE_TYPES,
   type Node,
-  type NodeType,
   type RectLike,
   type Tree,
 } from "./tree.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type { AnvilMetaWindow } from "./window/types.js";
 import type { EventSchedulerPort } from "./event-scheduler.js";
+import type { DragPreviewPresenter } from "./tree-presentation.js";
 
 export type MonitorConstraints = {
   maxWidth: number;
@@ -44,31 +43,32 @@ export interface GrabResizeHost {
   readonly tree: Tree;
   readonly focusMetaWindow: Meta.Window | null;
   readonly settings: Gio.Settings;
-  nodeWinAtPointer: Node<NodeType> | null;
+  nodeWinAtPointer: Node | null;
 
-  findNodeWindow(w: Meta.Window): Node<NodeType> | null;
-  findNodeWindowAtPointer(node: Node<NodeType>): Node<NodeType> | null;
+  findNodeWindow(w: Meta.Window): Node | null;
+  findNodeWindowAtPointer(node: Node): Node | null;
   trackCurrentMonWs(): void;
   freezeRender(): void;
   unfreezeRender(): void;
   renderTree(from: string, force?: boolean): void;
   readonly scheduler: EventSchedulerPort;
   move(metaWindow: Meta.Window, rect: RectLike): void;
-  calculateGaps(node: Node<NodeType>): number;
-  processNode(node: Node<NodeType>): void;
+  calculateGaps(node: Node): number;
+  processNode(node: Node): void;
   getMonitorConstraints(monitorIndex: number): MonitorConstraints;
-  floatingWindow(node: Node<NodeType>): boolean;
-  minimizedWindow(node: Node<NodeType>): boolean;
+  floatingWindow(node: Node): boolean;
+  minimizedWindow(node: Node): boolean;
   allowDragDropTile(): boolean;
-  moveWindowToPointer(node: Node<NodeType>, previewOnly?: boolean): void;
-  updateStackedFocus(node: Node<NodeType> | null | undefined): void;
-  updateTabbedFocus(node: Node<NodeType> | null | undefined): void;
+  moveWindowToPointer(node: Node, previewOnly?: boolean): void;
+  updateStackedFocus(node: Node | null | undefined): void;
+  updateTabbedFocus(node: Node | null | undefined): void;
   observeGrabResizeUpdate(metaWindow: Meta.Window): void;
   observeGrabMoveUpdate(
     metaWindow: Meta.Window,
     pointer: readonly [number, number],
     eligible: boolean
   ): void;
+  readonly previewPresenter: DragPreviewPresenter;
 }
 
 /**
@@ -115,10 +115,10 @@ export class GrabResizeSession {
   grabOp: Meta.GrabOp = Meta.GrabOp.NONE;
   cancelGrab = false;
   resizedWindows: Map<number, number> = new Map();
-  private _lastResizePair: Node<any> | null = null;
+  private _lastResizePair: Node | null = null;
   private _grabbedMetaWindow: Meta.Window | null = null;
   private _liveResizeSrcId = 0;
-  private _draggedNodeWindow: Node<any> | null = null;
+  private _draggedNodeWindow: Node | null = null;
   /** Session-owned grab fields (B8-6). */
   private _nodeGrab = new Map<number, NodeGrabState>();
 
@@ -126,17 +126,17 @@ export class GrabResizeSession {
     this._host = host;
   }
 
-  private _winId(node: Node<any>): number | null {
+  private _winId(node: Node): number | null {
     const w = node.nodeValue as Meta.Window | null;
     return w ? w.get_id() : null;
   }
 
-  private _getNodeGrab(node: Node<any>): NodeGrabState | null {
+  private _getNodeGrab(node: Node): NodeGrabState | null {
     const id = this._winId(node);
     return id === null ? null : this._nodeGrab.get(id) ?? null;
   }
 
-  private _setNodeGrab(node: Node<any>, patch: Partial<NodeGrabState>): void {
+  private _setNodeGrab(node: Node, patch: Partial<NodeGrabState>): void {
     const id = this._winId(node);
     if (id === null) return;
     const prev: NodeGrabState = this._nodeGrab.get(id) ?? {
@@ -147,7 +147,7 @@ export class GrabResizeSession {
     this._nodeGrab.set(id, { ...prev, ...patch });
   }
 
-  private _clearNodeGrab(node: Node<any>): void {
+  private _clearNodeGrab(node: Node): void {
     const id = this._winId(node);
     if (id !== null) this._nodeGrab.delete(id);
   }
@@ -178,7 +178,7 @@ export class GrabResizeSession {
     this.resizedWindows.clear();
   }
 
-  grabModeFor(node: Node<NodeType>): string | null {
+  grabModeFor(node: Node): string | null {
     return this._getNodeGrab(node)?.grabMode ?? null;
   }
 
@@ -377,34 +377,19 @@ export class GrabResizeSession {
     this.grabOp = Meta.GrabOp.NONE;
   }
 
-  cleanup(focusNodeWindow: Node<any> | null) {
+  cleanup(focusNodeWindow: Node | null) {
     this.cancelGrab = false;
     this._lastResizePair = null;
+    this._host.previewPresenter.destroy();
     if (!focusNodeWindow) return;
     this._clearNodeGrab(focusNodeWindow);
-
-    // Bug #175 fix: Ensure preview hint is always cleaned up (add try-catch)
-    // Ported from jcrussell/forge
-    if (focusNodeWindow.previewHint) {
-      try {
-        focusNodeWindow.previewHint.hide();
-        if (global.window_group && global.window_group.contains(focusNodeWindow.previewHint)) {
-          global.window_group.remove_child(focusNodeWindow.previewHint);
-        }
-        focusNodeWindow.previewHint.destroy();
-      } catch (e) {
-        Logger.warn(`Failed to cleanup preview hint: ${e}`);
-      } finally {
-        focusNodeWindow.previewHint = null;
-      }
-    }
 
     if (focusNodeWindow.mode === WINDOW_MODES.GRAB_TILE) {
       focusNodeWindow.mode = WINDOW_MODES.TILE;
     }
   }
 
-  handleResizing(focusNodeWindow: Node<any> | null) {
+  handleResizing(focusNodeWindow: Node | null) {
     const host = this._host;
     if (!host.settings.get_boolean("tiling-mode-enabled")) return;
     const observedWindow = this._grabbedMetaWindow ?? host.focusMetaWindow;
@@ -618,7 +603,7 @@ export class GrabResizeSession {
     this._repositionDuringResize(focusNodeWindow);
   }
 
-  handleMoving(focusNodeWindow: Node<any> | null) {
+  handleMoving(focusNodeWindow: Node | null) {
     const host = this._host;
     if (!focusNodeWindow || focusNodeWindow.mode !== WINDOW_MODES.GRAB_TILE) return;
 
@@ -634,18 +619,10 @@ export class GrabResizeSession {
     host.nodeWinAtPointer = nodeWinAtPointer ?? null;
 
     const hidePreview = () => {
-      if (focusNodeWindow.previewHint) {
-        focusNodeWindow.previewHint.hide();
-      }
+      host.previewPresenter.hide();
     };
 
     if (nodeWinAtPointer) {
-      if (!focusNodeWindow.previewHint) {
-        const previewHint = new St.Bin();
-        global.window_group.add_child(previewHint);
-        focusNodeWindow.previewHint = previewHint;
-      }
-
       if (dragDropAllowed) {
         host.moveWindowToPointer(focusNodeWindow, true);
       } else {
@@ -656,7 +633,7 @@ export class GrabResizeSession {
     }
   }
 
-  _startLiveResizeLoop(focusNodeWindow: Node<any>) {
+  _startLiveResizeLoop(focusNodeWindow: Node) {
     const host = this._host;
     this._stopLiveResizeLoop();
     if (!host.settings.get_boolean("tiling-mode-enabled")) return;
@@ -708,7 +685,7 @@ export class GrabResizeSession {
     }
   }
 
-  _repositionDuringResize(focusNodeWindow: Node<any> | null) {
+  _repositionDuringResize(focusNodeWindow: Node | null) {
     const host = this._host;
     const initRect = focusNodeWindow ? this._getNodeGrab(focusNodeWindow)?.initRect : null;
     if (!focusNodeWindow || !initRect) {
@@ -755,7 +732,7 @@ export class GrabResizeSession {
     }
   }
 
-  _liveResizeNeighbors(draggingNodeWindow: Node<any>) {
+  _liveResizeNeighbors(draggingNodeWindow: Node) {
     const host = this._host;
     const draggingMetaWin = draggingNodeWindow.nodeValue as Meta.Window;
 
@@ -767,8 +744,8 @@ export class GrabResizeSession {
     if (parentNode && this._lastResizePair) {
       const resizePairParent = this._lastResizePair.parentNode;
       if (resizePairParent && resizePairParent !== parentNode) {
-        const ancestors = new Set<Node<any>>();
-        let ancestor: Node<any> | null = draggingNodeWindow.parentNode;
+        const ancestors = new Set<Node>();
+        let ancestor: Node | null = draggingNodeWindow.parentNode;
         while (ancestor) {
           ancestors.add(ancestor);
           ancestor = ancestor.parentNode;

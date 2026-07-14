@@ -8,12 +8,11 @@
  * delegates to AnvilRuntime.layoutEngine for the ops above (Stage 5 bridge).
  * Frame apply and focus activation go through LayoutHost (not TilingRender).
  *
- * @see codebase-review.md F5 Stage 5, architecture rule 2
+ * @see .agents/rules/architecture.md rule 2
  */
 
 import Gio from "gi://Gio";
 import Meta from "gi://Meta";
-import St from "gi://St";
 
 import * as Utils from "./utils.js";
 import { safeRaise, safeFocus, safeActivate } from "./mutter-safe.js";
@@ -24,7 +23,6 @@ import {
   ORIENTATION_TYPES,
   POSITION,
   isUnsetPercent,
-  type NodeType,
   type RectLike,
   type Tree,
 } from "./tree.js";
@@ -35,13 +33,13 @@ export interface LayoutHost {
   readonly tree: Tree;
   readonly settings: Gio.Settings;
   readonly focusMetaWindow: Meta.Window | null;
-  readonly currentMonWsNode: Node<any> | null;
+  readonly currentMonWsNode: Node | null;
 
-  notifyFocusChanged(node: Node<any> | null, source: PointerFocusSource): void;
+  notifyFocusChanged(node: Node | null, source: PointerFocusSource): void;
   moveWindow(metaWindow: Meta.Window, rect: RectLike): void;
-  rectForMonitor(node: Node<any>, monitorIndex: number): RectLike | null;
-  sameParentMonitor(a: Node<any>, b: Node<any>): boolean;
-  floatingWindow(node: Node<any>): boolean;
+  rectForMonitor(node: Node, monitorIndex: number): RectLike | null;
+  sameParentMonitor(a: Node, b: Node): boolean;
+  floatingWindow(node: Node): boolean;
 }
 
 /**
@@ -52,12 +50,12 @@ export interface LayoutHost {
  * and layout writes).
  */
 export interface DragDropPlan {
-  focusNodeWindow: Node<NodeType>;
-  nodeWinAtPointer: Node<NodeType>;
-  parentNodeTarget: Node<NodeType>;
-  containerNode: Node<NodeType> | null;
-  referenceNode: Node<NodeType> | null;
-  previousParent: Node<NodeType>;
+  focusNodeWindow: Node;
+  nodeWinAtPointer: Node;
+  parentNodeTarget: Node;
+  containerNode: Node | null;
+  referenceNode: Node | null;
+  previousParent: Node;
   kind: "createCon" | "detachWindow" | "centerSwap" | "simpleInsert";
   isLeft: boolean;
   isRight: boolean;
@@ -98,7 +96,7 @@ export class LayoutEngine {
    * Set container layout mode (B6-2). Resets sibling percents when leaving STACKED/TABBED
    * back to a split layout. Caller handles raise/activate and render.
    */
-  setLayout(node: Node<any> | null, layout: string): void {
+  setLayout(node: Node | null, layout: string): void {
     if (!node) return;
     const prev = node.layout;
     node.layout = layout;
@@ -118,7 +116,7 @@ export class LayoutEngine {
    * LayoutEngine is the sole owner of layout writes). Sets `tree.attachNode` to
    * the toggled parent so the next render attaches there. Caller renders.
    */
-  toggleSplitLayout(parentNode: Node<NodeType>): void {
+  toggleSplitLayout(parentNode: Node): void {
     const currentLayout = parentNode.layout;
     if (currentLayout === LAYOUT_TYPES.HSPLIT) {
       parentNode.layout = LAYOUT_TYPES.VSPLIT;
@@ -132,7 +130,7 @@ export class LayoutEngine {
    * Set the tree's attach node (architecture rule §2: commands express intent
    * through LayoutEngine rather than mutating tree structure directly).
    */
-  setAttachNode(node: Node<NodeType>): void {
+  setAttachNode(node: Node): void {
     this._host.tree.attachNode = node;
   }
 
@@ -142,7 +140,7 @@ export class LayoutEngine {
    * If the parent now has at most one tiled child, clear its percent and reset
    * the grandparent's siblings, then reset the parent's siblings.
    */
-  resetPercentForFloatToggle(parentNode: Node<NodeType>, tree: Tree): void {
+  resetPercentForFloatToggle(parentNode: Node, tree: Tree): void {
     if (tree.getTiledChildren(parentNode.childNodes).length <= 1) {
       parentNode.percent = undefined;
       this.resetSiblingPercent(parentNode.parentNode!);
@@ -156,7 +154,7 @@ export class LayoutEngine {
    * Used by the move command's stacked-queue follow-up to bring the moved window
    * to the top of the stack. Caller renders.
    */
-  raiseInStacked(node: Node<NodeType>): void {
+  raiseInStacked(node: Node): void {
     const parent = node.parentNode;
     if (!parent) return;
     parent.appendChild(node);
@@ -168,7 +166,7 @@ export class LayoutEngine {
    * §2: LayoutEngine owns sibling percents and tree-structure mutations for
    * tiling ops). Used when a window crosses monitor/workspace nodes.
    */
-  reparentToNode(node: Node<NodeType>, newParent: Node<NodeType>): void {
+  reparentToNode(node: Node, newParent: Node): void {
     const oldParent = node.parentNode;
     newParent.appendChild(node);
     if (oldParent) {
@@ -189,7 +187,7 @@ export class LayoutEngine {
 
     switch (plan.kind) {
       case "createCon": {
-        let childNode: Node<NodeType>;
+        let childNode: Node;
         if (plan.reuseExistingAsCon) {
           childNode = plan.parentNodeTarget;
         } else {
@@ -225,9 +223,10 @@ export class LayoutEngine {
   }
 
   /** Create a fresh CON node (settings wired from the host). */
-  private _createConNode(): Node<NodeType> {
-    const con = new Node(NODE_TYPES.CON, new St.Bin());
+  private _createConNode(): Node {
+    const con = new Node(NODE_TYPES.CON, this._host.tree.nextContainerIdentity());
     con.settings = this._host.settings;
+    this._host.tree.host.presentation.ensure(con);
     return con;
   }
 
@@ -236,7 +235,7 @@ export class LayoutEngine {
    * §2: LayoutEngine owns layout writes — the `Node.resetLayoutSingleChild`
    * primitive is invoked only through this owner entry point).
    */
-  resetLayoutSingleChild(node: Node<NodeType>): void {
+  resetLayoutSingleChild(node: Node): void {
     node.resetLayoutSingleChild();
   }
 
@@ -262,14 +261,14 @@ export class LayoutEngine {
     return true;
   }
 
-  focus(node: Node<any> | null, direction: Meta.MotionDirection): Node<any> | null {
+  focus(node: Node | null, direction: Meta.MotionDirection): Node | null {
     const host = this._host;
     const tree = host.tree;
     if (!node) return null;
 
     // Skip minimized windows with an explicit loop + visited set (B5-4).
-    const visited = new Set<Node<any>>();
-    let from: Node<any> | null = node;
+    const visited = new Set<Node>();
+    let from: Node | null = node;
     while (from) {
       const step = tree.next(from, direction);
       if (!step) return null;
@@ -296,10 +295,7 @@ export class LayoutEngine {
   }
 
   /** Resolve CON/MONITOR focus targets to a window node (shared with focus loop). */
-  private _resolveFocusTarget(
-    next: Node<any> | null,
-    direction: Meta.MotionDirection
-  ): Node<any> | null {
+  private _resolveFocusTarget(next: Node | null, direction: Meta.MotionDirection): Node | null {
     if (!next) return null;
     const position = Utils.positionFromDirection(direction);
     const previous = position === POSITION.BEFORE;
@@ -311,7 +307,7 @@ export class LayoutEngine {
       case NODE_TYPES.CON: {
         const tiledConWindows = next
           .getNodeByType(NODE_TYPES.WINDOW)
-          .filter((w: Node<any>) => w.isTile());
+          .filter((w: Node) => w.isTile());
         if (next.layout === LAYOUT_TYPES.STACKED) {
           return next.lastChild;
         }
@@ -321,7 +317,7 @@ export class LayoutEngine {
         return tiledConWindows[0] ?? null;
       }
       case NODE_TYPES.MONITOR: {
-        let monNext: Node<any> | null;
+        let monNext: Node | null;
         if (next.layout === LAYOUT_TYPES.STACKED) {
           monNext = next.lastChild;
         } else {
@@ -337,7 +333,7 @@ export class LayoutEngine {
     }
   }
 
-  move(node: Node<any>, direction: Meta.MotionDirection) {
+  move(node: Node, direction: Meta.MotionDirection) {
     const host = this._host;
     const tree = host.tree;
     const next = tree.next(node, direction);
@@ -434,7 +430,7 @@ export class LayoutEngine {
     return true;
   }
 
-  split(node: Node<any>, orientation: string, forceSplit: boolean = false) {
+  split(node: Node, orientation: string, forceSplit: boolean = false) {
     const host = this._host;
     const tree = host.tree;
     if (!node) return;
@@ -466,9 +462,10 @@ export class LayoutEngine {
 
     // Push down the Meta.Window into a new Container
     const currentIndex = node.index;
-    const container = new St.Bin();
+    const container = tree.nextContainerIdentity();
     const newConNode = new Node(NODE_TYPES.CON, container);
     newConNode.settings = host.settings;
+    tree.host.presentation.ensure(newConNode);
 
     // Take the direction of the parent
     newConNode.layout =
@@ -482,7 +479,7 @@ export class LayoutEngine {
     tree.attachNode = newConNode;
   }
 
-  swap(node: Node<any>, direction: Meta.MotionDirection) {
+  swap(node: Node, direction: Meta.MotionDirection) {
     const host = this._host;
     const tree = host.tree;
     let nextSwapNode = tree.next(node, direction);
@@ -498,7 +495,7 @@ export class LayoutEngine {
       case NODE_TYPES.MONITOR: {
         const childWindowNodes = nextSwapNode
           .getNodeByMode(WINDOW_MODES.TILE)
-          .filter((t: Node<any>) => t.nodeType === NODE_TYPES.WINDOW);
+          .filter((t: Node) => t.nodeType === NODE_TYPES.WINDOW);
         if (nextSwapNode.layout === LAYOUT_TYPES.STACKED) {
           nextSwapNode = childWindowNodes[childWindowNodes.length - 1];
         } else {
@@ -520,7 +517,7 @@ export class LayoutEngine {
     return nextSwapNode;
   }
 
-  swapPairs(fromNode: Node<any>, toNode: Node<any>, focus: boolean = true) {
+  swapPairs(fromNode: Node, toNode: Node, focus: boolean = true) {
     const host = this._host;
     if (!(this._swappable(fromNode) && this._swappable(toNode))) return;
     // Swap the items in the array
@@ -557,7 +554,7 @@ export class LayoutEngine {
     }
   }
 
-  private _swappable(node: Node<any> | null) {
+  private _swappable(node: Node | null) {
     if (!node) return false;
     if (node.nodeType === NODE_TYPES.WINDOW && !(node.nodeValue as Meta.Window).minimized) {
       return true;
@@ -565,13 +562,13 @@ export class LayoutEngine {
     return false;
   }
 
-  computeSizes(node: Node<any>, childItems: Node<any>[]) {
+  computeSizes(node: Node, childItems: Node[]) {
     const sizes: number[] = [];
     const orientation = Utils.orientationFromLayout(node.layout!);
     const rect = node.rect!;
     const totalSize = orientation === ORIENTATION_TYPES.HORIZONTAL ? rect.width : rect.height;
     const grabTiled = node.getNodeByMode(WINDOW_MODES.GRAB_TILE).length > 0;
-    childItems.forEach((childNode: Node<any>, index: number) => {
+    childItems.forEach((childNode: Node, index: number) => {
       // B5-3: undefined (or legacy 0) means equal share
       const percent =
         !grabTiled && !isUnsetPercent(childNode.percent)
@@ -588,33 +585,33 @@ export class LayoutEngine {
     return sizes;
   }
 
-  resetSiblingPercent(parentNode: Node<any> | null) {
+  resetSiblingPercent(parentNode: Node | null) {
     if (!parentNode) return;
-    parentNode.childNodes.forEach((n: Node<any>) => {
+    parentNode.childNodes.forEach((n: Node) => {
       n.percent = undefined;
     });
   }
 
-  redistributeSiblingPercent(parentNode: Node<any> | null) {
+  redistributeSiblingPercent(parentNode: Node | null) {
     if (!parentNode) return;
     const children = parentNode.childNodes;
     if (children.length === 0) return;
 
     // Calculate sum of remaining children's percents
     let totalPercent = 0;
-    children.forEach((n: Node<any>) => {
+    children.forEach((n: Node) => {
       if (!isUnsetPercent(n.percent)) totalPercent += n.percent as number;
     });
 
     if (totalPercent > 0) {
       // Scale remaining children proportionally to sum to 1.0
       const scale = 1.0 / totalPercent;
-      children.forEach((n: Node<any>) => {
+      children.forEach((n: Node) => {
         n.percent = isUnsetPercent(n.percent) ? 0 : (n.percent as number) * scale;
       });
     } else {
       // Fallback: if no percents were set, use equal distribution
-      children.forEach((n: Node<any>) => {
+      children.forEach((n: Node) => {
         n.percent = 1.0 / children.length;
       });
     }

@@ -26,7 +26,7 @@
  *   * or ?       — simple glob (whole-string)
  *   re:pattern   — JavaScript RegExp
  *
- * @see codebase-review.md F5 Stage 2, architecture rule 6
+ * @see .agents/rules/architecture.md rule 6
  */
 
 import Meta from "gi://Meta";

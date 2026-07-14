@@ -3,7 +3,6 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import St from "gi://St";
 import { LayoutEngine } from "../../../src/lib/extension/layout-engine.js";
 import {
   Node,
@@ -68,11 +67,11 @@ describe("LayoutEngine", () => {
     });
 
     it("divides space equally when percents are unset", () => {
-      const container = new Node(NODE_TYPES.CON, new St.Bin());
+      const container = new Node(NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.HSPLIT;
       container.rect = { x: 0, y: 0, width: 1000, height: 500 };
-      const child1 = new Node(NODE_TYPES.CON, new St.Bin());
-      const child2 = new Node(NODE_TYPES.CON, new St.Bin());
+      const child1 = new Node(NODE_TYPES.CON, "con");
+      const child2 = new Node(NODE_TYPES.CON, "con");
       child1.percent = 0;
       child2.percent = 0;
       const sizes = engine.computeSizes(container, [child1, child2]);
@@ -80,11 +79,11 @@ describe("LayoutEngine", () => {
     });
 
     it("applies residual pixel fix when floor leaves remainder", () => {
-      const container = new Node(NODE_TYPES.CON, new St.Bin());
+      const container = new Node(NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.HSPLIT;
       container.rect = { x: 0, y: 0, width: 100, height: 50 };
       const children = [0, 1, 2].map(() => {
-        const n = new Node(NODE_TYPES.CON, new St.Bin());
+        const n = new Node(NODE_TYPES.CON, "con");
         n.percent = 0;
         return n;
       });
@@ -96,11 +95,11 @@ describe("LayoutEngine", () => {
     });
 
     it("respects explicit percents", () => {
-      const container = new Node(NODE_TYPES.CON, new St.Bin());
+      const container = new Node(NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.HSPLIT;
       container.rect = { x: 0, y: 0, width: 1000, height: 500 };
-      const child1 = new Node(NODE_TYPES.CON, new St.Bin());
-      const child2 = new Node(NODE_TYPES.CON, new St.Bin());
+      const child1 = new Node(NODE_TYPES.CON, "con");
+      const child2 = new Node(NODE_TYPES.CON, "con");
       child1.percent = 0.3;
       child2.percent = 0.7;
       const sizes = engine.computeSizes(container, [child1, child2]);
@@ -127,9 +126,9 @@ describe("LayoutEngine", () => {
     });
 
     it("resetSiblingPercent zeroes children", () => {
-      const parent = new Node(NODE_TYPES.CON, new St.Bin());
-      const a = new Node(NODE_TYPES.CON, new St.Bin());
-      const b = new Node(NODE_TYPES.CON, new St.Bin());
+      const parent = new Node(NODE_TYPES.CON, "con");
+      const a = new Node(NODE_TYPES.CON, "con");
+      const b = new Node(NODE_TYPES.CON, "con");
       a.percent = 0.4;
       b.percent = 0.6;
       parent.appendChild(a);
@@ -140,9 +139,9 @@ describe("LayoutEngine", () => {
     });
 
     it("redistributeSiblingPercent scales remaining percents to 1", () => {
-      const parent = new Node(NODE_TYPES.CON, new St.Bin());
-      const a = new Node(NODE_TYPES.CON, new St.Bin());
-      const b = new Node(NODE_TYPES.CON, new St.Bin());
+      const parent = new Node(NODE_TYPES.CON, "con");
+      const a = new Node(NODE_TYPES.CON, "con");
+      const b = new Node(NODE_TYPES.CON, "con");
       a.percent = 0.25;
       b.percent = 0.25;
       parent.appendChild(a);

@@ -7,7 +7,6 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
-import St from "gi://St";
 import GLib from "gi://GLib";
 import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
@@ -448,7 +447,7 @@ describe("AnvilRuntime - Resize", () => {
       monitor._rect = monRect;
 
       // Create CON node under monitor with HSPLIT layout
-      const conNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const conNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       conNode.layout = LAYOUT_TYPES.HSPLIT;
       conNode.percent = 1.0;
       conNode._rect = monRect;

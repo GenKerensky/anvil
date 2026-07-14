@@ -15,15 +15,7 @@ import Gio from "gi://Gio";
 import { safeRaise, safeActivate } from "./mutter-safe.js";
 import * as Utils from "./utils.js";
 import { computeSnapLayout } from "./snap-layout.js";
-import {
-  Tree,
-  Node,
-  LAYOUT_TYPES,
-  ORIENTATION_TYPES,
-  NODE_TYPES,
-  type NodeType,
-  type RectLike,
-} from "./tree.js";
+import { Tree, Node, LAYOUT_TYPES, ORIENTATION_TYPES, NODE_TYPES, type RectLike } from "./tree.js";
 import { WINDOW_MODES } from "./window/constants.js";
 import type { PointerFocusSource } from "./pointer-policy.js";
 import type { LayoutEngine } from "./layout-engine.js";
@@ -55,13 +47,13 @@ export interface CommandHandlerHost {
   readonly scheduler: EventSchedulerPort;
   readonly prefsTitle: string;
 
-  findNodeWindow(w: Meta.Window): Node<NodeType> | null;
+  findNodeWindow(w: Meta.Window): Node | null;
   move(w: Meta.Window, rect: RectLike): void;
   moveCenter(w: Meta.Window): void;
   renderTree(from: string, force?: boolean): void;
-  notifyFocusChanged(node: Node<NodeType> | null, source: PointerFocusSource): void;
-  updateStackedFocus(n: Node<NodeType> | null | undefined): void;
-  updateTabbedFocus(n: Node<NodeType> | null | undefined): void;
+  notifyFocusChanged(node: Node | null, source: PointerFocusSource): void;
+  updateStackedFocus(n: Node | null | undefined): void;
+  updateTabbedFocus(n: Node | null | undefined): void;
   isActiveWindowWorkspaceTiled(w: Meta.Window): boolean;
   isFloatingExempt(w: Meta.Window | null): boolean;
   floatWorkspace(i: number): void;

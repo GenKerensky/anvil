@@ -13,7 +13,7 @@
 import Meta from "gi://Meta";
 import Gio from "gi://Gio";
 
-import { Tree, Node, NODE_TYPES, type NodeType } from "./tree.js";
+import { Tree, Node, NODE_TYPES } from "./tree.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import { safeRaise } from "./mutter-safe.js";
 import type { AnvilMetaWindow } from "./window/types.js";
@@ -27,19 +27,19 @@ export interface WorkspaceMutationsHost {
   readonly grabOp: Meta.GrabOp;
   sortedWindows: Meta.Window[];
 
-  findNodeWindow(w: Meta.Window): Node<NodeType> | null;
+  findNodeWindow(w: Meta.Window): Node | null;
   renderTree(from: string, force?: boolean): void;
   updateBorderLayout(): void;
   updateDecorationLayout(): void;
-  updateStackedFocus(n: Node<NodeType> | null | undefined): void;
-  updateTabbedFocus(n: Node<NodeType> | null | undefined): void;
-  floatingWindow(n: Node<NodeType> | null): boolean;
+  updateStackedFocus(n: Node | null | undefined): void;
+  updateTabbedFocus(n: Node | null | undefined): void;
+  floatingWindow(n: Node | null): boolean;
   validWindow(w: Meta.Window): boolean;
 
   // Narrow grab dispatchers (C4) — NOT concrete GrabResizeSession
-  handleResizing(n: Node<NodeType> | null): void;
-  handleMoving(n: Node<NodeType> | null): void;
-  grabModeFor(n: Node<NodeType>): string | null;
+  handleResizing(n: Node | null): void;
+  handleMoving(n: Node | null): void;
+  grabModeFor(n: Node): string | null;
 }
 
 export class WorkspaceMutations {

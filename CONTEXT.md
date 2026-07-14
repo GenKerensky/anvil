@@ -141,4 +141,4 @@ _Avoid_: window manager, global controller, Tiling State Machine
 5. User actions are **AnvilAction** values handled by **CommandBus**.
 
 See `.agents/rules/architecture.md` (agent rules), `.agents/context/architecture.md`
-(seams map), and `codebase-review.md` (historical review).
+(seams map), and `.agents/memory/decisions.md` (historical decisions).

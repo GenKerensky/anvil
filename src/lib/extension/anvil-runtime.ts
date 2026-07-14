@@ -69,7 +69,7 @@ import { safeRaise } from "./mutter-safe.js";
 import { GnomeContainerPresenter } from "./gnome-container-presenter.js";
 import { GnomePreviewPresenter } from "./gnome-preview-presenter.js";
 import { computeSnapLayout } from "./snap-layout.js";
-import { syncActiveWindowTab } from "./tab-decoration.js";
+import { DragPreviewPresenter, TreePresentation } from "./tree-presentation.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -141,7 +141,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private _settingsBridge: SettingsBridge | null = null;
   private _focus: FocusController | null = null;
   private _borders: BorderController | null = null;
-  private declare nodeWinAtPointer: Node<any> | null;
+  private _treePresentation: TreePresentation | null = null;
+  private _dragPreviewPresenter: DragPreviewPresenter | null = null;
+  private declare nodeWinAtPointer: Node | null;
   private declare sortedWindows: Meta.Window[];
 
   /** CommandBus — typed AnvilAction dispatch (B3-1 / B10-2). */
@@ -159,6 +161,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private _initializeGraph(): void {
+    this._treePresentation = new TreePresentation();
+    this._dragPreviewPresenter = new DragPreviewPresenter();
     this._tilingEngineMode = selectTilingEngineMode(
       GLib.environ_getenv(GLib.get_environ(), "ANVIL_TILING_ENGINE")
     );
@@ -289,6 +293,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       determineSplitLayout: () => self.determineSplitLayout(),
       floatingWindow: (n) => self.floatingWindow(n),
       bindWorkspaceSignals: (ws) => self.bindWorkspaceSignals(ws),
+      get presentation() {
+        return self._treePresentation!;
+      },
     });
     this.theme = this.ext.theme;
     // Always construct PointerPolicy; enable/disable behavior via settings (B9-2).
@@ -304,6 +311,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       getResizeCount: (id) => self._grab!.getResizeCount(id),
       findParent: (node, type) => this.tree.findParent(node, type),
       computeSizes: (n, c) => self._layout!.computeSizes(n, c),
+      presentation: self._treePresentation!,
     });
     this._grab = new GrabResizeSession({
       get tree() {
@@ -346,6 +354,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         self._withTilingShadow("grab-move-update", (shadow) =>
           shadow.observeGrabMoveUpdate(window, pointer, eligible)
         ),
+      get previewPresenter() {
+        return self._dragPreviewPresenter!;
+      },
     });
     this._tracker = new WindowTracker({
       get coreTilingEngine() {
@@ -369,6 +380,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       isFloatingExempt: (w) => self.isFloatingExempt(w),
       isActiveWindowWorkspaceTiled: (w) => self.isActiveWindowWorkspaceTiled(w),
       floatingWindow: (n) => self.floatingWindow(n),
+      findNodeWindowByActor: (actor) =>
+        self._treePresentation!.findWindowNodeByActor(self.tree, actor),
       reloadTree: (from) => self.reloadTree(from),
       updateMetaWorkspaceMonitor: (from, mon, w) => self.updateMetaWorkspaceMonitor(from, mon, w),
       updateMetaPositionSize: (w, from) => self.updateMetaPositionSize(w, from),
@@ -473,6 +486,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       },
       renderTree: (from, force) => self.renderTree(from, force),
       processGap: (n) => self._tilingRender!.processGap(n),
+      presentation: self._treePresentation!,
+      previewPresenter: self._dragPreviewPresenter!,
     });
     this._initCommandHandlers();
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -538,6 +553,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       },
       get settings() {
         return self2.ext.settings;
+      },
+      get presentation() {
+        return self2._treePresentation!;
       },
     });
 
@@ -612,7 +630,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._pointerPolicy = null;
   }
 
-  private notifyFocusChanged(node: Node<any> | null, source: PointerFocusSource) {
+  private notifyFocusChanged(node: Node | null, source: PointerFocusSource) {
     if (this._pointerPolicy) {
       this._pointerPolicy.onFocusChanged({ node, source });
     }
@@ -959,10 +977,11 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     safely("event scheduler", () => this._eventScheduler?.dispose());
     safely("core container presentation", () => this._containerPresenter?.destroy());
     safely("core previews", () => this._previewPresenter?.destroy());
+    safely("drag preview", () => this._dragPreviewPresenter?.destroy());
     safely("decorations", () => Utils._disableDecorations());
     safely("signals", () => this._signalManager?.unbindAll());
     safely("borders", () => this._borders?.destroy());
-    safely("active tab", () => syncActiveWindowTab(null));
+    safely("tree presentation", () => this._treePresentation?.destroy());
     safely("tracker", () => this._tracker?.dispose());
     safely("grab-resize", () => this._grab?.dispose());
     safely("settings", () => this._settingsBridge?.disable());
@@ -992,6 +1011,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._settingsBridge = null;
     this._focus = null;
     this._borders = null;
+    this._treePresentation = null;
+    this._dragPreviewPresenter = null;
     this._commandBus = null;
     this.windowProps = null;
   }
@@ -1034,7 +1055,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   /**
    * Wire keybindings after both AnvilRuntime and Keybindings are constructed.
    * Call from AnvilExtension.enable — never create Keybindings in a getter.
-   * @see codebase-review.md B2-2, B4-9
+   * @see .agents/rules/architecture.md lifecycle and dependency rules
    */
   wireKeybindings(kbd: Keybindings) {
     this._kbd = kbd;
@@ -1096,7 +1117,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private setActiveWindowDecoration(nextWindow: Meta.Window | null) {
     this._borders!.setActiveWindow(nextWindow);
-    syncActiveWindowTab(nextWindow ? this.tree.findNode(nextWindow) : null);
+    this._treePresentation!.syncActiveTab(nextWindow ? this.tree.findNode(nextWindow) : null);
   }
 
   // Window movement API
@@ -1144,7 +1165,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this.move(metaWindow, moveRect);
   }
 
-  private rectForMonitor(node: Node<any>, targetMonitor: number) {
+  private rectForMonitor(node: Node, targetMonitor: number) {
     if (!node || (node && node.nodeType !== NODE_TYPES.WINDOW)) return null;
     if (targetMonitor < 0) return null;
     const metaWindow = node.nodeValue as Meta.Window;
@@ -1207,7 +1228,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._renderScheduler!.reloadTree(from);
   }
 
-  private sameParentMonitor(firstNode: Node<any>, secondNode: Node<any>) {
+  private sameParentMonitor(firstNode: Node, secondNode: Node) {
     if (!firstNode || !secondNode) return false;
     if (!firstNode.nodeValue || !secondNode.nodeValue) return false;
     const firstWin = firstNode.nodeValue as Meta.Window;
@@ -1223,11 +1244,11 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._borders!.reconcileAll();
   }
 
-  private updateStackedFocus(focusNodeWindow: Node<any> | undefined | null) {
+  private updateStackedFocus(focusNodeWindow: Node | undefined | null) {
     this._focus!.updateStackedFocus(focusNodeWindow);
   }
 
-  private updateTabbedFocus(focusNodeWindow: Node<any> | null | undefined) {
+  private updateTabbedFocus(focusNodeWindow: Node | null | undefined) {
     this._focus!.updateTabbedFocus(focusNodeWindow);
   }
 
@@ -1276,12 +1297,12 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._freezeRender = false;
   }
 
-  private floatingWindow(node: Node<any> | null) {
+  private floatingWindow(node: Node | null) {
     if (!node) return false;
     return node.nodeType === NODE_TYPES.WINDOW && node.mode === WINDOW_MODES.FLOAT;
   }
 
-  private minimizedWindow(node: Node<any> | null) {
+  private minimizedWindow(node: Node | null) {
     if (!node) return false;
     return node._type === NODE_TYPES.WINDOW && node._data && (node._data as Meta.Window).minimized;
   }
@@ -1290,14 +1311,14 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
    * Handle previewing and applying where a drag-drop window is going to be tiled.
    * @deprecated Use this._dragDrop!.moveWindowToPointer() directly.
    */
-  private moveWindowToPointer(focusNodeWindow: Node<any>, preview: boolean = false) {
+  private moveWindowToPointer(focusNodeWindow: Node, preview: boolean = false) {
     this._dragDrop!.moveWindowToPointer(focusNodeWindow, preview);
   }
 
   /**
    * @deprecated Use this._dragDrop!.findNodeWindowAtPointer() directly.
    */
-  private findNodeWindowAtPointer(focusNodeWindow: Node<any>) {
+  private findNodeWindowAtPointer(focusNodeWindow: Node) {
     return this._dragDrop!.findNodeWindowAtPointer(focusNodeWindow);
   }
 
@@ -1349,7 +1370,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._grab!.end(display, metaWindow, grabOp);
   }
 
-  private _grabCleanup(focusNodeWindow: Node<any> | null) {
+  private _grabCleanup(focusNodeWindow: Node | null) {
     this._grab!.cleanup(focusNodeWindow);
   }
 

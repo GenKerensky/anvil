@@ -16,7 +16,7 @@ import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 
 import { Logger } from "../shared/logger.js";
-import { Tree, Node, type NodeType } from "./tree.js";
+import { Tree, Node } from "./tree.js";
 import type { AnvilMetaWorkspace } from "./window/types.js";
 import type { WindowTracker } from "./window-tracker.js";
 import type { LayoutEngine } from "./layout-engine.js";
@@ -44,7 +44,7 @@ export interface SignalManagerHost {
   showingDesktop(): boolean;
   suspendWindowDecorations(): void;
   notifyWorkspaceSettled(): void;
-  notifyFocusChanged(node: Node<NodeType> | null, source: PointerFocusSource): void;
+  notifyFocusChanged(node: Node | null, source: PointerFocusSource): void;
 
   // Freeze: storage owned by the runtime SessionFlags; SignalManager is a caller (C2)
   isRenderFrozen(): boolean;
@@ -54,8 +54,8 @@ export interface SignalManagerHost {
   // Workspace transition flag: storage on SessionFlags; SignalManager is the sole writer (C2)
   workspaceChanging: boolean;
 
-  updateStackedFocus(n: Node<NodeType> | null | undefined): void;
-  updateTabbedFocus(n: Node<NodeType> | null | undefined): void;
+  updateStackedFocus(n: Node | null | undefined): void;
+  updateTabbedFocus(n: Node | null | undefined): void;
 
   // Grab op forwarding (narrow — delegates to GrabResizeSession)
   handleGrabOpBegin(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp): void;
@@ -178,7 +178,7 @@ export class SignalManager {
       // Empty handler: connect to suppress Mutter's built-in edge-tile preview
       // while Anvil owns tiling. Do not disconnect — an empty slot blocks the
       // default preview side effects without drawing our own overlay.
-      // @see codebase-review.md B4-6
+      // Mutter tile previews are intentionally suppressed while Anvil owns tiling.
       shellWm.connect("show-tile-preview", (_wm, _metaWindow, _rect, _num) => {
         /* intentionally empty — suppress default tile preview */
       }),

@@ -4,7 +4,7 @@
  * Static actions are plain objects; dynamic actions (e.g. resize amount) are
  * factories evaluated at invoke time.
  *
- * @see codebase-review.md F5 Stage 8, B10-1
+ * @see .agents/rules/architecture.md rule 3
  */
 
 import type Gio from "gi://Gio";

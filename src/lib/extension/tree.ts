@@ -17,14 +17,9 @@
  */
 
 // Gnome imports
-import Clutter from "gi://Clutter";
 import Gio from "gi://Gio";
 import GObject from "gi://GObject";
 import Meta from "gi://Meta";
-// Mtk is available via Meta for Rectangle types; keep Shell/St runtime imports.
-import Shell from "gi://Shell";
-import type ShellNS from "@girs/shell-18";
-import St from "gi://St";
 
 // Shared state
 import { Logger } from "../shared/logger.js";
@@ -33,12 +28,7 @@ import { Logger } from "../shared/logger.js";
 import * as Utils from "./utils.js";
 import { createEnum } from "./utils/create-enum.js";
 import { WINDOW_MODES } from "./window/constants.js";
-import {
-  ensureWindowTab,
-  ensureConDecoration,
-  destroyConDecoration,
-  refreshTabTitle,
-} from "./tab-decoration.js";
+import type { TreePresentationPort } from "./tree-presentation.js";
 
 /**
  * Narrow host for Tree — no concrete AnvilRuntime import (Stage 7).
@@ -47,8 +37,9 @@ import {
 export interface TreeHost {
   readonly settings: Gio.Settings;
   readonly focusMetaWindow: Meta.Window | null;
+  readonly presentation: TreePresentationPort;
   determineSplitLayout(): string;
-  floatingWindow(node: Node<any>): boolean;
+  floatingWindow(node: Node): boolean;
   bindWorkspaceSignals(workspace: Meta.Workspace): void;
 }
 
@@ -68,7 +59,7 @@ export const NODE_TYPES = createEnum([
 ]);
 
 /**
- * Union of `NODE_TYPES` values — the `Node<T>` type discriminator. Use this
+ * Union of `NODE_TYPES` values — the `Node` type discriminator. Use this
  * instead of `any` on exported host interfaces (architecture rule §7).
  */
 export type NodeType = typeof NODE_TYPES[keyof typeof NODE_TYPES];
@@ -98,7 +89,7 @@ export function isUnsetPercent(percent: number | undefined | null): boolean {
  * Type guard interface: when isWindow() returns true, the node can be
  * treated as having Meta.Window data for _data and nodeValue.
  */
-interface WindowNode extends Node<any> {
+interface WindowNode extends Node {
   _data: Meta.Window;
   nodeValue: Meta.Window;
 }
@@ -118,7 +109,7 @@ export type TreeTestNode = {
   parentLayout?: string | null;
 };
 
-function serializeNodeForTest(node: Node<any>): TreeTestNode {
+function serializeNodeForTest(node: Node): TreeTestNode {
   const children = node.childNodes.map((c) => serializeNodeForTest(c));
   const data: TreeTestNode = {
     type: node.nodeType,
@@ -153,15 +144,15 @@ function serializeNodeForTest(node: Node<any>): TreeTestNode {
  * Workspace
  *
  */
-export class Node<T extends string> extends GObject.Object {
+export class Node extends GObject.Object {
   static {
     GObject.registerClass(this);
   }
 
-  _type: T;
-  _data: Meta.Window | string | St.Bin | null;
-  _parent: Node<T> | null;
-  _nodes: Node<T>[];
+  _type: NodeType;
+  _data: Meta.Window | string | null;
+  _parent: Node | null;
+  _nodes: Node[];
   mode: string = "";
   /**
    * Sibling space share in parent. `undefined` = unset → equal share in computeSizes (B5-3).
@@ -169,15 +160,9 @@ export class Node<T extends string> extends GObject.Object {
    */
   percent: number | undefined = undefined;
   _rect: RectLike | null = null;
-  tab: St.BoxLayout | null = null;
-  decoration: St.BoxLayout | null = null;
-  app: ShellNS.App | null = null;
-  /** Clutter.Actor for the compositor — only for WINDOW types */
-  _actor: Clutter.Actor | null = null;
   /** Render rect set by processGap — used by processNode rendering */
   renderRect?: RectLike;
   pointer: { x: number; y: number } | null = null;
-  actorBin!: St.Bin | null;
   settings!: Gio.Settings | null;
   layout: string | undefined;
   lastTabFocus: Meta.Window | null = null;
@@ -189,93 +174,28 @@ export class Node<T extends string> extends GObject.Object {
   prevFloat?: boolean;
   /** Tab style marker for background windows */
   backgroundTab?: boolean;
-  /** Preview hint actor during drag-drop tiling */
-  previewHint?: St.Bin | null;
   /** Create container flag during drag-drop */
   createCon?: boolean;
   /** Detach window flag during drag-drop */
   detachWindow?: boolean;
 
-  constructor(type: T, data: Meta.Window | string | St.Bin | null) {
+  constructor(type: NodeType, data: Meta.Window | string | null) {
     super();
     // TODO - move to GObject property definitions?
     this._type = type; // see NODE_TYPES
     // _data: Meta.Window, unique id strings (Monitor,
-    // Workspace or St.Bin - a representation of Container)
+    // Workspace or Container identity strings)
     this._data = data;
     this._parent = null;
     this._nodes = []; // Child elements of this node
     this.mode = WINDOW_MODES.DEFAULT as string;
     this.percent = undefined;
     this._rect = null;
-    this.tab = null;
-    this.decoration = null;
-    this.app = null;
     this.pointer = null;
-
-    if (this.isWindow()) {
-      // When destroy() is called on Meta.Window, it might not be
-      // available so we store it immediately
-      this._initMetaWindow();
-      this._actor = this._data.get_compositor_private();
-      ensureWindowTab(this);
-    }
-
-    if (this.isCon()) {
-      ensureConDecoration(this);
-    }
-  }
-
-  get windowActor(): Clutter.Actor | null {
-    // A Meta.Window can be admitted before Mutter creates its compositor actor
-    // (notably Xwayland/Electron startup windows). Refresh lazily so the node
-    // becomes renderable once the actor maps instead of remaining invalid.
-    if (!this._actor && this.isWindow()) {
-      try {
-        this._actor = (this._data as Meta.Window).get_compositor_private();
-      } catch {
-        // Meta.Window may already be finalized during teardown.
-        this._actor = null;
-      }
-    }
-    return this._actor;
-  }
-
-  get actor() {
-    switch (this.nodeType) {
-      case NODE_TYPES.WINDOW:
-        // A Meta.Window was assigned during creation
-        // But obtain the Clutter.Actor
-        return this.windowActor;
-      case NODE_TYPES.CON:
-      case NODE_TYPES.ROOT:
-        // A St.Bin was assigned during creation
-        return this.nodeValue;
-      case NODE_TYPES.MONITOR:
-      case NODE_TYPES.WORKSPACE:
-        // A separate St.Bin was assigned on another attribute during creation
-        return this.actorBin;
-      default:
-        return null;
-    }
   }
 
   set rect(rect: RectLike | null) {
     this._rect = rect;
-    if (!rect) return;
-    switch (this.nodeType) {
-      case NODE_TYPES.WINDOW:
-        break;
-      case NODE_TYPES.CON:
-      case NODE_TYPES.MONITOR:
-      case NODE_TYPES.ROOT:
-      case NODE_TYPES.WORKSPACE:
-        if (this.actor) {
-          (this.actor as Clutter.Actor).set_size(rect.width, rect.height);
-          (this.actor as Clutter.Actor).set_position(rect.x, rect.y);
-        }
-        break;
-    }
   }
 
   get rect() {
@@ -286,11 +206,11 @@ export class Node<T extends string> extends GObject.Object {
     return this._nodes;
   }
 
-  set childNodes(nodes: Node<T>[]) {
+  set childNodes(nodes: Node[]) {
     this._nodes = nodes;
   }
 
-  get firstChild(): Node<T> | null {
+  get firstChild(): Node | null {
     if (this._nodes && this._nodes.length >= 1) {
       return this._nodes[0];
     }
@@ -323,14 +243,14 @@ export class Node<T extends string> extends GObject.Object {
     return null;
   }
 
-  get lastChild(): Node<T> | null {
+  get lastChild(): Node | null {
     if (this._nodes && this._nodes.length >= 1) {
       return this._nodes[this._nodes.length - 1];
     }
     return null;
   }
 
-  get nextSibling(): Node<T> | null {
+  get nextSibling(): Node | null {
     if (this.parentNode) {
       const idx = this.index;
       if (idx !== null && this.parentNode.lastChild !== this) {
@@ -352,11 +272,11 @@ export class Node<T extends string> extends GObject.Object {
     return this._parent;
   }
 
-  set parentNode(node: Node<T> | null) {
+  set parentNode(node: Node | null) {
     this._parent = node;
   }
 
-  get previousSibling(): Node<T> | null {
+  get previousSibling(): Node | null {
     if (this.parentNode) {
       const idx = this.index;
       if (idx !== null && this.parentNode.firstChild !== this) {
@@ -366,7 +286,7 @@ export class Node<T extends string> extends GObject.Object {
     return null;
   }
 
-  appendChild(node: Node<any>) {
+  appendChild(node: Node) {
     if (!node) return null;
     if (node.parentNode) node.parentNode.removeChild(node);
     this.childNodes.push(node);
@@ -378,7 +298,7 @@ export class Node<T extends string> extends GObject.Object {
    * Checks if node is a descendant of this,
    * or a descendant of its childNodes, etc
    */
-  contains(node: Node<any>) {
+  contains(node: Node) {
     if (!node) return false;
     const searchNode = this.getNodeByValue(node.nodeValue);
     return searchNode ? true : false;
@@ -402,7 +322,7 @@ export class Node<T extends string> extends GObject.Object {
     return results;
   }
 
-  insertBefore(newNode: Node<any>, childNode: Node<any> | null) {
+  insertBefore(newNode: Node, childNode: Node | null) {
     if (!newNode) return null;
     if (newNode === childNode) return null;
     if (!childNode) {
@@ -493,11 +413,7 @@ export class Node<T extends string> extends GObject.Object {
     return this.isMode(WINDOW_MODES.GRAB_TILE);
   }
 
-  removeChild(node: Node<any>) {
-    if (node.isTabbed() && node.decoration) {
-      destroyConDecoration(node);
-    }
-
+  removeChild(node: Node) {
     let refNode;
     if (this.contains(node)) {
       // Since contains() tries to find node on all descendants,
@@ -517,8 +433,8 @@ export class Node<T extends string> extends GObject.Object {
    * Backend for getNodeBy[attribute] (B5-5: typed criteria, not free strings).
    */
   _search(term: unknown, criteria: NodeSearchCriteria) {
-    const results: Node<any>[] = [];
-    const searchFn = (candidate: Node<any>) => {
+    const results: Node[] = [];
+    const searchFn = (candidate: Node) => {
       switch (criteria) {
         case "VALUE":
           if (candidate.nodeValue === term) results.push(candidate);
@@ -540,11 +456,11 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   // start walking from root and all child nodes
-  _traverseBreadthFirst(callback: (node: Node<any>) => void) {
-    const queue = new Queue<Node<any>>();
+  _traverseBreadthFirst(callback: (node: Node) => void) {
+    const queue = new Queue<Node>();
     queue.enqueue(this);
 
-    let currentNode: Node<any> | undefined = queue.dequeue();
+    let currentNode: Node | undefined = queue.dequeue();
 
     while (currentNode) {
       for (let i = 0, length = currentNode.childNodes.length; i < length; i++) {
@@ -557,8 +473,8 @@ export class Node<T extends string> extends GObject.Object {
   }
 
   // start walking from bottom to root
-  _traverseDepthFirst(callback: (node: Node<any>) => void) {
-    const recurse = (currentNode: Node<any>) => {
+  _traverseDepthFirst(callback: (node: Node) => void) {
+    const recurse = (currentNode: Node) => {
       for (let i = 0, length = currentNode.childNodes.length; i < length; i++) {
         recurse(currentNode.childNodes[i]);
       }
@@ -568,36 +484,8 @@ export class Node<T extends string> extends GObject.Object {
     recurse(this);
   }
 
-  _walk(callback: (node: Node<any>) => void, traversal: (cb: (node: Node<any>) => void) => void) {
+  _walk(callback: (node: Node) => void, traversal: (cb: (node: Node) => void) => void) {
     traversal.call(this, callback);
-  }
-
-  _initMetaWindow() {
-    if (this.isWindow()) {
-      const windowTracker = Shell.WindowTracker.get_default();
-      const metaWin = this.nodeValue;
-      const app = windowTracker.get_window_app(metaWin) as ShellNS.App;
-      this.app = app;
-    }
-  }
-
-  // Check if the underlying window actor is still alive. GJS throws
-  // on property access of finalized GObjects rather than segfaulting,
-  // so a cheap get_name() call is enough to detect dead actors.
-  isNodeValid() {
-    if (!this.isWindow()) return true;
-    try {
-      const actor = this.windowActor;
-      if (!actor) return false;
-      actor.get_name();
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  render(_from?: any) {
-    refreshTabTitle(this);
   }
 
   get float(): boolean {
@@ -627,7 +515,7 @@ export class Node<T extends string> extends GObject.Object {
         if (wasFloating) {
           const p = this.parentNode;
           if (p) {
-            p.childNodes.forEach((c: any) => {
+            p.childNodes.forEach((c: Node) => {
               c.percent = undefined;
             });
           }
@@ -655,7 +543,7 @@ export class Node<T extends string> extends GObject.Object {
 /**
  * An implementation of Queue using arrays
  */
-export class Queue<T = any> extends GObject.Object {
+export class Queue<T = unknown> extends GObject.Object {
   static {
     GObject.registerClass(this);
   }
@@ -680,63 +568,59 @@ export class Queue<T = any> extends GObject.Object {
   }
 }
 
-export class Tree extends Node<any> {
+export class Tree extends Node {
   static {
     GObject.registerClass(this);
   }
   private _host!: TreeHost;
-  windows: Record<string, any> = {};
   allNodeWindows: Meta.Window[] = [];
-  attachNode: Node<any> | null = null;
+  attachNode: Node | null = null;
   defaultStackHeight!: number;
   private _initialized = false;
+  private _containerSequence = 0;
 
   constructor(host: TreeHost) {
-    super(NODE_TYPES.ROOT, null);
+    super(NODE_TYPES.ROOT, "root");
     this._host = host;
     this.defaultStackHeight = 35;
     this.settings = host.settings;
     this.layout = LAYOUT_TYPES.ROOT;
   }
 
-  /** Activate Shell actors and workspace state after the runtime graph is ready. */
+  /** Activate presentation records and workspace state after the runtime graph is ready. */
   initialize(): void {
     if (this._initialized) return;
-    const rootBin = new St.Bin();
-    this._data = rootBin;
-    if (!global.window_group.contains(rootBin)) global.window_group.add_child(rootBin);
+    this._host.presentation.ensure(this);
     this._initialized = true;
   }
 
-  /** Remove every Shell actor owned by the Tiling Tree and reset its state. */
+  /** Release every presentation record associated with this tree and reset its state. */
   dispose(): void {
     if (!this._initialized) return;
     this.reset();
-    const rootBin = this._data as St.Bin | null;
-    if (rootBin && global.window_group.contains(rootBin)) {
-      global.window_group.remove_child(rootBin);
-    }
-    this._data = null;
+    this._host.presentation.remove(this);
     this._initialized = false;
   }
 
-  /** Remove workspace/monitor actors and structural state while retaining the root actor. */
+  /** Remove workspace/monitor presentation and structural state while retaining the root. */
   reset(): void {
-    const actorNodes = [
-      ...this.getNodeByType(NODE_TYPES.WORKSPACE),
-      ...this.getNodeByType(NODE_TYPES.MONITOR),
-    ];
-    for (const node of actorNodes) {
-      if (node.actorBin && global.window_group.contains(node.actorBin)) {
-        global.window_group.remove_child(node.actorBin);
-      }
-    }
+    for (const node of this._nodes) this._releasePresentationSubtree(node);
     this.childNodes.length = 0;
     this.attachNode = null;
   }
 
   get host(): TreeHost {
     return this._host;
+  }
+
+  nextContainerIdentity(): string {
+    this._containerSequence += 1;
+    return `con-${this._containerSequence}`;
+  }
+
+  private _releasePresentationSubtree(node: Node): void {
+    for (const child of node.childNodes) this._releasePresentationSubtree(child);
+    this._host.presentation.remove(node);
   }
 
   /**
@@ -761,9 +645,7 @@ export class Tree extends Node<any> {
       );
       if (!monitorWsNode) continue;
       monitorWsNode.layout = this._host.determineSplitLayout();
-      monitorWsNode.actorBin = new St.Bin();
-      if (!global.window_group.contains(monitorWsNode.actorBin))
-        global.window_group.add_child(monitorWsNode.actorBin);
+      this._host.presentation.ensure(monitorWsNode);
     }
   }
 
@@ -782,10 +664,7 @@ export class Tree extends Node<any> {
 
     const workspace = wsManager.get_workspace_by_index(wsIndex);
     newWsNode.layout = LAYOUT_TYPES.HSPLIT;
-    newWsNode.actorBin = new St.Bin({ style_class: "workspace-actor-bg" });
-
-    if (!global.window_group.contains(newWsNode.actorBin))
-      global.window_group.add_child(newWsNode.actorBin);
+    this._host.presentation.ensure(newWsNode);
 
     this._host.bindWorkspaceSignals(workspace!);
     this.addMonitor(wsIndex);
@@ -801,9 +680,7 @@ export class Tree extends Node<any> {
       return false;
     }
 
-    if (global.window_group.contains(existingWsNode.actorBin!))
-      global.window_group.remove_child(existingWsNode.actorBin!);
-
+    this._releasePresentationSubtree(existingWsNode);
     this.removeChild(existingWsNode);
 
     // Phase E fix: Re-index remaining workspace nodes after deletion
@@ -847,7 +724,7 @@ export class Tree extends Node<any> {
    */
   createNode(
     parentObj: unknown,
-    type: string,
+    type: NodeType,
     value: unknown,
     mode: string = WINDOW_MODES.TILE as string
   ) {
@@ -855,8 +732,15 @@ export class Tree extends Node<any> {
     let child;
 
     if (parentNode) {
-      child = new Node(type, value as Meta.Window | string | St.Bin | null);
+      const nodeValue =
+        type === NODE_TYPES.CON
+          ? typeof value === "string"
+            ? value
+            : this.nextContainerIdentity()
+          : (value as Meta.Window | string);
+      child = new Node(type, nodeValue ?? null);
       child.settings = this.settings;
+      this._host.presentation.ensure(child);
 
       if (child.isWindow()) child.mode = mode;
 
@@ -891,27 +775,11 @@ export class Tree extends Node<any> {
   }
 
   /**
-   * Find the NodeWindow using the Meta.WindowActor
-   */
-  findNodeByActor(windowActor: Clutter.Actor) {
-    let searchNode;
-    const criteriaMatchFn = (node: Node<any>) => {
-      if (node.isWindow() && node.actor === windowActor) {
-        searchNode = node;
-      }
-    };
-
-    this._walk(criteriaMatchFn, this._traverseDepthFirst);
-
-    return searchNode;
-  }
-
-  /**
    * Obtains the non-floating, non-minimized list of nodes
    * Useful for calculating the rect areas
    */
-  getTiledChildren(items: Node<any>[]) {
-    const filterFn = (node: Node<any>) => {
+  getTiledChildren(items: Node[]) {
+    const filterFn = (node: Node) => {
       if (node.isWindow()) {
         const floating = node.isFloat();
         const grabTiling = node.isGrabTile();
@@ -938,7 +806,7 @@ export class Tree extends Node<any> {
    *
    * Credits: borrowed logic from tree.c of i3
    */
-  next(node: Node<any>, direction: Meta.MotionDirection): Node<any> | null {
+  next(node: Node, direction: Meta.MotionDirection): Node | null {
     if (!node) return null;
     const orientation = Utils.orientationFromDirection(direction);
     const position = Utils.positionFromDirection(direction);
@@ -990,7 +858,7 @@ export class Tree extends Node<any> {
     return null;
   }
 
-  nextMonitor(nodeWindow: Node<any>, position: string, orientation: string) {
+  nextMonitor(nodeWindow: Node, position: string, orientation: string) {
     if (!nodeWindow) return null;
     const nodeValue = nodeWindow.nodeValue as Meta.Window;
     // Use the built in logic to determine adjacent monitors
@@ -1005,12 +873,12 @@ export class Tree extends Node<any> {
     return monitorNode;
   }
 
-  findAncestorMonitor(node: Node<any>) {
+  findAncestorMonitor(node: Node) {
     return this.findAncestor(node, NODE_TYPES.MONITOR);
   }
 
-  findAncestor(node: Node<any>, ancestorType: string) {
-    let ancestorNode: Node<any> | undefined;
+  findAncestor(node: Node, ancestorType: string) {
+    let ancestorNode: Node | undefined;
 
     while (node && ancestorType && !node.isRoot()) {
       if (node.isType(ancestorType)) {
@@ -1024,7 +892,7 @@ export class Tree extends Node<any> {
     return ancestorNode;
   }
 
-  nextVisible(node: Node<any>, direction: Meta.MotionDirection): Node<any> | null {
+  nextVisible(node: Node, direction: Meta.MotionDirection): Node | null {
     if (!node) return null;
     let next = this.next(node, direction);
     if (
@@ -1042,10 +910,10 @@ export class Tree extends Node<any> {
    * Performs cleanup of dangling parents in addition to removing the
    * node from the parent.
    */
-  removeNode(node: Node<any>) {
+  removeNode(node: Node) {
     let oldChild;
 
-    const cleanUpParent = (existParent: Node<any>) => {
+    const cleanUpParent = (existParent: Node) => {
       if (this.getTiledChildren(existParent.childNodes).length === 0) {
         existParent.percent = undefined;
         // Bug #470 fix: Don't reset sibling percents across workspace/monitor boundaries
@@ -1072,10 +940,12 @@ export class Tree extends Node<any> {
     if (parentNode.childNodes.length === 1 && parentNode.nodeType !== NODE_TYPES.MONITOR) {
       const existParent = parentNode.parentNode;
       if (!existParent) return false;
+      this._releasePresentationSubtree(parentNode);
       oldChild = existParent.removeChild(parentNode);
       cleanUpParent(existParent);
     } else {
       const existParent = node.parentNode!;
+      this._host.presentation.remove(node);
       oldChild = existParent.removeChild(node);
       if (!this._host.floatingWindow(node)) cleanUpParent(existParent);
     }
@@ -1103,14 +973,14 @@ export class Tree extends Node<any> {
   }
 
   /** Zero sibling percents (equal-share on next layout). Pure structure helper. */
-  resetSiblingPercent(parentNode: Node<any> | null) {
+  resetSiblingPercent(parentNode: Node | null) {
     if (!parentNode) return;
-    parentNode.childNodes.forEach((n: Node<any>) => {
+    parentNode.childNodes.forEach((n: Node) => {
       n.percent = undefined;
     });
   }
 
-  findFirstNodeWindowFrom(node: Node<any>) {
+  findFirstNodeWindowFrom(node: Node) {
     const results = node.getNodeByType(NODE_TYPES.WINDOW);
     if (results.length > 0) {
       return results[0];
@@ -1130,15 +1000,15 @@ export class Tree extends Node<any> {
     return serializeNodeForTest(this);
   }
 
-  debugChildNodes(node: Node<any>) {
+  debugChildNodes(node: Node) {
     if (!Logger.isDebugEnabled()) return;
     this.debugNode(this);
-    node.childNodes.forEach((child: Node<any>) => {
+    node.childNodes.forEach((child: Node) => {
       this.debugChildNodes(child);
     });
   }
 
-  debugParentNodes(node: Node<any>) {
+  debugParentNodes(node: Node) {
     if (!Logger.isDebugEnabled()) return;
     if (node) {
       if (node.parentNode) {
@@ -1148,7 +1018,7 @@ export class Tree extends Node<any> {
     }
   }
 
-  debugNode(node: Node<any>) {
+  debugNode(node: Node) {
     if (!Logger.isDebugEnabled()) return;
     let spacing = "";
     const dashes = "-->";
@@ -1193,7 +1063,7 @@ export class Tree extends Node<any> {
     );
   }
 
-  findParent(childNode: Node<any>, parentNodeType: string) {
+  findParent(childNode: Node, parentNodeType: string) {
     const parents = this.getNodeByType(parentNodeType);
     // Only get the first parent
     return parents.filter((p) => p.contains(childNode))[0];

@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import St from "gi://St";
 import Meta from "gi://Meta";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import { LAYOUT_TYPES, NODE_TYPES, ORIENTATION_TYPES } from "../../../src/lib/extension/tree.js";
@@ -104,7 +103,7 @@ describe("Tree Operations", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       monitor.layout = LAYOUT_TYPES.HSPLIT;
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.VSPLIT;
 
       const window1 = createMockWindow();
@@ -146,7 +145,7 @@ describe("Tree Operations", () => {
 
     it("should toggle split direction if single child", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.HSPLIT;
 
       const window = createMockWindow();
@@ -160,7 +159,7 @@ describe("Tree Operations", () => {
 
     it("should not toggle if forceSplit is true", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.HSPLIT;
 
       const window = createMockWindow();
@@ -237,8 +236,8 @@ describe("Tree Operations", () => {
     it("should swap windows in different parents", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
 
-      const container1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
-      const container2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con-1");
+      const container2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con-2");
 
       const window1 = createMockWindow();
       const window2 = createMockWindow();
@@ -373,7 +372,7 @@ describe("Tree Operations", () => {
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
       node1.mode = WINDOW_MODES.TILE;
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.HSPLIT;
 
       const window2 = createMockWindow();
@@ -398,7 +397,7 @@ describe("Tree Operations", () => {
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
       node1.mode = WINDOW_MODES.TILE;
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.STACKED;
 
       const window2 = createMockWindow();
@@ -525,7 +524,7 @@ describe("Tree Operations", () => {
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
       node1.mode = WINDOW_MODES.TILE;
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.HSPLIT;
 
       const window2 = createMockWindow();
@@ -586,7 +585,7 @@ describe("Tree Operations", () => {
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
       node1.mode = WINDOW_MODES.TILE;
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.STACKED;
 
       const window2 = createMockWindow();
@@ -604,7 +603,7 @@ describe("Tree Operations", () => {
     it("should cycle through windows in stacked container using UP/DOWN", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.STACKED;
 
       const window1 = createMockWindow();
@@ -626,7 +625,7 @@ describe("Tree Operations", () => {
     it("should navigate up in stacked container", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.STACKED;
 
       const window1 = createMockWindow();
@@ -643,7 +642,7 @@ describe("Tree Operations", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       monitor.layout = LAYOUT_TYPES.HSPLIT;
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.STACKED;
 
       const window1 = createMockWindow();
@@ -662,7 +661,7 @@ describe("Tree Operations", () => {
     it("should cycle through tabs using LEFT/RIGHT", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.TABBED;
 
       const window1 = createMockWindow();
@@ -684,7 +683,7 @@ describe("Tree Operations", () => {
     it("should navigate left between tabs", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.TABBED;
 
       const window1 = createMockWindow();
@@ -701,7 +700,7 @@ describe("Tree Operations", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       monitor.layout = LAYOUT_TYPES.VSPLIT;
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.TABBED;
 
       const window1 = createMockWindow();
@@ -721,10 +720,10 @@ describe("Tree Operations", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       monitor.layout = LAYOUT_TYPES.HSPLIT;
 
-      const container1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container1.layout = LAYOUT_TYPES.VSPLIT;
 
-      const container2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container2.layout = LAYOUT_TYPES.VSPLIT;
 
       const window1 = createMockWindow();
@@ -747,7 +746,7 @@ describe("Tree Operations", () => {
       const window1 = createMockWindow();
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.VSPLIT;
 
       const window2 = createMockWindow();
@@ -769,7 +768,7 @@ describe("Tree Operations", () => {
       const window1 = createMockWindow();
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
 
-      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, new St.Bin());
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       container.layout = LAYOUT_TYPES.STACKED;
 
       const window2 = createMockWindow();

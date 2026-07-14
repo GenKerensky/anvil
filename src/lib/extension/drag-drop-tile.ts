@@ -15,18 +15,11 @@ import Meta from "gi://Meta";
 import Gio from "gi://Gio";
 
 import { Logger } from "../shared/logger.js";
-import {
-  Tree,
-  Node,
-  LAYOUT_TYPES,
-  ORIENTATION_TYPES,
-  NODE_TYPES,
-  type NodeType,
-  type RectLike,
-} from "./tree.js";
+import { Tree, Node, LAYOUT_TYPES, ORIENTATION_TYPES, NODE_TYPES, type RectLike } from "./tree.js";
 import * as Utils from "./utils.js";
 import type { LayoutEngine, DragDropPlan } from "./layout-engine.js";
 import { WINDOW_MODES } from "./window/constants.js";
+import type { DragPreviewPresenter, TreePresentationPort } from "./tree-presentation.js";
 
 /** Host surface for DragDropTile — narrow, read-only where possible. */
 export interface DragDropTileHost {
@@ -34,12 +27,14 @@ export interface DragDropTileHost {
   readonly settings: Gio.Settings;
   readonly layoutEngine: LayoutEngine;
   /** Shared with GrabResizeSession; storage owned by AnvilRuntime. Read-only here. */
-  readonly nodeWinAtPointer: Node<NodeType> | null;
+  readonly nodeWinAtPointer: Node | null;
   /** Read-only view of grab cancel flag owned by GrabResizeSession. */
   readonly cancelGrab: boolean;
   sortedWindows: Meta.Window[];
   renderTree(from: string, force?: boolean): void;
-  processGap(node: Node<NodeType>): RectLike;
+  processGap(node: Node): RectLike;
+  readonly presentation: TreePresentationPort;
+  readonly previewPresenter: DragPreviewPresenter;
 }
 
 type RegionRect = { x: number; y: number; width: number; height: number };
@@ -56,7 +51,7 @@ export class DragDropTile {
    * transaction to `LayoutEngine.applyDragDrop`, so this module never writes
    * tree structure, percents, or layouts directly (architecture rule §2).
    */
-  moveWindowToPointer(focusNodeWindow: Node<NodeType>, preview: boolean = false) {
+  moveWindowToPointer(focusNodeWindow: Node, preview: boolean = false) {
     if (this.host.cancelGrab) {
       return;
     }
@@ -76,20 +71,14 @@ export class DragDropTile {
       const tabbed = parentNodeTarget!.isTabbed();
       const stackedOrTabbed = stacked || tabbed;
 
-      const updatePreview = (previewTarget: Node<NodeType>, previewParams: PreviewParams) => {
-        const previewHint = previewTarget.previewHint;
+      const updatePreview = (previewTarget: Node, previewParams: PreviewParams) => {
         const previewHintEnabled = this.host.settings.get_boolean("preview-hint-enabled");
         const previewRect = previewParams.targetRect;
-        if (previewHint && previewHintEnabled) {
-          if (!previewRect) {
-            previewHint.hide();
-            return;
-          }
-          previewHint.set_style_class_name(previewParams.className);
-          previewHint.set_position(previewRect.x, previewRect.y);
-          previewHint.set_size(previewRect.width, previewRect.height);
-          previewHint.show();
+        if (!previewHintEnabled || !previewRect) {
+          this.host.previewPresenter.hide();
+          return;
         }
+        this.host.previewPresenter.show(previewParams.className, previewRect);
       };
 
       const regions = (rect: RegionRect, regionWidth: number) => {
@@ -137,8 +126,8 @@ export class DragDropTile {
         };
       };
 
-      let referenceNode: Node<NodeType> | null = null;
-      let containerNode: Node<NodeType> | null = null;
+      let referenceNode: Node | null = null;
+      let containerNode: Node | null = null;
       // Plan flags (pure — no node mutation). The apply transaction read these
       // off `childNode` historically; they now live on the plan.
       let createCon = false;
@@ -321,10 +310,7 @@ export class DragDropTile {
         // (tab cleanup) is owned here; tree structure/percents/layouts are not.
         const previousParent = focusNodeWindow!.parentNode!;
 
-        if (focusNodeWindow.tab) {
-          const decoParent = focusNodeWindow.tab.get_parent();
-          if (decoParent) decoParent.remove_child(focusNodeWindow.tab);
-        }
+        this.host.presentation.detachTab(focusNodeWindow);
 
         const centerSwap = isCenter && centerLayout == "SWAP";
         const kind = createCon
@@ -408,7 +394,7 @@ export class DragDropTile {
     }
   }
 
-  findNodeWindowAtPointer(focusNodeWindow: Node<NodeType>) {
+  findNodeWindowAtPointer(focusNodeWindow: Node) {
     const pointerCoord = global.get_pointer() as unknown as [number, number];
 
     const nodeWinAtPointer = this._findNodeWindowAtPointer(

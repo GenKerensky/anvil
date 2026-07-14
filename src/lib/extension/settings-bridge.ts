@@ -13,7 +13,7 @@
  *     - css-updated — theme CSS changed; shell reloads stylesheet
  *   All other keys in SETTING_HANDLERS are the live prefs→shell event bus.
  *
- * @see codebase-review.md F5 Stage 8, C3-1
+ * @see .agents/rules/architecture.md rule 11
  */
 
 import type Gio from "gi://Gio";

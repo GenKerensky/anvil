@@ -32,7 +32,7 @@ export interface BorderControllerHost {
   readonly tree: Tree;
   readonly settings: Gio.Settings;
   readonly focusMetaWindow: Meta.Window | null;
-  findNodeWindow(metaWindow: Meta.Window): Node<any> | null;
+  findNodeWindow(metaWindow: Meta.Window): Node | null;
 }
 
 export class BorderController {
@@ -233,7 +233,7 @@ export class BorderController {
     const tiledOnMonitor = monitorNode
       ? monitorNode
           .getNodeByMode(WINDOW_MODES.TILE)
-          .filter((node: Node<any>) => node.isWindow() && !node.nodeValue.minimized)
+          .filter((node: Node) => node.isWindow() && !node.nodeValue.minimized)
       : [];
     const hideSingle =
       settings.get_boolean("focus-border-hidden-on-single") &&

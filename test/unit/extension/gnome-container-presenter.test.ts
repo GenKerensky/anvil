@@ -1,5 +1,5 @@
-import St from "gi://St";
 import { describe, expect, it, vi } from "vitest";
+import St from "gi://St";
 
 import { GnomeContainerPresenter } from "../../../src/lib/extension/gnome-container-presenter.js";
 import { surfaceId, windowId } from "../../../src/lib/tiling/index.js";

@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
-import St from "gi://St";
+import { TreePresentation } from "../../../src/lib/extension/tree-presentation.js";
 import { createMockWindow } from "../mocks/helpers/index.js";
 
 describe("Node", () => {
@@ -65,7 +65,7 @@ describe("Node", () => {
     });
 
     it("should correctly identify CON type", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
 
       expect(node.isCon()).toBe(true);
       expect(node.isRoot()).toBe(false);
@@ -81,7 +81,7 @@ describe("Node", () => {
     });
 
     it("should check type by name", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
 
       expect(node.isType(NODE_TYPES.CON)).toBe(true);
       expect(node.isType(NODE_TYPES.ROOT)).toBe(false);
@@ -128,17 +128,18 @@ describe("Node", () => {
       metaWindow.get_compositor_private = vi.fn(() => actor);
 
       const node = new Node(NODE_TYPES.WINDOW, metaWindow);
-      expect(node.isNodeValid()).toBe(false);
+      const presentation = new TreePresentation();
+      presentation.ensure(node);
+      expect(presentation.isRenderable(node)).toBe(false);
 
       actor = { get_name: vi.fn(() => "late-mapped-window") };
-      expect(node.isNodeValid()).toBe(true);
-      expect(node.windowActor).toBe(actor);
+      expect(presentation.isRenderable(node)).toBe(true);
     });
   });
 
   describe("Layout Checking Methods", () => {
     it("should check horizontal split layout", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
       node.layout = LAYOUT_TYPES.HSPLIT;
 
       expect(node.isHSplit()).toBe(true);
@@ -147,7 +148,7 @@ describe("Node", () => {
     });
 
     it("should check vertical split layout", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
       node.layout = LAYOUT_TYPES.VSPLIT;
 
       expect(node.isVSplit()).toBe(true);
@@ -155,7 +156,7 @@ describe("Node", () => {
     });
 
     it("should check stacked layout", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
       node.layout = LAYOUT_TYPES.STACKED;
 
       expect(node.isStacked()).toBe(true);
@@ -163,7 +164,7 @@ describe("Node", () => {
     });
 
     it("should check tabbed layout", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
       node.layout = LAYOUT_TYPES.TABBED;
 
       expect(node.isTabbed()).toBe(true);
@@ -171,7 +172,7 @@ describe("Node", () => {
     });
 
     it("should check layout by name", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
       node.layout = LAYOUT_TYPES.HSPLIT;
 
       expect(node.isLayout(LAYOUT_TYPES.HSPLIT)).toBe(true);
@@ -180,14 +181,14 @@ describe("Node", () => {
   });
 
   describe("appendChild", () => {
-    let parent: Node<string>;
-    let child1: Node<string>;
-    let child2: Node<string>;
+    let parent: Node;
+    let child1: Node;
+    let child2: Node;
 
     beforeEach(() => {
       parent = new Node(NODE_TYPES.ROOT, "parent");
-      child1 = new Node(NODE_TYPES.CON, new St.Bin());
-      child2 = new Node(NODE_TYPES.CON, new St.Bin());
+      child1 = new Node(NODE_TYPES.CON, "con");
+      child2 = new Node(NODE_TYPES.CON, "con");
     });
 
     it("should add child to empty parent", () => {
@@ -240,16 +241,16 @@ describe("Node", () => {
   });
 
   describe("removeChild", () => {
-    let parent: Node<string>;
-    let child1: Node<string>;
-    let child2: Node<string>;
-    let child3: Node<string>;
+    let parent: Node;
+    let child1: Node;
+    let child2: Node;
+    let child3: Node;
 
     beforeEach(() => {
       parent = new Node(NODE_TYPES.ROOT, "parent");
-      child1 = new Node(NODE_TYPES.CON, new St.Bin());
-      child2 = new Node(NODE_TYPES.CON, new St.Bin());
-      child3 = new Node(NODE_TYPES.CON, new St.Bin());
+      child1 = new Node(NODE_TYPES.CON, "con");
+      child2 = new Node(NODE_TYPES.CON, "con");
+      child3 = new Node(NODE_TYPES.CON, "con");
 
       parent.appendChild(child1);
       parent.appendChild(child2);
@@ -290,7 +291,7 @@ describe("Node", () => {
 
     it("should handle removing only child", () => {
       const singleParent = new Node(NODE_TYPES.ROOT, "single");
-      const onlyChild = new Node(NODE_TYPES.CON, new St.Bin());
+      const onlyChild = new Node(NODE_TYPES.CON, "con");
       singleParent.appendChild(onlyChild);
 
       singleParent.removeChild(onlyChild);
@@ -302,16 +303,16 @@ describe("Node", () => {
   });
 
   describe("insertBefore", () => {
-    let parent: Node<string>;
-    let child1: Node<string>;
-    let child2: Node<string>;
-    let newChild: Node<string>;
+    let parent: Node;
+    let child1: Node;
+    let child2: Node;
+    let newChild: Node;
 
     beforeEach(() => {
       parent = new Node(NODE_TYPES.ROOT, "parent");
-      child1 = new Node(NODE_TYPES.CON, new St.Bin());
-      child2 = new Node(NODE_TYPES.CON, new St.Bin());
-      newChild = new Node(NODE_TYPES.CON, new St.Bin());
+      child1 = new Node(NODE_TYPES.CON, "con");
+      child2 = new Node(NODE_TYPES.CON, "con");
+      newChild = new Node(NODE_TYPES.CON, "con");
 
       parent.appendChild(child1);
       parent.appendChild(child2);
@@ -358,7 +359,7 @@ describe("Node", () => {
 
     it("should return null if childNode parent is not this", () => {
       const otherParent = new Node(NODE_TYPES.ROOT, "other");
-      const otherChild = new Node(NODE_TYPES.CON, new St.Bin());
+      const otherChild = new Node(NODE_TYPES.CON, "con");
       otherParent.appendChild(otherChild);
 
       const result = parent.insertBefore(newChild, otherChild);
@@ -378,16 +379,16 @@ describe("Node", () => {
   });
 
   describe("Navigation Properties", () => {
-    let parent: Node<string>;
-    let child1: Node<string>;
-    let child2: Node<string>;
-    let child3: Node<string>;
+    let parent: Node;
+    let child1: Node;
+    let child2: Node;
+    let child3: Node;
 
     beforeEach(() => {
       parent = new Node(NODE_TYPES.ROOT, "parent");
-      child1 = new Node(NODE_TYPES.CON, new St.Bin());
-      child2 = new Node(NODE_TYPES.CON, new St.Bin());
-      child3 = new Node(NODE_TYPES.CON, new St.Bin());
+      child1 = new Node(NODE_TYPES.CON, "con");
+      child2 = new Node(NODE_TYPES.CON, "con");
+      child3 = new Node(NODE_TYPES.CON, "con");
 
       parent.appendChild(child1);
       parent.appendChild(child2);
@@ -431,7 +432,7 @@ describe("Node", () => {
       });
 
       it("should return null when no parent", () => {
-        const orphan = new Node(NODE_TYPES.CON, new St.Bin());
+        const orphan = new Node(NODE_TYPES.CON, "con");
 
         expect(orphan.nextSibling).toBeNull();
         expect(orphan.previousSibling).toBeNull();
@@ -446,7 +447,7 @@ describe("Node", () => {
       });
 
       it("should return null when no parent", () => {
-        const orphan = new Node(NODE_TYPES.CON, new St.Bin());
+        const orphan = new Node(NODE_TYPES.CON, "con");
 
         expect(orphan.index).toBeNull();
       });
@@ -460,7 +461,7 @@ describe("Node", () => {
       it("should return correct level for nested nodes", () => {
         expect(child1.level).toBe(1);
 
-        const grandchild = new Node(NODE_TYPES.CON, new St.Bin());
+        const grandchild = new Node(NODE_TYPES.CON, "con");
         child1.appendChild(grandchild);
 
         expect(grandchild.level).toBe(2);
@@ -469,14 +470,14 @@ describe("Node", () => {
   });
 
   describe("contains", () => {
-    let root: Node<string>;
-    let child: Node<string>;
-    let grandchild: Node<string>;
+    let root: Node;
+    let child: Node;
+    let grandchild: Node;
 
     beforeEach(() => {
       root = new Node(NODE_TYPES.ROOT, "root");
-      child = new Node(NODE_TYPES.CON, new St.Bin());
-      grandchild = new Node(NODE_TYPES.CON, new St.Bin());
+      child = new Node(NODE_TYPES.CON, "con");
+      grandchild = new Node(NODE_TYPES.CON, "con");
 
       root.appendChild(child);
       child.appendChild(grandchild);
@@ -491,7 +492,7 @@ describe("Node", () => {
     });
 
     it("should return false for unrelated node", () => {
-      const other = new Node(NODE_TYPES.CON, new St.Bin());
+      const other = new Node(NODE_TYPES.CON, "unrelated-con");
 
       expect(root.contains(other)).toBe(false);
     });
@@ -502,18 +503,18 @@ describe("Node", () => {
   });
 
   describe("getNodeByValue", () => {
-    let root: Node<string>;
-    let child1: Node<string>;
-    let child2: Node<string>;
-    let grandchild: Node<string>;
-    let child1Bin: St.Bin;
-    let child2Bin: St.Bin;
-    let grandchildBin: St.Bin;
+    let root: Node;
+    let child1: Node;
+    let child2: Node;
+    let grandchild: Node;
+    let child1Bin: string;
+    let child2Bin: string;
+    let grandchildBin: string;
 
     beforeEach(() => {
-      child1Bin = new St.Bin();
-      child2Bin = new St.Bin();
-      grandchildBin = new St.Bin();
+      child1Bin = "con-1";
+      child2Bin = "con-2";
+      grandchildBin = "con-3";
 
       root = new Node(NODE_TYPES.ROOT, "root");
       child1 = new Node(NODE_TYPES.CON, child1Bin);
@@ -545,15 +546,15 @@ describe("Node", () => {
   });
 
   describe("getNodeByType", () => {
-    let root: Node<string>;
-    let con1: Node<string>;
-    let con2: Node<string>;
-    let workspace: Node<string>;
+    let root: Node;
+    let con1: Node;
+    let con2: Node;
+    let workspace: Node;
 
     beforeEach(() => {
       root = new Node(NODE_TYPES.ROOT, "root");
-      con1 = new Node(NODE_TYPES.CON, new St.Bin());
-      con2 = new Node(NODE_TYPES.CON, new St.Bin());
+      con1 = new Node(NODE_TYPES.CON, "con");
+      con2 = new Node(NODE_TYPES.CON, "con");
       workspace = new Node(NODE_TYPES.WORKSPACE, "ws0");
 
       root.appendChild(con1);
@@ -585,7 +586,7 @@ describe("Node", () => {
 
   describe("rect property", () => {
     it("should get and set rect", () => {
-      const node = new Node(NODE_TYPES.CON, new St.Bin());
+      const node = new Node(NODE_TYPES.CON, "con");
       const rect = { x: 10, y: 20, width: 100, height: 200 };
 
       node.rect = rect;

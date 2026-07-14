@@ -5,7 +5,7 @@
  * name; AnvilRuntime wires host methods. Keybindings build AnvilAction values
  * and call dispatch — no mega-switch.
  *
- * @see codebase-review.md F5 Stage 1 residual, architecture rule 3
+ * @see .agents/rules/architecture.md rule 3
  */
 
 import type {

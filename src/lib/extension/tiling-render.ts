@@ -18,33 +18,41 @@
  * Constraints (B8-3): enforceUltrawideSize clamps the **applied frame rect**,
  * not tree percents. Percents stay in LayoutEngine; constraints run at apply.
  *
- * @see codebase-review.md F5 Stage 3, architecture rule 2 (one owner per state)
+ * @see .agents/rules/architecture.md rule 2 (one owner per state)
  */
 
-import Clutter from "gi://Clutter";
 import GObject from "gi://GObject";
 import Gio from "gi://Gio";
 import Meta from "gi://Meta";
-import St from "gi://St";
 
 import { Logger } from "../shared/logger.js";
 import * as Utils from "./utils.js";
 import { LAYOUT_TYPES, NODE_TYPES, type Node, type RectLike, type Tree } from "./tree.js";
+import type { TreePresentationPort } from "./tree-presentation.js";
 
 const WINDOW_MODE_TILE = "TILE";
+
+type LayoutPass = {
+  sizes: number[];
+  stackedHeight: number;
+  tiledChildren: Node[];
+};
+type SplitPass = Pick<LayoutPass, "sizes">;
+type TabbedPass = Pick<LayoutPass, "stackedHeight"> & { tiledChildren?: Node[] };
 
 export interface TilingRenderDeps {
   settings: Gio.Settings;
   getTree: () => Tree;
   moveWindow: (metaWindow: Meta.Window, rect: RectLike) => void;
-  getAllNodeWindows: () => Node<any>[];
+  getAllNodeWindows: () => Node[];
   isFloatingExempt: (metaWindow: Meta.Window) => boolean;
   isActiveWindowWorkspaceTiled: (metaWindow: Meta.Window) => boolean;
-  getTiledChildren: (childNodes: Node<any>[]) => Node<any>[];
+  getTiledChildren: (childNodes: Node[]) => Node[];
   getResizeCount: (windowId: number) => number;
-  findParent: (node: Node<any>, type: string) => Node<any> | null;
+  findParent: (node: Node, type: string) => Node | null;
   /** LayoutEngine.computeSizes — not via Tree facade (Stage 7). */
-  computeSizes: (node: Node<any>, childItems: Node<any>[]) => number[];
+  computeSizes: (node: Node, childItems: Node[]) => number[];
+  presentation: TreePresentationPort;
 }
 
 export class TilingRender extends GObject.Object {
@@ -88,7 +96,7 @@ export class TilingRender extends GObject.Object {
     });
   }
 
-  calculateGaps(node: Node<any>) {
+  calculateGaps(node: Node) {
     if (!node) return 0;
 
     const settings = this._deps.settings;
@@ -110,7 +118,7 @@ export class TilingRender extends GObject.Object {
     return gap;
   }
 
-  processGap(node: Node<any>) {
+  processGap(node: Node) {
     const rect = node.rect!;
     let nodeWidth = rect.width;
     let nodeHeight = rect.height;
@@ -127,7 +135,7 @@ export class TilingRender extends GObject.Object {
     return { x: nodeX, y: nodeY, width: nodeWidth, height: nodeHeight };
   }
 
-  enforceUltrawideSize(node: Node<any>, rect: RectLike): RectLike {
+  enforceUltrawideSize(node: Node, rect: RectLike): RectLike {
     if (!node.isWindow()) {
       Logger.debug(`enforceUltrawideSize: node is not a window, skipping`);
       return rect;
@@ -207,12 +215,10 @@ export class TilingRender extends GObject.Object {
     return rect;
   }
 
-  apply(node: Node<any>) {
+  apply(node: Node) {
     if (!node) return;
-    const tiledChildren = node
-      .getNodeByMode(WINDOW_MODE_TILE)
-      .filter((t: Node<any>) => t.isWindow());
-    tiledChildren.forEach((w: Node<any>) => {
+    const tiledChildren = node.getNodeByMode(WINDOW_MODE_TILE).filter((t: Node) => t.isWindow());
+    tiledChildren.forEach((w: Node) => {
       if (w.renderRect) {
         if (w.renderRect.width > 0 && w.renderRect.height > 0) {
           const metaWin = w.nodeValue as Meta.Window;
@@ -263,24 +269,22 @@ export class TilingRender extends GObject.Object {
     }
   }
 
-  processNode(node: Node<any>) {
+  processNode(node: Node) {
     if (!node) return;
 
     const tree = this._deps.getTree();
 
     if (node.nodeType === NODE_TYPES.ROOT) {
-      node.childNodes.forEach((child: Node<any>) => {
+      node.childNodes.forEach((child: Node) => {
         this.processNode(child);
       });
     }
 
     if (node.nodeType === NODE_TYPES.WORKSPACE) {
-      node.childNodes.forEach((child: Node<any>) => {
+      node.childNodes.forEach((child: Node) => {
         this.processNode(child);
       });
     }
-
-    const params: Record<string, any> = {};
 
     if (node.nodeType === NODE_TYPES.MONITOR || node.nodeType === NODE_TYPES.CON) {
       if (node.childNodes.length === 0) {
@@ -297,27 +301,23 @@ export class TilingRender extends GObject.Object {
         node.rect = monitorArea;
         node.rect = this.processGap(node);
       }
+      if (node.rect) this._deps.presentation.setRect(node, node.rect);
 
       const tiledChildren = tree.getTiledChildren(node.childNodes);
       const sizes = this._deps.computeSizes(node, tiledChildren);
 
-      params.sizes = sizes;
       const showTabs = this._deps.settings.get_boolean("showtab-decoration-enabled");
-      params.stackedHeight = showTabs ? tree.defaultStackHeight * Utils.dpi() : 0;
-      params.tiledChildren = tiledChildren;
+      const params: LayoutPass = {
+        sizes,
+        stackedHeight: showTabs ? tree.defaultStackHeight * Utils.dpi() : 0,
+        tiledChildren,
+      };
 
-      const decoration = node.decoration;
-
-      if (decoration) {
-        const decoChildren = decoration.get_children();
-        decoChildren.forEach((decoChild: Clutter.Actor) => {
-          decoration.remove_child(decoChild);
-        });
-      }
+      this._deps.presentation.clearDecoration(node);
 
       tiledChildren
-        .filter((c: Node<any>) => c.isNodeValid())
-        .forEach((child: Node<any>, index: number) => {
+        .filter((c: Node) => this._deps.presentation.isRenderable(c))
+        .forEach((child: Node, index: number) => {
           if (node.layout === LAYOUT_TYPES.HSPLIT || node.layout === LAYOUT_TYPES.VSPLIT) {
             this.processSplit(node, child, params, index);
           } else if (node.layout === LAYOUT_TYPES.STACKED) {
@@ -337,7 +337,7 @@ export class TilingRender extends GObject.Object {
     }
   }
 
-  processSplit(node: Node<any>, child: Node<any>, params: Record<string, any>, index: number) {
+  processSplit(node: Node, child: Node, params: SplitPass, index: number) {
     const layout = node.layout;
     const nodeRect = node.rect!;
     let nodeWidth: number;
@@ -381,7 +381,7 @@ export class TilingRender extends GObject.Object {
     };
   }
 
-  processStacked(node: Node<any>, child: Node<any>, params: Record<string, any>, index: number) {
+  processStacked(node: Node, child: Node, _params: object, index: number) {
     const layout = node.layout;
     const rect = node.rect!;
     const nodeWidth = rect.width;
@@ -405,7 +405,7 @@ export class TilingRender extends GObject.Object {
     }
   }
 
-  processTabbed(node: Node<any>, child: Node<any>, params: Record<string, any>, _index: number) {
+  processTabbed(node: Node, child: Node, params: TabbedPass, _index: number) {
     const layout = node.layout;
     const nodeRect = node.rect!;
     let nodeWidth: number;
@@ -424,16 +424,10 @@ export class TilingRender extends GObject.Object {
       if (node.childNodes.length > 1 || alwaysShowDecorationTab) {
         nodeY = nodeRect.y + params.stackedHeight;
         nodeHeight = nodeRect.height - params.stackedHeight;
-        if (node.decoration && child.isWindow() && child.isNodeValid()) {
+        if (child.isWindow() && this._deps.presentation.isRenderable(child)) {
           const gap = this.calculateGaps(node);
           const renderRect = this.processGap(node);
-          let borderWidth = 0;
-          try {
-            const actorWithBorder = child._actor as any;
-            if (actorWithBorder?.border) {
-              borderWidth = actorWithBorder.border.get_theme_node().get_border_width(St.Side.TOP);
-            }
-          } catch {}
+          const borderWidth = this._deps.presentation.topBorderWidth(child);
 
           const adjust = 4 * Utils.dpi();
           const adjustWidth = renderRect.width + (borderWidth * 2 + gap) / adjust;
@@ -444,24 +438,15 @@ export class TilingRender extends GObject.Object {
             adjustY = renderRect.y;
           }
 
-          const decoration = node.decoration;
+          this._deps.presentation.layoutTabbedDecoration(node, child, {
+            width: adjustWidth,
+            height: params.stackedHeight,
+            x: adjustX,
+            y: adjustY,
+            visible: (params.tiledChildren?.length ?? 0) > 0 && params.stackedHeight !== 0,
+          });
 
-          if (decoration !== null && decoration !== undefined) {
-            decoration.set_size(adjustWidth, params.stackedHeight);
-            decoration.set_position(adjustX, adjustY);
-            if (params.tiledChildren.length > 0 && params.stackedHeight !== 0) {
-              decoration.show();
-            } else {
-              decoration.hide();
-            }
-            if (child.tab && !decoration.contains(child.tab)) {
-              try {
-                decoration.add_child(child.tab);
-              } catch {}
-            }
-          }
-
-          child.render();
+          this._deps.presentation.refreshTabTitle(child);
         }
       }
 

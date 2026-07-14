@@ -1,16 +1,16 @@
 # Architecture Rules (enforceable)
 
-**Authority:** Synthesized from `codebase-review.md` (F3 target shape, F4 rules 1–12, extractions F5 + residual 9–21). Agents **must** follow these rules on every tiling-core change.
+**Authority:** Synthesized from the completed codebase review and its extraction roadmap. Agents
+**must** follow these rules on every tiling-core change.
 
 **Related (load when needed):**
 
-| Need                                   | Read                              |
-| -------------------------------------- | --------------------------------- |
-| Source layout / seams map              | `.agents/context/architecture.md` |
-| Ubiquitous language                    | `CONTEXT.md`                      |
-| Historical ADRs / extraction notes     | `.agents/memory/decisions.md`     |
-| Full review narrative (reference only) | `codebase-review.md`              |
-| Finish-change gates                    | `.agents/rules/workflow.md`       |
+| Need                               | Read                              |
+| ---------------------------------- | --------------------------------- |
+| Source layout / seams map          | `.agents/context/architecture.md` |
+| Ubiquitous language                | `CONTEXT.md`                      |
+| Historical ADRs / extraction notes | `.agents/memory/decisions.md`     |
+| Finish-change gates                | `.agents/rules/workflow.md`       |
 
 ---
 
@@ -35,7 +35,7 @@ Prefs write → GSettings / windows.json reload trigger → shell reacts
 | Focus entry                 | `focus-controller.ts` (+ `LayoutEngine.focus`)                           |
 | Frame geometry              | `tiling-render.ts`                                                       |
 | Borders                     | `border-controller.ts`                                                   |
-| Tab UI                      | `tab-decoration.ts`                                                      |
+| Tree presentation           | `tree-presentation.ts` (tabs, decorations, structural actors, previews)  |
 | Grab / live resize          | `grab-resize-session.ts`                                                 |
 | Pointer hover/warp          | `pointer-policy.ts` (always constructed)                                 |
 | Keybindings                 | `keybinding-table.ts` → `keybindings.ts`                                 |
@@ -73,7 +73,7 @@ Do **not** invent a second write path.
 | Window admit / destroy             | `WindowTracker` (`admitWindow` / destroy pipeline) | New Meta track entry that bypasses `admitWindow`            |
 | Grab session + resize exemption    | `GrabResizeSession`                                | New 16ms grab loops or exemption maps on WM                 |
 | Focus borders / split hints        | `BorderController`                                 | New border actors created outside controller                |
-| Tab strip UI                       | `tab-decoration.ts`                                | Building St tabs inside `tree.ts`                           |
+| Legacy Tree presentation           | `TreePresentation` / `DragPreviewPresenter`        | St/Clutter actor fields or construction inside `tree.ts`    |
 | Directional focus helpers          | `FocusController`                                  | Duplicating stacked/tabbed raise logic in command handlers  |
 | GSettings reactions                | `SettingsBridge`                                   | Mega-`switch (key)` on WM                                   |
 | User command dispatch              | `CommandBus` via `AnvilRuntime.command()`          | New open-coded `switch (action.name)`                       |
@@ -260,7 +260,7 @@ Before marking a tiling-core task done:
 | New feature logic only on a god-class `AnvilRuntime` | Owner module + host wire (`anvil-runtime.ts` refactor is fine) |
 | Mega-switch on `action.name` or settings key         | CommandBus / SettingsBridge registry                           |
 | `isFloatingExempt` copy-paste / dual classification  | RulesEngine only                                               |
-| Tree importing WM; Clutter tabs inside Node          | TreeHost; `tab-decoration.ts`                                  |
+| Tree importing WM; presentation fields inside Node   | TreeHost; `tree-presentation.ts`                               |
 | `command({ name: "Split" })` from track              | `LayoutEngine.autoSplitFromFocus`                              |
 | Busy 120×16ms reconcile                              | Backoff + stop when stable                                     |
 | `percent === 0` meaning unset                        | `undefined` + `isUnsetPercent`                                 |
@@ -282,5 +282,4 @@ Before marking a tiling-core task done:
 
 ---
 
-_End of architecture rules. Prefer this file over digging `codebase-review.md` for day-to-day
-implementation; keep the review for historical findings and roadmaps._
+_End of architecture rules. This file is the durable result of the completed review._

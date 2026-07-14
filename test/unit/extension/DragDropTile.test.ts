@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import St from "gi://St";
 import Meta from "gi://Meta";
 import { DragDropTile } from "../../../src/lib/extension/drag-drop-tile.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
@@ -48,6 +47,8 @@ describe("DragDropTile", () => {
           height: rect.height,
         };
       }),
+      presentation: wm._treePresentation,
+      previewPresenter: wm._dragPreviewPresenter,
     };
 
     dragDrop = new DragDropTile(mockHost);
@@ -181,7 +182,7 @@ describe("DragDropTile", () => {
       const focusNode = grabWindow(new Node(NODE_TYPES.WINDOW, focus));
       focusNode.mode = WINDOW_MODES.GRAB_TILE;
       // Give focus a throwaway parent so `previousParent` is defined.
-      const dummyCon = new Node(NODE_TYPES.CON, new St.Bin());
+      const dummyCon = new Node(NODE_TYPES.CON, "con");
       dummyCon.appendChild(focusNode);
 
       (global as any).get_pointer = vi.fn(() => [50, 100, 0]); // left region
@@ -206,7 +207,7 @@ describe("DragDropTile", () => {
       // Target's parent is a TABBED CON (stackedOrTabbed, non-monitor): left drop
       // sets the detachWindow plan and splits the focus window.
       const { monitor } = getWorkspaceAndMonitor(ctx);
-      const tabbedCon = new Node(NODE_TYPES.CON, new St.Bin());
+      const tabbedCon = new Node(NODE_TYPES.CON, "con");
       tabbedCon.layout = LAYOUT_TYPES.TABBED;
       tabbedCon.settings = ctx.anvilRuntime.ext.settings;
       monitor.childNodes[0] = tabbedCon;
@@ -217,7 +218,7 @@ describe("DragDropTile", () => {
 
       const focus = makeWindow(2, "Focus", { x: 0, y: 0, width: 200, height: 200 });
       const focusNode = grabWindow(new Node(NODE_TYPES.WINDOW, focus));
-      const dummyCon = new Node(NODE_TYPES.CON, new St.Bin());
+      const dummyCon = new Node(NODE_TYPES.CON, "con");
       dummyCon.appendChild(focusNode);
 
       (global as any).get_pointer = vi.fn(() => [50, 100, 0]); // left region
@@ -237,7 +238,7 @@ describe("DragDropTile", () => {
       mockHost.settings.get_string.mockReturnValue("HSPLIT");
 
       const { monitor } = getWorkspaceAndMonitor(ctx);
-      const con = new Node(NODE_TYPES.CON, new St.Bin());
+      const con = new Node(NODE_TYPES.CON, "con");
       con.layout = LAYOUT_TYPES.HSPLIT;
       con.settings = ctx.anvilRuntime.ext.settings;
       monitor.childNodes[0] = con;
@@ -248,7 +249,7 @@ describe("DragDropTile", () => {
 
       const focus = makeWindow(2, "Focus", { x: 0, y: 0, width: 200, height: 200 });
       const focusNode = grabWindow(new Node(NODE_TYPES.WINDOW, focus));
-      const dummyCon = new Node(NODE_TYPES.CON, new St.Bin());
+      const dummyCon = new Node(NODE_TYPES.CON, "con");
       dummyCon.appendChild(focusNode);
 
       (global as any).get_pointer = vi.fn(() => [100, 100, 0]); // center

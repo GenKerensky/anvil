@@ -41,7 +41,7 @@ export class PointerPolicy extends GObject.Object {
   private _hoverFocusEnabled = false;
   private _pointerFocusTimeoutId = 0;
 
-  lastFocusedWindow: Node<any> | null = null;
+  lastFocusedWindow: Node | null = null;
   lastFocusedWindowMonitor = 0;
   lastFocusedWindowWorkspace = 0;
 
@@ -78,16 +78,16 @@ export class PointerPolicy extends GObject.Object {
     return this._focusWindowUnderPointer();
   }
 
-  canWarpToNode(nodeWindow: Node<any> | null) {
+  canWarpToNode(nodeWindow: Node | null) {
     if (!nodeWindow) return false;
     return this._canWarpToNode(nodeWindow);
   }
 
-  storePointerLastPosition(nodeWindow: Node<any> | null) {
+  storePointerLastPosition(nodeWindow: Node | null) {
     this._storePointerLastPosition(nodeWindow);
   }
 
-  getPointerPositionInside(nodeWindow: Node<any> | null) {
+  getPointerPositionInside(nodeWindow: Node | null) {
     return this._getPointerPositionInside(nodeWindow);
   }
 
@@ -98,13 +98,7 @@ export class PointerPolicy extends GObject.Object {
   /**
    * Focus changed — optionally warp the pointer to the focused window.
    */
-  onFocusChanged({
-    node,
-    source: _source,
-  }: {
-    node: Node<any> | null;
-    source: PointerFocusSource;
-  }) {
+  onFocusChanged({ node, source: _source }: { node: Node | null; source: PointerFocusSource }) {
     if (!node || !node._data) return;
 
     if (this._settings.get_boolean("move-pointer-focus-enabled")) {
@@ -203,7 +197,7 @@ export class PointerPolicy extends GObject.Object {
     return Utils.metaWindowAtPoint(pointer, metaWindows);
   }
 
-  private _canWarpToNode(nodeWindow: Node<any>) {
+  private _canWarpToNode(nodeWindow: Node) {
     if (nodeWindow && nodeWindow._data) {
       const metaWindow = nodeWindow.nodeValue as Meta.Window;
       const metaRect = metaWindow.get_frame_rect();
@@ -221,7 +215,7 @@ export class PointerPolicy extends GObject.Object {
     return false;
   }
 
-  private _pointerIsOverParentDecoration(nodeWindow: Node<any>, pointerCoord: [number, number]) {
+  private _pointerIsOverParentDecoration(nodeWindow: Node, pointerCoord: [number, number]) {
     if (pointerCoord && nodeWindow?.parentNode) {
       const node = nodeWindow.parentNode;
       if (node.isTabbed() || node.isStacked()) {
@@ -231,7 +225,7 @@ export class PointerPolicy extends GObject.Object {
     return false;
   }
 
-  private _warpToNode(nodeWindow: Node<any>) {
+  private _warpToNode(nodeWindow: Node) {
     const newCoord = this._getPointerPositionInside(nodeWindow);
     if (newCoord && newCoord.x && newCoord.y) {
       const seat = Clutter.get_default_backend().get_default_seat();
@@ -243,7 +237,7 @@ export class PointerPolicy extends GObject.Object {
     }
   }
 
-  private _getPointerPositionInside(nodeWindow: Node<any> | null) {
+  private _getPointerPositionInside(nodeWindow: Node | null) {
     if (nodeWindow && nodeWindow._data) {
       const metaWindow = nodeWindow.nodeValue as Meta.Window;
       const metaRect = metaWindow.get_frame_rect();
@@ -260,7 +254,7 @@ export class PointerPolicy extends GObject.Object {
     return null;
   }
 
-  private _storePointerLastPosition(nodeWindow: Node<any> | null) {
+  private _storePointerLastPosition(nodeWindow: Node | null) {
     if (nodeWindow && nodeWindow._data) {
       const metaWindow = nodeWindow.nodeValue as Meta.Window;
       const metaRect = metaWindow.get_frame_rect();
