@@ -86,7 +86,10 @@ that calls `TilingRender` (today: `AnvilRuntime.renderTree`). Geometry **apply**
 legacy remains the sole topology, percentage, and platform-effect writer while the portable state
 machine receives the same normalized ingress for comparison. Shadow intentions are always
 discarded and cannot call Meta/St effects. This diagnostic mirror is not a second production write
-path. See `docs/plans/portable-tiling-state-machine.md` under “Migration rule: never two writers.”
+path. The portable core is experimental and is not approved as the default. Core maturation,
+cutover, and legacy retirement are a separate workstream; ordinary production fixes and cleanups
+must not expand into portable-core modules, adapters, parity work, engine selection, or legacy
+removal. See `docs/plans/portable-tiling-state-machine.md` under “Migration rule: never two writers.”
 
 ---
 

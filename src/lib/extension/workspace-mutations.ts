@@ -39,6 +39,7 @@ export interface WorkspaceMutationsHost {
   // Narrow grab dispatchers (C4) — NOT concrete GrabResizeSession
   handleResizing(n: Node<NodeType> | null): void;
   handleMoving(n: Node<NodeType> | null): void;
+  grabModeFor(n: Node<NodeType>): string | null;
 }
 
 export class WorkspaceMutations {
@@ -180,10 +181,11 @@ export class WorkspaceMutations {
 
     const tilingModeEnabled = host.settings.get_boolean("tiling-mode-enabled");
 
-    if (focusNodeWindow.grabMode && tilingModeEnabled) {
-      if (focusNodeWindow.grabMode === GRAB_TYPES.RESIZING) {
+    const grabMode = host.grabModeFor(focusNodeWindow);
+    if (grabMode && tilingModeEnabled) {
+      if (grabMode === GRAB_TYPES.RESIZING) {
         host.handleResizing(focusNodeWindow);
-      } else if (focusNodeWindow.grabMode === GRAB_TYPES.MOVING) {
+      } else if (grabMode === GRAB_TYPES.MOVING) {
         host.handleMoving(focusNodeWindow);
       }
     } else {

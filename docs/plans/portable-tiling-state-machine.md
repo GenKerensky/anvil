@@ -1,11 +1,17 @@
 # Portable Tiling State Machine design and migration plan
 
-**Status:** Final design and migration plan; self-grilled, with ADR 0002 proposed  
-**Date:** 2026-07-13  
+**Status:** Experimental implementation; not approved as the default runtime
+
+**Date:** 2026-07-13
+
 **Scope:** Isolate Anvil's tiling decisions into a platform-independent, event-driven module without
 GNOME, GJS, Mutter, Shell, GSettings, actor, timer, or filesystem dependencies.
 
 ## Outcome
+
+> **Workstream boundary:** This document describes a separate experimental line of work. The
+> production runtime remains authoritative. Portable-core development, default cutover, and legacy
+> retirement must not be bundled into production bug fixes or broad cleanup work.
 
 Anvil will gain one deep module, `TilingStateMachine`, that owns authoritative tiling state and
 turns platform-independent events into committed revisions, changed intentions, and a queryable
@@ -22,8 +28,8 @@ GObject-based `Tree` in place.
 
 These decisions are accepted:
 
-1. The core uses a new platform-independent `TilingState`; the current `Tree` is retired rather
-   than purified in place.
+1. The core uses a new platform-independent `TilingState`; retiring the current `Tree` is a future
+   possibility requiring a separately accepted cutover plan, not an approved current action.
 2. The state machine is the sole owner of Tiling State, revision ordering, and event processing.
 3. Runtime observes GNOME and submits normalized events. It cannot mutate Tiling State directly.
 4. Transitions commit synchronously before Runtime applies their intentions.
@@ -908,6 +914,11 @@ Gate evidence (2026-07-13, Fedora Devbox, GNOME Shell/Mutter 50.1, commit `d0425
 **Phase 6 gate status:** complete.
 
 ### Phase 7 — default, soak, and retire legacy
+
+**Deferred:** Phase 7 is not approved for implementation. The portable core remains experimental,
+and the evidence below is retained only as development history. No production cleanup or bug-fix
+series may perform these steps. Resuming this phase requires a new review, an accepted plan, and
+explicit approval.
 
 33. **`feat(runtime): make core mode the default tiling engine`**
     - Retain a startup-only emergency legacy switch until the documented core-default soak matrix

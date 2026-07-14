@@ -148,7 +148,7 @@ function handleMove(host: CommandHandlerHost, action: DirectionAction) {
             focusNodeWindow!.nodeValue as Meta.Window,
             global.display.get_current_time()
           );
-          if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
+          if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue as Meta.Window;
           host.renderTree("move-tabbed-queue");
         }
         host.notifyFocusChanged(focusNodeWindow!, "move");
@@ -156,7 +156,7 @@ function handleMove(host: CommandHandlerHost, action: DirectionAction) {
     },
   });
   if (moved) {
-    if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue;
+    if (prev) prev!.parentNode!.lastTabFocus = prev.nodeValue as Meta.Window;
     host.renderTree("move-window");
   }
 }
@@ -320,7 +320,7 @@ function handleLayoutTabbedToggle(host: CommandHandlerHost) {
     host.layoutEngine.setLayout(parent, host.layoutEngine.determineSplitLayout());
   } else {
     host.layoutEngine.setLayout(parent, LAYOUT_TYPES.TABBED);
-    parent.lastTabFocus = focusNodeWindow.nodeValue;
+    parent.lastTabFocus = focusNodeWindow.nodeValue as Meta.Window;
   }
   host.unfreezeRender();
   host.layoutEngine.setAttachNode(parent);

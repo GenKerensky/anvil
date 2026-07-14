@@ -69,6 +69,7 @@ import { safeRaise } from "./mutter-safe.js";
 import { GnomeContainerPresenter } from "./gnome-container-presenter.js";
 import { GnomePreviewPresenter } from "./gnome-preview-presenter.js";
 import { computeSnapLayout } from "./snap-layout.js";
+import { syncActiveWindowTab } from "./tab-decoration.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -425,6 +426,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       cleanupAlwaysFloat: () => self.cleanupAlwaysFloat(),
       restoreAlwaysFloat: () => self.restoreAlwaysFloat(),
       clearResizedWindows: () => self._grab!.clearResizedWindows(),
+      suspendGrabResizeTilingEffects: () => self._grab!.suspendTilingEffects(),
       observePortablePolicy: () =>
         self._withTilingShadow("policy", (shadow) => shadow.observePolicy()),
     });
@@ -507,6 +509,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       validWindow: (w) => self2._tracker!.validWindow(w),
       handleResizing: (n) => self2._grab!.handleResizing(n),
       handleMoving: (n) => self2._grab!.handleMoving(n),
+      grabModeFor: (n) => self2._grab!.grabModeFor(n),
     };
     this._wsMutations = new WorkspaceMutations(this._wsMutationsHost!);
     this._renderScheduler = new RenderScheduler({
@@ -959,6 +962,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     safely("decorations", () => Utils._disableDecorations());
     safely("signals", () => this._signalManager?.unbindAll());
     safely("borders", () => this._borders?.destroy());
+    safely("active tab", () => syncActiveWindowTab(null));
     safely("tracker", () => this._tracker?.dispose());
     safely("grab-resize", () => this._grab?.dispose());
     safely("settings", () => this._settingsBridge?.disable());
@@ -1092,6 +1096,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private setActiveWindowDecoration(nextWindow: Meta.Window | null) {
     this._borders!.setActiveWindow(nextWindow);
+    syncActiveWindowTab(nextWindow ? this.tree.findNode(nextWindow) : null);
   }
 
   // Window movement API

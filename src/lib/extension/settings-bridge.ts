@@ -36,6 +36,7 @@ export interface SettingsBridgeHost {
   cleanupAlwaysFloat(): void;
   restoreAlwaysFloat(): void;
   clearResizedWindows(): void;
+  suspendGrabResizeTilingEffects(): void;
   observePortablePolicy(): void;
 }
 
@@ -123,7 +124,10 @@ const SETTINGS_HANDLERS: Record<string, SettingHandler> = {
   "focus-border-hidden-on-single": handleBorderToggles,
   "focus-on-hover-enabled": handlePointerPolicy,
   "move-pointer-focus-enabled": handlePointerPolicy,
-  "tiling-mode-enabled": (h, k) => h.renderTree(k),
+  "tiling-mode-enabled": (h, k) => {
+    if (!h.settings.get_boolean(k)) h.suspendGrabResizeTilingEffects();
+    h.renderTree(k);
+  },
   "window-gap-size-increment": (h, k) => h.renderTree(k, true),
   "window-gap-size": (h, k) => h.renderTree(k, true),
   "window-gap-hidden-on-single": (h, k) => h.renderTree(k, true),

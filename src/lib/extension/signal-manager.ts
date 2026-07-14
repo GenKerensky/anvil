@@ -78,6 +78,13 @@ export class SignalManager {
   private _workspaceManagerSignals: number[] | undefined;
   private _overviewSignals: SignalId[] | null = null;
 
+  private _reconcileDesktopVisibility = (): void => {
+    const host = this._host;
+    if (host.showingDesktop()) host.suspendWindowDecorations();
+    else host.updateBorderLayout();
+    host.updateDecorationLayout();
+  };
+
   // Workspace flags have zero external readers and remain private to this module.
   private _workspaceAdded = false;
   private _workspaceRemoved = false;
@@ -112,11 +119,7 @@ export class SignalManager {
         host.trackCurrentMonWs();
       }),
       extDisplay.connect("grab-op-end", (_d, m, g) => host.handleGrabOpEnd(_d, m, g)),
-      extDisplay.connect("showing-desktop-changed", () => {
-        if (host.showingDesktop()) host.suspendWindowDecorations();
-        else host.updateBorderLayout();
-        host.updateDecorationLayout();
-      }),
+      extDisplay.connect("showing-desktop-changed", this._reconcileDesktopVisibility),
       extDisplay.connect("in-fullscreen-changed", () => {
         host.observePortableWindows();
         host.renderTree("full-screen-changed");
@@ -184,11 +187,7 @@ export class SignalManager {
     const extWsm = global.workspace_manager;
 
     this._workspaceManagerSignals = [
-      extWsm.connect("showing-desktop-changed", () => {
-        if (host.showingDesktop()) host.suspendWindowDecorations();
-        else host.updateBorderLayout();
-        host.updateDecorationLayout();
-      }),
+      extWsm.connect("showing-desktop-changed", this._reconcileDesktopVisibility),
       extWsm.connect("workspace-added", (_wsm, wsIndex) => {
         host.observePortableTopology();
         if (host.coreTilingEngine) return;

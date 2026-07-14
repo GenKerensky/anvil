@@ -180,20 +180,13 @@ export class Node<T extends string> extends GObject.Object {
   actorBin!: St.Bin | null;
   settings!: Gio.Settings | null;
   layout: string | undefined;
-  lastTabFocus: any = null;
+  lastTabFocus: Meta.Window | null = null;
 
   // --- AnvilRuntime monkey-patched state (set at runtime) ---
   /** Previous layout before stacked/tabbed toggle */
   prevLayout?: string;
   /** Was floating before mass-float operation */
   prevFloat?: boolean;
-  /**
-   * Grab fields — owned by GrabResizeSession (B8-6). Mirrored onto Node only
-   * during an active grab for residual position-size readers; prefer session state.
-   */
-  grabMode?: string | null;
-  initGrabOp?: Meta.GrabOp | null;
-  initRect?: RectLike | null;
   /** Tab style marker for background windows */
   backgroundTab?: boolean;
   /** Preview hint actor during drag-drop tiling */
@@ -693,7 +686,7 @@ export class Tree extends Node<any> {
   }
   private _host!: TreeHost;
   windows: Record<string, any> = {};
-  allNodeWindows: any[] = [];
+  allNodeWindows: Meta.Window[] = [];
   attachNode: Node<any> | null = null;
   defaultStackHeight!: number;
   private _initialized = false;

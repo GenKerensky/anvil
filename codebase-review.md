@@ -561,22 +561,24 @@ Settings change → SettingsBridge → affected modules only
 
 ### F5. Prioritized roadmap
 
-| Stage | Work                                                     | Outcome                | Effort | Status                |
-| ----- | -------------------------------------------------------- | ---------------------- | ------ | --------------------- |
-| **0** | Adopt architecture rules (window.ts freeze later lifted) | Stops bleeding         | S      | **done** (2026-07-10) |
-| **1** | `AnvilAction` union + command registry **inside** WM     | Readable dispatch      | M      | **done** (2026-07-10) |
-| **2** | Extract RulesEngine from `isFloatingExempt` + overrides  | One place for floats   | M      | **done** (2026-07-10) |
-| **3** | Expand TilingRender; delete WM wrappers                  | Clear render ownership | M      | **done** (2026-07-10) |
-| **4** | WindowTracker extraction (signals + track/destroy)       | Testable lifecycle     | L      | **done** (2026-07-10) |
-| **5** | LayoutEngine extraction (tree ops + percent)             | Pure layout unit tests | L      | **done** (2026-07-10) |
-| **6** | GrabResizeSession                                        | Debuggable resize      | L      | **done** (2026-07-10) |
-| **7** | Remove Tree→WM concrete dependency; strip node UI        | Clean graph            | L      | **done** (2026-07-10) |
-| **8** | Keybinding table + SettingsBridge                        | Less string soup       | M      | **done** (2026-07-10) |
+| Stage | Work                                                     | Outcome                | Effort | Status                                 |
+| ----- | -------------------------------------------------------- | ---------------------- | ------ | -------------------------------------- |
+| **0** | Adopt architecture rules (window.ts freeze later lifted) | Stops bleeding         | S      | **done** (2026-07-10)                  |
+| **1** | `AnvilAction` union + command registry **inside** WM     | Readable dispatch      | M      | **done** (2026-07-10)                  |
+| **2** | Extract RulesEngine from `isFloatingExempt` + overrides  | One place for floats   | M      | **done** (2026-07-10)                  |
+| **3** | Expand TilingRender; delete WM wrappers                  | Clear render ownership | M      | **done** (2026-07-10)                  |
+| **4** | WindowTracker extraction (signals + track/destroy)       | Testable lifecycle     | L      | **done** (2026-07-10)                  |
+| **5** | LayoutEngine extraction (tree ops + percent)             | Pure layout unit tests | L      | **done** (2026-07-10)                  |
+| **6** | GrabResizeSession                                        | Debuggable resize      | L      | **done** (2026-07-10)                  |
+| **7** | Remove Tree→WM concrete dependency; strip node UI        | Clean graph            | L      | **partial**: actor refs remain on Node |
+| **8** | Keybinding table + SettingsBridge                        | Less string soup       | M      | **done** (2026-07-10)                  |
 
-**F5 roadmap complete (stages 0–8):** architecture rules; `AnvilAction` + command registry;
+**F5 extraction roadmap landed (stages 0–8):** architecture rules; `AnvilAction` + command registry;
 **`RulesEngine`**; **`TilingRender`**; **`WindowTracker`**; **`LayoutEngine`**;
 **`GrabResizeSession`**; **`TreeHost`** + **`tab-decoration.ts`**; **`keybinding-table.ts`**
-(schema → AnvilAction) + **`SettingsBridge`** (GSettings key → host handlers).
+(schema → AnvilAction) + **`SettingsBridge`** (GSettings key → host handlers). Stage 7's remaining
+presentation references are tracked explicitly below and prevent calling the broader separation
+complete.
 
 ### Residual findings roadmap (post-F5)
 
@@ -593,18 +595,27 @@ Address remaining individual findings (including P2/P3) beyond the prioritized F
 | **15** | Tree pure: percent unset, focus loop, typed search                 | B5-3, B5-4, B5-5, B5-6                                       | **done** (2026-07-11) |
 | **16** | setLayout, PointerPolicy always-on, FocusController                | B6-2, B6-3, B9-1, B9-2, B9-3                                 | **done** (2026-07-11) |
 | **17** | Float classification cache + BorderController                      | B7-1, B7-2                                                   | **done** (2026-07-11) |
-| **18** | Grab residual: size-changed drive, initRect off Node               | B8-5, B8-6                                                   | **done** (2026-07-11) |
+| **18** | Grab residual: size-changed drive, initRect off Node               | B8-5, B8-6                                                   | **done** (2026-07-14) |
 | **19** | Split utils + class match policy                                   | B11-1, B12-3                                                 | **done** (2026-07-11) |
 | **20** | CommandBus modules + WindowConfig schema + reduce `any`            | B3-1 full, B10-2, C4-1, D3-1, C1-1                           | **done** (2026-07-11) |
 | **21** | Tree/render invariants docs + E2E notes                            | B5 invariants, D2-1, D2-2                                    | **done** (2026-07-11) |
 
-**Residual roadmap complete (stages 9–21):** all review findings addressed, including P2/P3.
+**Residual roadmap implementation status:** the extraction stages landed, but the 2026-07-14
+reconciliation found two residual production debts that must remain visible:
+
+- B5-1 is partial: actor construction is in presentation helpers, but production `Node` still
+  retains optional tab/decoration actor references.
+- B8-6 was completed on 2026-07-14: `GrabResizeSession` owns per-window grab state without
+  mirroring `initRect`, `initGrabOp`, or `grabMode` onto production `Node`.
+
+These production-runtime debts must be resolved on their own merits. They must not be deferred to,
+or combined with, the experimental portable-core workstream.
 
 Do **not** rewrite from scratch. Each stage should keep E2E green and prefer mechanical moves with behavior parity.
 
 ---
 
-## Appendix A — File heat map
+## Appendix A — Original file heat map (historical baseline)
 
 | Path                | ~LOC    | Heat | Notes            |
 | ------------------- | ------- | ---- | ---------------- |

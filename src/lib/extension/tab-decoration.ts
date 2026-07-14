@@ -13,7 +13,27 @@ import St from "gi://St";
 import * as Utils from "./utils.js";
 import type { Node } from "./tree.js";
 
-export function ensureWindowTab(node: Node<any>): void {
+let activeWindowTab: St.Widget | null = null;
+
+/**
+ * Keep active-tab styling inside the tab presentation owner.
+ * Focus/border owners may select a node, but must not mutate tab actors.
+ */
+export function syncActiveWindowTab(node: Node<string> | null): void {
+  const next = node?.parentNode?.isTabbed() && node.tab ? (node.tab as St.Widget) : null;
+  if (activeWindowTab === next) return;
+  if (activeWindowTab) {
+    try {
+      activeWindowTab.remove_style_class_name("window-tabbed-tab-active");
+    } catch {
+      // The tab actor may already have been destroyed with its window.
+    }
+  }
+  activeWindowTab = next;
+  activeWindowTab?.add_style_class_name("window-tabbed-tab-active");
+}
+
+export function ensureWindowTab(node: Node<string>): void {
   if (node.tab || !node.isWindow()) return;
 
   const tabContents = new St.BoxLayout({
@@ -44,14 +64,7 @@ export function ensureWindowTab(node: Node<any>): void {
   tabContents.add_child(closeButton);
 
   const clickFn = () => {
-    if (!node.parentNode) return;
-    node.parentNode.childNodes.forEach((c) => {
-      if (c.tab) {
-        c.tab.remove_style_class_name("window-tabbed-tab-active");
-        c.render();
-      }
-    });
-    tabContents.add_style_class_name("window-tabbed-tab-active");
+    syncActiveWindowTab(node);
     metaWin.activate(global.display.get_current_time());
   };
 
@@ -72,13 +85,11 @@ export function ensureWindowTab(node: Node<any>): void {
   closeButton.connect("clicked", closeFn);
   closeButton.connect("button-release-event", middleClickCloseFn);
 
-  if (metaWin === global.display.get_focus_window()) {
-    tabContents.add_style_class_name("window-tabbed-tab-active");
-  }
   node.tab = tabContents;
+  if (metaWin === global.display.get_focus_window()) syncActiveWindowTab(node);
 }
 
-export function ensureConDecoration(node: Node<any>): void {
+export function ensureConDecoration(node: Node<string>): void {
   if (node.decoration) return;
   if (!node.isCon()) return;
   const decoration = new St.BoxLayout();
@@ -95,7 +106,7 @@ export function ensureConDecoration(node: Node<any>): void {
   node.decoration = decoration;
 }
 
-export function destroyConDecoration(node: Node<any>): void {
+export function destroyConDecoration(node: Node<string>): void {
   if (!node.decoration) return;
   node.decoration.hide();
   node.decoration.destroy_all_children();
@@ -103,7 +114,7 @@ export function destroyConDecoration(node: Node<any>): void {
   node.decoration = null;
 }
 
-export function refreshTabTitle(node: Node<any>): void {
+export function refreshTabTitle(node: Node<string>): void {
   if (node.tab === null || node.tab === undefined) return;
   const titleLabel = node.tab.get_child_at_index(1);
   if (titleLabel) {
@@ -112,7 +123,7 @@ export function refreshTabTitle(node: Node<any>): void {
   }
 }
 
-function getNodeTitle(node: Node<any>): string | null {
+function getNodeTitle(node: Node<string>): string | null {
   if (node.isWindow()) {
     return node.nodeValue.title ? node.nodeValue.title : node.app!.get_name();
   }

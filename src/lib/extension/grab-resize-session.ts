@@ -2,8 +2,7 @@
  * GrabResizeSession — grab-op begin/end, live resize, keyboard resize, exemption counts.
  *
  * Sole owner of grab session state (grabOp, cancelGrab, resizedWindows map, live loop).
- * Grab per-window fields (initRect / grabMode / initGrabOp) live on this session (B8-6);
- * Node still mirrors them during a grab for residual position-size readers.
+ * Grab per-window fields (initRect / grabMode / initGrabOp) live only on this session (B8-6).
  *
  * Live 16ms poll is a **Wayland fallback** only (B8-5). On X11, size-changed drives
  * handleResizing; the poll is not started.
@@ -26,6 +25,7 @@ import {
   POSITION,
   NODE_TYPES,
   type Node,
+  type NodeType,
   type RectLike,
   type Tree,
 } from "./tree.js";
@@ -44,25 +44,25 @@ export interface GrabResizeHost {
   readonly tree: Tree;
   readonly focusMetaWindow: Meta.Window | null;
   readonly settings: Gio.Settings;
-  nodeWinAtPointer: Node<any> | null;
+  nodeWinAtPointer: Node<NodeType> | null;
 
-  findNodeWindow(w: Meta.Window): Node<any> | null;
-  findNodeWindowAtPointer(node: Node<any>): Node<any> | null;
+  findNodeWindow(w: Meta.Window): Node<NodeType> | null;
+  findNodeWindowAtPointer(node: Node<NodeType>): Node<NodeType> | null;
   trackCurrentMonWs(): void;
   freezeRender(): void;
   unfreezeRender(): void;
   renderTree(from: string, force?: boolean): void;
   readonly scheduler: EventSchedulerPort;
   move(metaWindow: Meta.Window, rect: RectLike): void;
-  calculateGaps(node: Node<any>): number;
-  processNode(node: Node<any>): void;
+  calculateGaps(node: Node<NodeType>): number;
+  processNode(node: Node<NodeType>): void;
   getMonitorConstraints(monitorIndex: number): MonitorConstraints;
-  floatingWindow(node: Node<any>): boolean;
-  minimizedWindow(node: Node<any>): boolean;
+  floatingWindow(node: Node<NodeType>): boolean;
+  minimizedWindow(node: Node<NodeType>): boolean;
   allowDragDropTile(): boolean;
-  moveWindowToPointer(node: Node<any>, previewOnly?: boolean): void;
-  updateStackedFocus(node: Node<any> | null | undefined): void;
-  updateTabbedFocus(node: Node<any> | null | undefined): void;
+  moveWindowToPointer(node: Node<NodeType>, previewOnly?: boolean): void;
+  updateStackedFocus(node: Node<NodeType> | null | undefined): void;
+  updateTabbedFocus(node: Node<NodeType> | null | undefined): void;
   observeGrabResizeUpdate(metaWindow: Meta.Window): void;
   observeGrabMoveUpdate(
     metaWindow: Meta.Window,
@@ -119,7 +119,7 @@ export class GrabResizeSession {
   private _grabbedMetaWindow: Meta.Window | null = null;
   private _liveResizeSrcId = 0;
   private _draggedNodeWindow: Node<any> | null = null;
-  /** Session-owned grab fields (B8-6); mirrored onto Node for residual readers. */
+  /** Session-owned grab fields (B8-6). */
   private _nodeGrab = new Map<number, NodeGrabState>();
 
   constructor(host: GrabResizeHost) {
@@ -131,27 +131,25 @@ export class GrabResizeSession {
     return w ? w.get_id() : null;
   }
 
-  /** Write grab fields to session map + mirror onto Node (legacy). */
+  private _getNodeGrab(node: Node<any>): NodeGrabState | null {
+    const id = this._winId(node);
+    return id === null ? null : this._nodeGrab.get(id) ?? null;
+  }
+
   private _setNodeGrab(node: Node<any>, patch: Partial<NodeGrabState>): void {
     const id = this._winId(node);
-    const prev: NodeGrabState = (id !== null ? this._nodeGrab.get(id) : undefined) ?? {
-      initRect: node.initRect ?? null,
-      initGrabOp: node.initGrabOp ?? null,
-      grabMode: node.grabMode ?? null,
+    if (id === null) return;
+    const prev: NodeGrabState = this._nodeGrab.get(id) ?? {
+      initRect: null,
+      initGrabOp: null,
+      grabMode: null,
     };
-    const next = { ...prev, ...patch };
-    if (id !== null) this._nodeGrab.set(id, next);
-    node.initRect = next.initRect;
-    node.initGrabOp = next.initGrabOp;
-    node.grabMode = next.grabMode;
+    this._nodeGrab.set(id, { ...prev, ...patch });
   }
 
   private _clearNodeGrab(node: Node<any>): void {
     const id = this._winId(node);
     if (id !== null) this._nodeGrab.delete(id);
-    node.initRect = null;
-    node.initGrabOp = null;
-    node.grabMode = null;
   }
 
   getResizeCount(id: number): number {
@@ -180,9 +178,24 @@ export class GrabResizeSession {
     this.resizedWindows.clear();
   }
 
+  grabModeFor(node: Node<NodeType>): string | null {
+    return this._getNodeGrab(node)?.grabMode ?? null;
+  }
+
+  /** Stop Anvil's resize effects without ending Mutter's active grab. */
+  suspendTilingEffects(): void {
+    this._stopLiveResizeLoop();
+  }
+
   dispose(): void {
     this._stopLiveResizeLoop();
     this._grabbedMetaWindow = null;
+    if (this._draggedNodeWindow) this.cleanup(this._draggedNodeWindow);
+    this._draggedNodeWindow = null;
+    this._lastResizePair = null;
+    this._nodeGrab.clear();
+    this.grabOp = Meta.GrabOp.NONE;
+    this.cancelGrab = false;
   }
 
   resizeByAmount(grabOp: Meta.GrabOp, amount: number) {
@@ -248,13 +261,12 @@ export class GrabResizeSession {
       const gaps = host.calculateGaps(focusNodeWindow);
 
       const mode = Utils.grabMode(grabOp);
+      const existingGrab = this._getNodeGrab(focusNodeWindow);
       this._setNodeGrab(focusNodeWindow, {
         grabMode: mode,
         initGrabOp: grabOp,
         // Only set initRect if not already tracking a resize (preserves original during key repeat)
-        initRect: focusNodeWindow.initRect
-          ? focusNodeWindow.initRect
-          : Utils.removeGapOnRect(frameRect, gaps),
+        initRect: existingGrab?.initRect ?? Utils.removeGapOnRect(frameRect, gaps),
       });
       if (mode === GRAB_TYPES.MOVING && focusNodeWindow.mode === WINDOW_MODES.TILE) {
         host.freezeRender();
@@ -287,10 +299,11 @@ export class GrabResizeSession {
     if (focusMetaWindow) {
       const focusNodeWindow = host.findNodeWindow(focusMetaWindow);
       if (focusNodeWindow) {
+        const grab = this._getNodeGrab(focusNodeWindow);
         Logger.debug(
           `_handleGrabOpEnd: percent=${focusNodeWindow.percent} initRect=${JSON.stringify(
-            focusNodeWindow.initRect
-          )} grabMode=${focusNodeWindow.grabMode}`
+            grab?.initRect
+          )} grabMode=${grab?.grabMode}`
         );
       }
     }
@@ -399,9 +412,11 @@ export class GrabResizeSession {
     if (!focusNodeWindow || focusNodeWindow.isFloat()) {
       return;
     }
+    const nodeGrab = this._getNodeGrab(focusNodeWindow);
+    if (!nodeGrab) return;
     const grabOps = Utils.decomposeGrabOp(this.grabOp);
     for (const grabOp of grabOps) {
-      const initGrabOp = focusNodeWindow.initGrabOp;
+      const initGrabOp = nodeGrab.initGrabOp;
       const direction = Utils.directionFromGrab(grabOp);
       const orientation = Utils.orientationFromGrab(grabOp);
       let parentNodeForFocus = focusNodeWindow!.parentNode!;
@@ -441,7 +456,7 @@ export class GrabResizeSession {
 
       Logger.debug(
         `_handleResizing: title=${focusMeta.get_title()} initRect=${JSON.stringify(
-          focusNodeWindow.initRect
+          nodeGrab.initRect
         )} currentRect=${JSON.stringify(
           currentRect
         )} direction=${direction} orientation=${orientation} sameParent=${sameParent} resizePair=${
@@ -460,7 +475,7 @@ export class GrabResizeSession {
             return;
           }
 
-          firstRect = focusNodeWindow.initRect;
+          firstRect = nodeGrab.initRect;
           if (resizePairForWindow) {
             if (
               !host.floatingWindow(resizePairForWindow) &&
@@ -492,7 +507,7 @@ export class GrabResizeSession {
             if (host.tree.getTiledChildren(resizePairForWindow.parentNode.childNodes).length <= 1) {
               return;
             }
-            const firstWindowRect = focusNodeWindow.initRect;
+            const firstWindowRect = nodeGrab.initRect;
             let index: number | null = resizePairForWindow.index;
             if (position === POSITION.BEFORE) {
               // Find the opposite node
@@ -530,7 +545,7 @@ export class GrabResizeSession {
           if (host.tree.getTiledChildren(parentNodeForFocus.childNodes).length <= 1) {
             return;
           }
-          firstRect = focusNodeWindow.initRect;
+          firstRect = nodeGrab.initRect;
           if (resizePairForWindow) {
             if (
               !host.floatingWindow(resizePairForWindow) &&
@@ -563,7 +578,7 @@ export class GrabResizeSession {
             if (host.tree.getTiledChildren(resizePairForWindow.parentNode.childNodes).length <= 1) {
               return;
             }
-            const firstWindowRect = focusNodeWindow.initRect;
+            const firstWindowRect = nodeGrab.initRect;
             let index: number | null = resizePairForWindow.index;
             if (position === POSITION.BEFORE) {
               // Find the opposite node
@@ -648,8 +663,9 @@ export class GrabResizeSession {
 
     // Cache gaps once — they don't change during a resize
     const gaps = host.calculateGaps(focusNodeWindow);
-    let lastWidth = focusNodeWindow.initRect?.width;
-    let lastHeight = focusNodeWindow.initRect?.height;
+    const initialGrab = this._getNodeGrab(focusNodeWindow);
+    let lastWidth = initialGrab?.initRect?.width;
+    let lastHeight = initialGrab?.initRect?.height;
 
     this._liveResizeSrcId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 16, () => {
       if (!host.settings.get_boolean("tiling-mode-enabled")) {
@@ -657,7 +673,7 @@ export class GrabResizeSession {
         return GLib.SOURCE_REMOVE;
       }
       const metaWindow = focusNodeWindow.nodeValue as Meta.Window;
-      if (!metaWindow || !focusNodeWindow.grabMode) {
+      if (!metaWindow || !this._getNodeGrab(focusNodeWindow)?.grabMode) {
         this._liveResizeSrcId = 0;
         return GLib.SOURCE_REMOVE;
       }
@@ -694,7 +710,8 @@ export class GrabResizeSession {
 
   _repositionDuringResize(focusNodeWindow: Node<any> | null) {
     const host = this._host;
-    if (!focusNodeWindow || !focusNodeWindow.initRect) {
+    const initRect = focusNodeWindow ? this._getNodeGrab(focusNodeWindow)?.initRect : null;
+    if (!focusNodeWindow || !initRect) {
       Logger.debug(`_repositionDuringResize: skip — no focusNodeWindow or no initRect`);
       return;
     }
@@ -703,7 +720,6 @@ export class GrabResizeSession {
     if (!metaWindow) return;
 
     const frameRect = metaWindow.get_frame_rect();
-    const initRect = focusNodeWindow.initRect;
     const gaps = host.calculateGaps(focusNodeWindow);
 
     const grabOps = Utils.decomposeGrabOp(this.grabOp);

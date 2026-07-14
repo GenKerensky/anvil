@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import St from "gi://St";
+import GLib from "gi://GLib";
 import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
@@ -343,19 +344,15 @@ describe("AnvilRuntime - Resize", () => {
     });
   });
 
-  describe("resize - _handleGrabOpBegin node state", () => {
-    it("should set initRect and grabMode on the focused node", () => {
+  describe("resize - _handleGrabOpBegin session state", () => {
+    it("keeps grab state on GrabResizeSession instead of the focused node", () => {
       const metaWindow = setupFocusWindow(ctx);
-      const initialRect = metaWindow.get_frame_rect();
 
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 20);
 
       const node = wm().findNodeWindow(metaWindow);
       expect(node).not.toBeNull();
-      expect(node!.initRect).not.toBeNull();
-      expect(node!.initRect!.width).toBe(initialRect.width);
-      expect(node!.initGrabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
-      expect(node!.grabMode).toBeDefined();
+      expect(wm()._grab.grabModeFor(node)).toBeDefined();
     });
   });
 
@@ -371,24 +368,21 @@ describe("AnvilRuntime - Resize", () => {
 
       expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
       const node = wm().findNodeWindow(metaWindow);
-      expect(node!.initRect).toBeNull();
-      expect(node!.grabMode).toBeNull();
+      expect(wm()._grab.grabModeFor(node)).toBeNull();
     });
   });
 
   describe("resize - _grabCleanup", () => {
-    it("should clear initRect, grabMode, and initGrabOp from node", () => {
+    it("clears session-owned grab state without writing to the node", () => {
       const metaWindow = setupFocusWindow(ctx);
       wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10);
 
       const node = wm().findNodeWindow(metaWindow);
-      expect(node!.initRect).not.toBeNull();
+      expect(wm()._grab.grabModeFor(node)).not.toBeNull();
 
       wm()._grabCleanup(node);
 
-      expect(node!.initRect).toBeNull();
-      expect(node!.grabMode).toBeNull();
-      expect(node!.initGrabOp).toBeNull();
+      expect(wm()._grab.grabModeFor(node)).toBeNull();
     });
   });
 
@@ -408,6 +402,21 @@ describe("AnvilRuntime - Resize", () => {
   describe("resize - _startLiveResizeLoop / _stopLiveResizeLoop", () => {
     it("should stop live resize loop without throwing when not started", () => {
       expect(() => wm()._stopLiveResizeLoop()).not.toThrow();
+    });
+  });
+
+  describe("resize - session disposal", () => {
+    it("clears all observable grab session state", () => {
+      const metaWindow = setupFocusWindow(ctx);
+      const node = wm().findNodeWindow(metaWindow);
+      wm()._handleGrabOpBegin(ctx.display, metaWindow, Meta.GrabOp.RESIZING_E);
+      wm()._grab.cancelGrab = true;
+
+      wm()._grab.dispose();
+
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
+      expect(wm()._grab.cancelGrab).toBe(false);
+      expect(wm()._grab.grabModeFor(node)).toBeNull();
     });
   });
 
@@ -493,8 +502,31 @@ describe("AnvilRuntime - Resize", () => {
       wm()._handleGrabOpBegin(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
 
       expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
-      expect(node1.initRect).toBeUndefined();
-      expect(node1.grabMode).toBeUndefined();
+      expect(wm()._grab.grabModeFor(node1)).toBeNull();
+    });
+
+    it("stops Anvil resize effects when tiling is disabled during a live grab", () => {
+      const { metaWin1, node1, node2 } = setupTwoWindows(ctx);
+      const removeSpy = vi.spyOn(GLib.Source, "remove");
+
+      wm()._handleGrabOpBegin(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
+      expect(wm()._grab.grabModeFor(node1)).not.toBeNull();
+
+      ctx.settings.set_boolean("tiling-mode-enabled", false);
+      wm()._settingsBridge.handleChanged("tiling-mode-enabled");
+      metaWin1.move_resize_frame(true, 0, 0, 1060, 1080);
+      wm()._grab.handleResizing(node1);
+
+      expect(removeSpy).toHaveBeenCalled();
+      expect(node1.percent).toBe(0.5);
+      expect(node2.percent).toBe(0.5);
+      // Mutter still owns the physical grab until its real grab-op-end signal.
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.RESIZING_E);
+
+      wm()._handleGrabOpEnd(ctx.display, metaWin1, Meta.GrabOp.RESIZING_E);
+
+      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
+      expect(wm()._grab.grabModeFor(node1)).toBeNull();
     });
 
     it("should persist percent after grab end", () => {
@@ -516,9 +548,7 @@ describe("AnvilRuntime - Resize", () => {
       expect(node1.percent).toBeCloseTo(expectedPercent1, 3);
       expect(node2.percent).toBeCloseTo(expectedPercent2, 3);
 
-      expect(node1.initRect).toBeNull();
-      expect(node1.grabMode).toBeNull();
-      expect(node1.initGrabOp).toBeNull();
+      expect(wm()._grab.grabModeFor(node1)).toBeNull();
     });
 
     it("should persist percent after grab end with explicit rects check", () => {
@@ -538,8 +568,7 @@ describe("AnvilRuntime - Resize", () => {
 
       expect(node1.percent).not.toBe(0.5);
       expect(node2.percent).not.toBe(0.5);
-      expect(node1.initRect).toBeNull();
-      expect(node1.grabMode).toBeNull();
+      expect(wm()._grab.grabModeFor(node1)).toBeNull();
     });
 
     it("should preserve a pointer-resized split through the grab-end render", () => {
@@ -579,7 +608,7 @@ describe("AnvilRuntime - Resize", () => {
     it("should not change percent when initGrabOp is KEYBOARD_RESIZING_UNKNOWN", () => {
       const { metaWin1, node1, node2 } = setupTwoWindows(ctx);
 
-      node1.initGrabOp = Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN;
+      wm()._handleGrabOpBegin(ctx.display, metaWin1, Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN);
 
       wm()._grab.handleResizing(node1);
 

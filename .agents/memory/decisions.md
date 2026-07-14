@@ -1,5 +1,17 @@
 # Architecture Decisions
 
+## Portable core remains experimental (2026-07-14)
+
+- The portable tiling core is an experimental, opt-in implementation. It is not ready or approved
+  to become Anvil's default runtime.
+- The legacy production runtime remains authoritative. Shadow mode is diagnostic only and never
+  applies portable-core intentions.
+- Core maturation, default cutover, and legacy retirement are a separate line of work. Ordinary
+  production bug fixes and broad cleanups must not expand into `src/lib/tiling/`, core adapters,
+  parity machinery, engine-default selection, or legacy removal.
+- Existing parity and E2E evidence demonstrates progress, not approval. A future cutover requires
+  a separately accepted plan and explicit approval after the remaining real-shell work.
+
 ## Unsafe mode ownership (2026-07-14)
 
 - Anvil never writes `global.context.unsafe_mode`. The `test-mode` setting only exposes
@@ -196,7 +208,8 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 
 ### Residual Stage 18 — grab session ownership (2026-07-11)
 
-- Grab initRect/grabMode/initGrabOp owned by GrabResizeSession map (mirrored on Node) (B8-6).
+- Grab initRect/grabMode/initGrabOp are owned only by the GrabResizeSession map; Tree nodes do not
+  mirror active-grab state (B8-6).
 - Live 16ms resize poll only on Wayland; X11 uses size-changed path (B8-5).
 
 ### Residual Stage 17 — float cache + BorderController (2026-07-11)
@@ -212,6 +225,8 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   an actor that can own a `Clutter.Effect`.
 - The mask preserves pixels outside the frame bounds so client-side shadows remain intact.
 - Native reliability takes precedence over extension-specific shadow styling controls.
+- Removing Anvil's focused/unfocused shadow customization is an intentional compatibility change;
+  those settings and stylesheet hooks are not part of the native-shadow contract.
 
 ### Residual Stage 16 — layout/focus/pointer (2026-07-11)
 

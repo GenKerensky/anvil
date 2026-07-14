@@ -31,6 +31,7 @@ describe("SettingsBridge", () => {
       cleanupAlwaysFloat: vi.fn(),
       restoreAlwaysFloat: vi.fn(),
       clearResizedWindows: vi.fn(),
+      suspendGrabResizeTilingEffects: vi.fn(),
       observePortablePolicy: vi.fn(),
     };
     bridge = new SettingsBridge(host);
@@ -61,6 +62,23 @@ describe("SettingsBridge", () => {
     expect(host.observePortablePolicy.mock.invocationCallOrder[0]).toBeLessThan(
       host.renderTree.mock.invocationCallOrder[0]
     );
+  });
+
+  it("suspends Anvil resize effects when tiling is disabled", () => {
+    host.settings.get_boolean.mockReturnValue(false);
+
+    bridge.handleChanged("tiling-mode-enabled");
+
+    expect(host.suspendGrabResizeTilingEffects).toHaveBeenCalledOnce();
+    expect(host.renderTree).toHaveBeenCalledWith("tiling-mode-enabled");
+  });
+
+  it("does not suspend resize effects when tiling is enabled", () => {
+    host.settings.get_boolean.mockReturnValue(true);
+
+    bridge.handleChanged("tiling-mode-enabled");
+
+    expect(host.suspendGrabResizeTilingEffects).not.toHaveBeenCalled();
   });
 
   it("window-overrides-reload-trigger reloads overrides", () => {

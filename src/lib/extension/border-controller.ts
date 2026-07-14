@@ -42,7 +42,6 @@ export class BorderController {
   private _splitBorder: St.Bin | null = null;
   private _focusOwner: AnvilWindowActor | null = null;
   private _splitOwner: AnvilWindowActor | null = null;
-  private _activeTab: St.Widget | null = null;
   private _maskFailureLogged = false;
 
   constructor(private readonly _host: BorderControllerHost) {}
@@ -80,7 +79,6 @@ export class BorderController {
     if (this._activeWindow === metaWindow) {
       if (actorDestroyed) {
         this._activeWindow = null;
-        this._clearActiveTab();
         this._setVisible(this._focusBorder, false);
         this._setVisible(this._splitBorder, false);
         this._focusOwner = null;
@@ -107,7 +105,6 @@ export class BorderController {
     const previous = this._activeWindow;
     if (previous === next) return;
 
-    this._clearActiveTab();
     if (previous) this._detachSingletons(this._records.get(previous)?.actor);
     this._activeWindow = next;
     if (next) this.reconcileActiveWindow();
@@ -147,13 +144,11 @@ export class BorderController {
 
   suspendAll(): void {
     this._hideSingletonHints();
-    this._clearActiveTab();
     for (const record of this._records.values()) this._removeWindowMask(record);
   }
 
   destroy(): void {
     this._activeWindow = null;
-    this._clearActiveTab();
     for (const record of [...this._records.values()]) this.unregisterWindow(record.window);
     if (this._focusBorder) this._removeActor(this._focusBorder);
     if (this._splitBorder) this._removeActor(this._splitBorder);
@@ -260,14 +255,6 @@ export class BorderController {
       this._setFocusOwner(null);
     }
 
-    const desiredTab =
-      parentNode.isTabbed() && nodeWindow.tab ? (nodeWindow.tab as St.Widget) : null;
-    if (this._activeTab !== desiredTab) {
-      this._clearActiveTab();
-      this._activeTab = desiredTab;
-      this._activeTab?.add_style_class_name("window-tabbed-tab-active");
-    }
-
     const splitBorder = this._ensureSplitBorder();
     const showSplit =
       settings.get_boolean("split-border-toggle") &&
@@ -346,16 +333,6 @@ export class BorderController {
       this._stackBelow(actor, sibling);
       sibling = actor;
     }
-  }
-
-  private _clearActiveTab(): void {
-    if (!this._activeTab) return;
-    try {
-      this._activeTab.remove_style_class_name("window-tabbed-tab-active");
-    } catch {
-      /* actor already destroyed */
-    }
-    this._activeTab = null;
   }
 
   private _setFrameGeometry(
