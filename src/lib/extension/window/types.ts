@@ -19,7 +19,6 @@ export type AnvilWindowActor = Clutter.Actor & {
   get_meta_window?(): Meta.Window | null;
   actorSignals?: number[];
   border?: St.Bin;
-  cornerShadow?: St.Bin;
   splitBorder?: St.Bin;
 };
 export type AnvilMetaWorkspace = Meta.Workspace & {

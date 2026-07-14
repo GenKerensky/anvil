@@ -24,6 +24,7 @@ import type { SettingsBridge } from "./settings-bridge.js";
 import type { PointerFocusSource } from "./pointer-policy.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import type { EventSchedulerPort } from "./event-scheduler.js";
+import type { BorderRefreshMode } from "./render-scheduler.js";
 type SignalId = number;
 
 /** Host surface for SignalManager — intentionally wide (C1 accepted seam). */
@@ -34,11 +35,14 @@ export interface SignalManagerHost {
   readonly layout: LayoutEngine;
   readonly settingsBridge: SettingsBridge;
 
-  renderTree(from: string, force?: boolean): void;
+  renderTree(from: string, force?: boolean, borderRefresh?: BorderRefreshMode): void;
   trackCurrentMonWs(): void;
   updateMetaWorkspaceMonitor(from: string, mon: number | null, w: Meta.Window): void;
   updateDecorationLayout(): void;
-  hideWindowBorders(): void;
+  updateBorderLayout(): void;
+  setActiveWindowDecoration(window: Meta.Window | null): void;
+  showingDesktop(): boolean;
+  suspendWindowDecorations(): void;
   notifyWorkspaceSettled(): void;
   notifyFocusChanged(node: Node<NodeType> | null, source: PointerFocusSource): void;
 
@@ -98,6 +102,9 @@ export class SignalManager {
       extDisplay.connect("window-created", (_d, w) => {
         host.tracker.onWindowCreated(_d, w);
       }),
+      extDisplay.connect("notify::focus-window", () => {
+        host.setActiveWindowDecoration(extDisplay.get_focus_window());
+      }),
       extDisplay.connect("grab-op-begin", (_d, m, g) => host.handleGrabOpBegin(_d, m, g)),
       extDisplay.connect("window-entered-monitor", (_, monitor, metaWindow) => {
         host.observePortableWindow(metaWindow);
@@ -106,7 +113,8 @@ export class SignalManager {
       }),
       extDisplay.connect("grab-op-end", (_d, m, g) => host.handleGrabOpEnd(_d, m, g)),
       extDisplay.connect("showing-desktop-changed", () => {
-        host.hideWindowBorders();
+        if (host.showingDesktop()) host.suspendWindowDecorations();
+        else host.updateBorderLayout();
         host.updateDecorationLayout();
       }),
       extDisplay.connect("in-fullscreen-changed", () => {
@@ -138,7 +146,6 @@ export class SignalManager {
         host.tracker.trackMappedActor(actor);
       }),
       shellWm.connect("minimize", () => {
-        host.hideWindowBorders();
         if (host.coreTilingEngine) return;
         const focusNodeWindow = host.tree.findNode(global.display.get_focus_window());
         if (focusNodeWindow) {
@@ -178,7 +185,8 @@ export class SignalManager {
 
     this._workspaceManagerSignals = [
       extWsm.connect("showing-desktop-changed", () => {
-        host.hideWindowBorders();
+        if (host.showingDesktop()) host.suspendWindowDecorations();
+        else host.updateBorderLayout();
         host.updateDecorationLayout();
       }),
       extWsm.connect("workspace-added", (_wsm, wsIndex) => {
@@ -202,10 +210,10 @@ export class SignalManager {
         // Bug #374 fix: Set flag to prevent focus jumping during workspace transitions
         // Ported from jcrussell/forge
         host.workspaceChanging = true;
-        host.hideWindowBorders();
+        host.suspendWindowDecorations();
         host.trackCurrentMonWs();
         host.updateDecorationLayout();
-        host.renderTree("active-workspace-changed");
+        host.renderTree("active-workspace-changed", false, "skip");
         // Clear previous timer to avoid races on rapid workspace switches
         if (this._workspaceChangingTimeoutId) {
           GLib.Source.remove(this._workspaceChangingTimeoutId);
@@ -215,7 +223,7 @@ export class SignalManager {
         this._workspaceChangingTimeoutId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 300, () => {
           this._workspaceChangingTimeoutId = 0;
           host.workspaceChanging = false;
-          // Tree should have rendered by now (idle_add runs before 300ms timeout)
+          host.updateBorderLayout();
           host.notifyWorkspaceSettled();
           return false;
         });

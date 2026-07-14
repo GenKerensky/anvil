@@ -33,7 +33,8 @@ const MASK_CODE = `
 vec2 point = cogl_tex_coord0_in.xy / anvilMaskPixelStep;
 float coverage = anvilPointInsideBounds(point, anvilMaskBounds)
   ? anvilInnerFrameCoverage(point, anvilMaskBounds, anvilMaskRadius)
-  : 0.0;
+  // Preserve client-drawn shadow pixels outside the frame bounds.
+  : 1.0;
 cogl_color_out *= coverage;
 `;
 
@@ -54,6 +55,12 @@ export const WindowCornerMaskEffect = GObject.registerClass(
     }
 
     update(bounds: [number, number, number, number], radius: number): void {
+      if (
+        this._radius === radius &&
+        this._bounds.every((value, index) => value === bounds[index])
+      ) {
+        return;
+      }
       this._bounds = bounds;
       this._radius = radius;
       this.queue_repaint();

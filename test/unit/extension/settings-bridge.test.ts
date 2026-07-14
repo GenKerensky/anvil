@@ -20,10 +20,7 @@ describe("SettingsBridge", () => {
         getNodeByLayout: vi.fn(() => []),
       },
       reloadWindowOverrides: vi.fn(),
-      bordersEnabled: vi.fn(() => true),
-      ensureAllBorderActors: vi.fn(),
       updateBorderLayout: vi.fn(),
-      destroyAllBorderActors: vi.fn(),
       pointerPolicyNeeded: vi.fn(() => false),
       ensurePointerPolicy: vi.fn(),
       teardownPointerPolicy: vi.fn(),
@@ -79,17 +76,14 @@ describe("SettingsBridge", () => {
     expect(host.renderTree).not.toHaveBeenCalled();
   });
 
-  it("focus-border-toggle ensures borders when enabled", () => {
-    host.bordersEnabled.mockReturnValue(true);
+  it("focus-border-toggle reconciles registered decorations when enabled", () => {
     bridge.handleChanged("focus-border-toggle");
-    expect(host.ensureAllBorderActors).toHaveBeenCalled();
     expect(host.updateBorderLayout).toHaveBeenCalled();
   });
 
-  it("focus-border-toggle destroys borders when disabled", () => {
-    host.bordersEnabled.mockReturnValue(false);
+  it("focus-border-toggle reconciles without destroying lifecycle state when disabled", () => {
     bridge.handleChanged("focus-border-toggle");
-    expect(host.destroyAllBorderActors).toHaveBeenCalled();
+    expect(host.updateBorderLayout).toHaveBeenCalled();
   });
 
   it("refreshes border geometry after a stylesheet update", () => {

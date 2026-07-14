@@ -227,7 +227,6 @@ describe("AnvilRuntime - Lifecycle", () => {
     it("should not throw for missing actor properties", () => {
       const actor = {
         border: null,
-        cornerShadow: null,
         splitBorder: null,
         actorSignals: null,
         connect: vi.fn(),
@@ -269,14 +268,32 @@ describe("AnvilRuntime - Lifecycle", () => {
       const window = createMockWindow({ workspace: ctx.workspaces[0] });
       const observe = vi.spyOn(wm()._tilingShadow, "observeFocus");
       const legacy = vi.spyOn(wm()._eventScheduler, "enqueue");
+      const setActiveDecoration = vi.spyOn(wm()._borders, "setActiveWindow");
+      const render = vi.spyOn(wm(), "renderTree");
       wm()._tracker.trackWindow(ctx.display, window);
       observe.mockClear();
       legacy.mockClear();
+      setActiveDecoration.mockClear();
+      render.mockClear();
 
       window.emit("focus", window);
 
       expect(observe).toHaveBeenCalledWith(window);
+      expect(setActiveDecoration).toHaveBeenCalledExactlyOnceWith(window);
+      expect(render).toHaveBeenCalledWith("focus", true, "skip");
       expect(observe.mock.invocationCallOrder[0]).toBeLessThan(legacy.mock.invocationCallOrder[0]);
+    });
+
+    it("uses the surgical active-decoration update for core focus changes", () => {
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const setActiveDecoration = vi.spyOn(wm()._borders, "setActiveWindow");
+      wm()._tilingEngineMode = "core";
+      wm()._tracker.trackWindow(ctx.display, window);
+      setActiveDecoration.mockClear();
+
+      window.emit("focus", window);
+
+      expect(setActiveDecoration).toHaveBeenCalledExactlyOnceWith(window);
     });
 
     it("observes minimized availability before legacy rendering", () => {

@@ -25,10 +25,7 @@ export interface SettingsBridgeHost {
   readonly tree: Tree;
 
   reloadWindowOverrides(): void;
-  bordersEnabled(): boolean;
-  ensureAllBorderActors(): void;
   updateBorderLayout(): void;
-  destroyAllBorderActors(): void;
   pointerPolicyNeeded(): boolean;
   ensurePointerPolicy(): void;
   teardownPointerPolicy(): void;
@@ -60,12 +57,9 @@ const PORTABLE_POLICY_KEYS = new Set([
 ]);
 
 function handleBorderToggles(host: SettingsBridgeHost, _key: string): void {
-  if (host.bordersEnabled()) {
-    host.ensureAllBorderActors();
-    host.updateBorderLayout();
-  } else {
-    host.destroyAllBorderActors();
-  }
+  // A toggle changes desired decoration state; it does not end any tracked
+  // window's lifecycle. Reconcile in place so re-enabling can restore actors.
+  host.updateBorderLayout();
 }
 
 function handlePointerPolicy(host: SettingsBridgeHost, key: string): void {

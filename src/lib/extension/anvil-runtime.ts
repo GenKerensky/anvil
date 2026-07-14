@@ -48,6 +48,7 @@ import { GRAB_TYPES, WINDOW_MODES } from "./window/constants.js";
 import { DragDropTile } from "./drag-drop-tile.js";
 import { SignalManager } from "./signal-manager.js";
 import { RenderScheduler } from "./render-scheduler.js";
+import type { BorderRefreshMode } from "./render-scheduler.js";
 import { DecorationLayout } from "./decoration-layout.js";
 import {
   createCommandHandlers,
@@ -242,11 +243,14 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       get settingsBridge() {
         return self._settingsBridge!;
       },
-      renderTree: (from, force) => self.renderTree(from, force),
+      renderTree: (from, force, borderRefresh) => self.renderTree(from, force, borderRefresh),
       trackCurrentMonWs: () => self.trackCurrentMonWs(),
       updateMetaWorkspaceMonitor: (from, mon, w) => self.updateMetaWorkspaceMonitor(from, mon, w),
       updateDecorationLayout: () => self.updateDecorationLayout(),
-      hideWindowBorders: () => self.hideWindowBorders(),
+      updateBorderLayout: () => self.updateBorderLayout(),
+      setActiveWindowDecoration: (window) => self.setActiveWindowDecoration(window),
+      showingDesktop: () => Boolean(global.display.get_property("showing-desktop", null)),
+      suspendWindowDecorations: () => self._borders!.suspendAll(),
       notifyWorkspaceSettled: () => self.notifyWorkspaceSettled(),
       notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
       isRenderFrozen: () => self._freezeRender,
@@ -367,15 +371,21 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       reloadTree: (from) => self.reloadTree(from),
       updateMetaWorkspaceMonitor: (from, mon, w) => self.updateMetaWorkspaceMonitor(from, mon, w),
       updateMetaPositionSize: (w, from) => self.updateMetaPositionSize(w, from),
-      renderTree: (from, force) => self.renderTree(from, force),
+      renderTree: (from, force, borderRefresh) => {
+        if (borderRefresh) self.renderTree(from, force, borderRefresh);
+        else self.renderTree(from, force);
+      },
       get scheduler() {
         return self._eventScheduler!;
       },
       unfreezeRender: () => self.unfreezeRender(),
-      ensureBorderActors: (a) => self.ensureBorderActors(a),
-      destroyWindowActors: (a) => self.destroyWindowActors(a),
-      hideActorBorder: (a) => self.hideActorBorder(a),
+      registerWindowDecoration: (window, actor) => self._borders!.registerWindow(window, actor),
+      unregisterWindowDecoration: (window, actorDestroyed) =>
+        self._borders!.unregisterWindow(window, actorDestroyed),
       updateBorderLayout: () => self.updateBorderLayout(),
+      setActiveWindowDecoration: (nextWindow) => self.setActiveWindowDecoration(nextWindow),
+      reconcileWindowDecoration: (metaWindow) => self._borders!.reconcileWindow(metaWindow),
+      reconcileActiveWindowDecoration: () => self._borders!.reconcileActiveWindow(),
       updateDecorationLayout: () => self.updateDecorationLayout(),
       updateStackedFocus: (n) => self.updateStackedFocus(n),
       updateTabbedFocus: (n) => self.updateTabbedFocus(n),
@@ -400,10 +410,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         return self.tree;
       },
       reloadWindowOverrides: () => self.reloadWindowOverrides(),
-      bordersEnabled: () => self._bordersEnabled(),
-      ensureAllBorderActors: () => self.ensureAllBorderActors(),
       updateBorderLayout: () => self.updateBorderLayout(),
-      destroyAllBorderActors: () => self.destroyAllBorderActors(),
       pointerPolicyNeeded: () => self._pointerPolicyNeeded(),
       ensurePointerPolicy: () => self._ensurePointerPolicy(),
       teardownPointerPolicy: () => self._teardownPointerPolicy(),
@@ -951,7 +958,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     safely("core previews", () => this._previewPresenter?.destroy());
     safely("decorations", () => Utils._disableDecorations());
     safely("signals", () => this._signalManager?.unbindAll());
-    safely("borders", () => this._borders?.destroyAllBorderActors());
+    safely("borders", () => this._borders?.destroy());
     safely("tracker", () => this._tracker?.dispose());
     safely("grab-resize", () => this._grab?.dispose());
     safely("settings", () => this._settingsBridge?.disable());
@@ -1083,35 +1090,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._wsMutations!.unfloatWorkspace(workspaceIndex);
   }
 
-  private _bordersEnabled() {
-    const settings = this.ext.settings;
-    return (
-      settings.get_boolean("focus-border-toggle") || settings.get_boolean("split-border-toggle")
-    );
-  }
-
-  private ensureBorderActors(windowActor: AnvilWindowActor | null) {
-    this._borders!.ensureBorderActors(windowActor);
-  }
-
-  private ensureAllBorderActors() {
-    this._borders!.ensureAllBorderActors();
-  }
-
-  private destroyWindowActors(actor: AnvilWindowActor) {
-    this._borders!.destroyWindowActors(actor);
-  }
-
-  private destroyAllBorderActors() {
-    this._borders!.destroyAllBorderActors();
-  }
-
-  private hideActorBorder(actor: AnvilWindowActor | null) {
-    this._borders!.hideActorBorder(actor);
-  }
-
-  private hideWindowBorders() {
-    this._borders!.hideWindowBorders();
+  private setActiveWindowDecoration(nextWindow: Meta.Window | null) {
+    this._borders!.setActiveWindow(nextWindow);
   }
 
   // Window movement API
@@ -1197,9 +1177,13 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     return null;
   }
 
-  private renderTree(from: string, force: boolean = false) {
+  private renderTree(
+    from: string,
+    force: boolean = false,
+    borderRefresh: BorderRefreshMode = "full"
+  ) {
     if (this._tilingEngineMode === "core") return;
-    this._renderScheduler!.renderTree(from, force);
+    this._renderScheduler!.renderTree(from, force, borderRefresh);
   }
 
   private get allNodeWindows() {
@@ -1231,7 +1215,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private updateBorderLayout() {
-    this._borders!.updateBorderLayout();
+    this._borders!.reconcileAll();
   }
 
   private updateStackedFocus(focusNodeWindow: Node<any> | undefined | null) {

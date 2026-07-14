@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import Clutter from "gi://Clutter";
 import St from "gi://St";
 import { Logger } from "../../../src/lib/shared/logger.js";
 import { WindowCornerMaskEffect } from "../../../src/lib/extension/window-corner-mask-effect.js";
@@ -16,6 +17,9 @@ import {
 } from "../mocks/helpers/index.js";
 
 describe("AnvilRuntime - Borders", () => {
+  const mask = (actor: any) =>
+    actor.get_first_child()?.get_effect("anvil-window-corner-mask") ?? null;
+
   const trackTestWindow = (
     ctx: any,
     window = createMockWindow({
@@ -41,8 +45,9 @@ describe("AnvilRuntime - Borders", () => {
 
       const window = trackTestWindow(ctx);
       const actor = window.get_compositor_private();
+      ctx.anvilRuntime._borders.setActiveWindow(window);
 
-      expect(actor.border).toBeNull();
+      expect(actor.border).toBeFalsy();
     });
 
     it("should create a border actor when focus-border-toggle is true", () => {
@@ -58,12 +63,12 @@ describe("AnvilRuntime - Borders", () => {
 
       const window = trackTestWindow(ctx);
       const actor = window.get_compositor_private();
+      ctx.anvilRuntime._borders.setActiveWindow(window);
 
       expect(actor.border).not.toBeNull();
-      expect(actor.cornerShadow).not.toBeNull();
       expect(ctx.windowGroup.contains(actor.border)).toBe(true);
-      expect(ctx.windowGroup.contains(actor.cornerShadow)).toBe(true);
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(mask(actor)).toBeTruthy();
+      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
     });
 
     it("should continuously mask unfocused tracked windows while hints are enabled", () => {
@@ -77,8 +82,8 @@ describe("AnvilRuntime - Borders", () => {
       const first = trackTestWindow(ctx);
       const second = trackTestWindow(ctx);
 
-      expect(first.get_compositor_private().get_effect("anvil-window-corner-mask")).toBeTruthy();
-      expect(second.get_compositor_private().get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(mask(first.get_compositor_private())).toBeTruthy();
+      expect(mask(second.get_compositor_private())).toBeTruthy();
     });
 
     it("keeps the mask radius in the theme node's actor coordinate space", () => {
@@ -126,9 +131,86 @@ describe("AnvilRuntime - Borders", () => {
       expect(update).toHaveBeenCalledWith([10, 10, 110, 110], 15);
       update.mockRestore();
     });
+
+    it("does not repaint an unchanged corner mask", () => {
+      const repaint = vi.spyOn(WindowCornerMaskEffect.prototype, "queue_repaint");
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      ctx.windowGroup.add_child(window.get_compositor_private());
+      trackTestWindow(ctx, window);
+
+      repaint.mockClear();
+      ctx.anvilRuntime._borders.reconcileWindow(window);
+
+      expect(repaint).not.toHaveBeenCalled();
+    });
+
+    it("defers masking until the window texture exists", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const actor = window.get_compositor_private();
+      actor._children = [];
+
+      trackTestWindow(ctx, window);
+      expect(mask(actor)).toBeNull();
+
+      actor.add_child(new Clutter.Actor());
+      ctx.anvilRuntime._borders.reconcileWindow(window);
+      expect(mask(actor)).toBeTruthy();
+    });
+
+    it("moves the mask when Mutter replaces a window texture", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const window = trackTestWindow(ctx);
+      const actor = window.get_compositor_private();
+      const previousTexture = actor.get_first_child();
+      const nextTexture = new Clutter.Actor();
+
+      actor._children = [nextTexture];
+      ctx.anvilRuntime._borders.reconcileWindow(window);
+
+      expect(previousTexture.get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(nextTexture.get_effect("anvil-window-corner-mask")).toBeTruthy();
+    });
+
+    it("forgets a mask target when Mutter destroys the surface actor", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const window = trackTestWindow(ctx);
+      const actor = window.get_compositor_private();
+      const previousSurface = actor.get_first_child();
+
+      previousSurface.emit("destroy");
+      actor._children = [new Clutter.Actor()];
+
+      expect(() => ctx.anvilRuntime._borders.reconcileWindow(window)).not.toThrow();
+      expect(mask(actor)).toBeTruthy();
+    });
   });
 
   describe("settings toggles", () => {
+    it("fully reconciles a window that is already focused at admission", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const actor = window.get_compositor_private();
+      ctx.windowGroup.add_child(actor);
+      ctx.display.get_focus_window.mockReturnValue(window);
+
+      ctx.anvilRuntime._borders.registerWindow(window, actor);
+
+      expect(mask(actor)).toBeTruthy();
+      expect(actor.border?.visible).toBe(true);
+    });
+
     it("registers actor lifecycle while borders are disabled", () => {
       const ctx = createAnvilRuntimeFixture({
         settings: {
@@ -139,19 +221,22 @@ describe("AnvilRuntime - Borders", () => {
       const window = createMockWindow({ workspace: ctx.workspaces[0] });
       const actor = window.get_compositor_private();
 
-      ctx.anvilRuntime._borders.ensureBorderActors(actor);
+      ctx.anvilRuntime._borders.registerWindow(window, actor);
       ctx.settings.set_boolean("focus-border-toggle", true);
-      ctx.anvilRuntime._borders.ensureAllBorderActors();
+      ctx.display.get_focus_window.mockReturnValue(window);
+      ctx.anvilRuntime._borders.setActiveWindow(window);
+      ctx.anvilRuntime._borders.reconcileAll();
+      const border = actor.border;
 
       expect(actor.border).not.toBeNull();
-      expect(actor.cornerShadow).not.toBeNull();
+      expect(mask(actor)).toBeTruthy();
 
       window.maximize();
-      ctx.anvilRuntime._borders.ensureBorderActors(actor);
-      expect(actor.border.visible).toBe(false);
+      ctx.anvilRuntime._borders.reconcileWindow(window);
+      expect(border.visible).toBe(false);
 
       window.unmaximize();
-      ctx.anvilRuntime._borders.ensureBorderActors(actor);
+      ctx.anvilRuntime._borders.reconcileWindow(window);
       expect(actor.border.visible).toBe(true);
     });
 
@@ -165,16 +250,16 @@ describe("AnvilRuntime - Borders", () => {
 
       const window = trackTestWindow(ctx);
       const actor = window.get_compositor_private();
+      ctx.anvilRuntime._borders.setActiveWindow(window);
       expect(actor.border).not.toBeNull();
 
       ctx.settings.set_boolean("focus-border-toggle", false);
-      expect(ctx.anvilRuntime._bordersEnabled()).toBe(false);
-      ctx.anvilRuntime.destroyAllBorderActors();
+      expect(ctx.anvilRuntime._borders.bordersEnabled()).toBe(false);
+      ctx.anvilRuntime._borders.destroy();
 
       expect(actor.border).toBeUndefined();
-      expect(actor.cornerShadow).toBeUndefined();
       expect(ctx.windowGroup._children).not.toContain(actor.border);
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(mask(actor)).toBeNull();
     });
 
     it("should remove masks from maximized and fullscreen windows", () => {
@@ -191,27 +276,26 @@ describe("AnvilRuntime - Borders", () => {
       const actor = window.get_compositor_private();
       window.appears_focused_value = true;
       ctx.display.get_focus_window.mockReturnValue(window);
+      ctx.anvilRuntime._borders.setActiveWindow(window);
+      const border = actor.border;
 
       window.maximize();
-      ctx.anvilRuntime._borders.updateBorderLayout();
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
-      expect(actor.border.visible).toBe(false);
-      expect(actor.cornerShadow.visible).toBe(false);
+      ctx.anvilRuntime._borders.reconcileAll();
+      expect(mask(actor)).toBeNull();
+      expect(border.visible).toBe(false);
 
       window.unmaximize();
-      ctx.anvilRuntime._borders.updateBorderLayout();
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
+      ctx.anvilRuntime._borders.reconcileAll();
+      expect(mask(actor)).toBeTruthy();
       expect(actor.border.visible).toBe(true);
-      expect(actor.cornerShadow.visible).toBe(true);
 
       window.make_fullscreen();
-      ctx.anvilRuntime._borders.updateBorderLayout();
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
-      expect(actor.border.visible).toBe(false);
-      expect(actor.cornerShadow.visible).toBe(false);
+      ctx.anvilRuntime._borders.reconcileAll();
+      expect(mask(actor)).toBeNull();
+      expect(border.visible).toBe(false);
     });
 
-    it("keeps rounded shadows visible and reflects window focus", () => {
+    it("does not enter full window reconciliation during focus changes", () => {
       const ctx = createAnvilRuntimeFixture({
         settings: {
           "focus-border-toggle": true,
@@ -220,26 +304,138 @@ describe("AnvilRuntime - Borders", () => {
       });
       const first = trackTestWindow(ctx);
       const second = trackTestWindow(ctx);
+      const third = trackTestWindow(ctx);
+      const reconcile = vi.spyOn(ctx.anvilRuntime._borders, "reconcileWindow");
+
+      ctx.anvilRuntime._borders.setActiveWindow(first);
+      reconcile.mockClear();
+      ctx.anvilRuntime._borders.setActiveWindow(second);
+
+      expect(reconcile).not.toHaveBeenCalled();
+      expect(first.get_compositor_private().border).toBeUndefined();
+      expect(second.get_compositor_private().border?.visible).toBe(true);
+      expect(third.get_compositor_private().border).toBeFalsy();
+    });
+
+    it("moves one focus outline between windows without leaving compatibility ownership behind", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const first = trackTestWindow(ctx);
+      const second = trackTestWindow(ctx);
+      const third = trackTestWindow(ctx);
       const firstActor = first.get_compositor_private();
       const secondActor = second.get_compositor_private();
 
-      first.appears_focused_value = true;
-      second.appears_focused_value = false;
-      ctx.display.get_focus_window.mockReturnValue(first);
-      ctx.anvilRuntime._borders.updateBorderLayout();
+      ctx.anvilRuntime._borders.setActiveWindow(first);
+      const outline = firstActor.border;
+      ctx.anvilRuntime._borders.setActiveWindow(second);
 
-      expect(firstActor.cornerShadow.visible).toBe(true);
-      expect(firstActor.cornerShadow.style_class).toBe("window-focused-shadow");
-      expect(secondActor.cornerShadow.visible).toBe(true);
-      expect(secondActor.cornerShadow.style_class).toBe("window-unfocused-shadow");
+      expect(firstActor.border).toBeUndefined();
+      expect(secondActor.border).toBe(outline);
+      expect(third.get_compositor_private().border).toBeFalsy();
+      expect(ctx.windowGroup._children.filter((actor: any) => actor === outline)).toHaveLength(1);
+    });
 
-      first.appears_focused_value = false;
-      second.appears_focused_value = true;
-      ctx.display.get_focus_window.mockReturnValue(second);
-      ctx.anvilRuntime._borders.updateBorderLayout();
+    it("reconciles active hints without entering full window reconciliation", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const first = trackTestWindow(ctx);
+      const second = trackTestWindow(ctx);
+      ctx.anvilRuntime._borders.setActiveWindow(first);
+      ctx.anvilRuntime._borders.reconcileActiveWindow();
+      ctx.anvilRuntime._borders.setActiveWindow(second);
+      const reconcile = vi.spyOn(ctx.anvilRuntime._borders, "reconcileWindow");
 
-      expect(firstActor.cornerShadow.style_class).toBe("window-unfocused-shadow");
-      expect(secondActor.cornerShadow.style_class).toBe("window-focused-shadow");
+      ctx.anvilRuntime._borders.reconcileActiveWindow();
+
+      expect(reconcile).not.toHaveBeenCalled();
+      expect(second.get_compositor_private().border?.visible).toBe(true);
+    });
+
+    it("does not restack an already ordered decoration chain", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": true },
+      });
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      ctx.windowGroup.add_child(window.get_compositor_private());
+      trackTestWindow(ctx, window);
+      ctx.anvilRuntime._borders.setActiveWindow(window);
+      ctx.anvilRuntime._borders.reconcileActiveWindow();
+      ctx.windowGroup.set_child_below_sibling.mockClear();
+
+      ctx.anvilRuntime._borders.reconcileWindow(window);
+
+      expect(ctx.windowGroup.set_child_below_sibling).not.toHaveBeenCalled();
+    });
+
+    it("treats repeated focus as a no-op and hides the singleton on null focus", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const window = trackTestWindow(ctx);
+      const reconcile = vi.spyOn(ctx.anvilRuntime._borders, "reconcileWindow");
+
+      ctx.anvilRuntime._borders.setActiveWindow(window);
+      reconcile.mockClear();
+      ctx.anvilRuntime._borders.setActiveWindow(window);
+      expect(reconcile).not.toHaveBeenCalled();
+
+      ctx.anvilRuntime._borders.setActiveWindow(null);
+      expect(reconcile).not.toHaveBeenCalled();
+    });
+
+    it("ignores an untracked next window and survives destroying the cached focus", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const tracked = trackTestWindow(ctx);
+      const next = trackTestWindow(ctx);
+      const untracked = createMockWindow({ workspace: ctx.workspaces[0] });
+      const reconcile = vi.spyOn(ctx.anvilRuntime._borders, "reconcileWindow");
+
+      ctx.anvilRuntime._borders.setActiveWindow(tracked);
+      reconcile.mockClear();
+      ctx.anvilRuntime._borders.setActiveWindow(untracked);
+      expect(reconcile).not.toHaveBeenCalled();
+
+      ctx.anvilRuntime._borders.setActiveWindow(next);
+      ctx.anvilRuntime._borders.unregisterWindow(next);
+      reconcile.mockClear();
+      expect(() => ctx.anvilRuntime._borders.setActiveWindow(tracked)).not.toThrow();
+      expect(reconcile).not.toHaveBeenCalled();
+      expect(tracked.get_compositor_private().border?.visible).toBe(true);
+    });
+
+    it("hides the singleton and removes/restores the mask across minimize transitions", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: {
+          "focus-border-toggle": true,
+          "split-border-toggle": false,
+          "focus-border-hidden-on-single": false,
+        },
+      });
+      const window = trackTestWindow(ctx);
+      const actor = window.get_compositor_private();
+      window.appears_focused_value = true;
+      ctx.display.get_focus_window.mockReturnValue(window);
+      ctx.anvilRuntime._borders.setActiveWindow(window);
+      ctx.anvilRuntime._borders.reconcileAll();
+      const border = actor.border;
+
+      expect(actor.border.visible).toBe(true);
+      expect(mask(actor)).toBeTruthy();
+
+      window.minimized = true;
+      ctx.anvilRuntime._borders.reconcileWindow(window);
+      expect(border.visible).toBe(false);
+      expect(mask(actor)).toBeNull();
+
+      window.minimized = false;
+      ctx.anvilRuntime._borders.reconcileWindow(window);
+      expect(actor.border.visible).toBe(true);
+      expect(mask(actor)).toBeTruthy();
     });
 
     it("should keep the border and mask enabled for a normal zero-gap window", () => {
@@ -258,10 +454,10 @@ describe("AnvilRuntime - Borders", () => {
       window.appears_focused_value = true;
       ctx.display.get_focus_window.mockReturnValue(window);
 
-      ctx.anvilRuntime._borders.updateBorderLayout();
+      ctx.anvilRuntime._borders.reconcileAll();
 
       expect(actor.border.visible).toBe(true);
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(mask(actor)).toBeTruthy();
     });
 
     it("should remove the mask when a tracked window is destroyed", () => {
@@ -273,11 +469,11 @@ describe("AnvilRuntime - Borders", () => {
       });
       const window = trackTestWindow(ctx);
       const actor = window.get_compositor_private();
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(mask(actor)).toBeTruthy();
 
       ctx.anvilRuntime._tracker.windowDestroy(actor);
 
-      expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
+      expect(mask(actor)).toBeNull();
     });
 
     it("should preserve borders and log once when mask setup fails", () => {
@@ -294,19 +490,18 @@ describe("AnvilRuntime - Borders", () => {
       ];
       for (const window of failingWindows) {
         const actor = window.get_compositor_private();
-        vi.spyOn(actor, "add_effect_with_name").mockImplementation(() => {
+        vi.spyOn(actor.get_first_child(), "add_effect_with_name").mockImplementation(() => {
           throw new Error("shader unavailable");
         });
         trackTestWindow(ctx, window);
-        expect(actor.border).toBeTruthy();
-        expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
+        expect(mask(actor)).toBeNull();
       }
 
       expect(warn).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe("showWindowBorders split border", () => {
+  describe("reconcileAll split border", () => {
     it("should show splitBorder for V-split when split-border is enabled and window is not maximized", () => {
       const ctx = createAnvilRuntimeFixture({
         settings: {
@@ -330,7 +525,8 @@ describe("AnvilRuntime - Borders", () => {
 
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      ctx.anvilRuntime._borders.showWindowBorders();
+      ctx.anvilRuntime._borders.registerWindow(metaWindow, metaWindow.get_compositor_private());
+      ctx.anvilRuntime._borders.reconcileAll();
 
       const actor = metaWindow.get_compositor_private();
       expect(actor.splitBorder).toBeTruthy();

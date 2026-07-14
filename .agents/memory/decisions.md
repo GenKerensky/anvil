@@ -204,6 +204,15 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 - RulesEngine caches match() by window id + identity until override reload (B7-1).
 - **BorderController** owns focus/split border actors; WM is a facade (B7-2).
 
+### Native window-shadow ownership (2026-07-14)
+
+- Mutter or the Wayland client owns window shadows; Anvil does not create sibling shadow actors.
+- `BorderController` owns only rounded surface masks and singleton focus/split hints. The effect
+  attaches to Mutter's window-surface child because `Meta.ShapedTexture` is `Clutter.Content`, not
+  an actor that can own a `Clutter.Effect`.
+- The mask preserves pixels outside the frame bounds so client-side shadows remain intact.
+- Native reliability takes precedence over extension-specific shadow styling controls.
+
 ### Residual Stage 16 — layout/focus/pointer (2026-07-11)
 
 - **LayoutEngine.setLayout** for stacked/tabbed toggles (B6-2); determineSplitLayout already
@@ -515,7 +524,7 @@ A second audit of the refactor found remaining work; all resolved.
   contract is one rectangular layout canvas per Surface; genuinely non-rectangular regions are
   exposed as multiple Surfaces until region-set geometry is designed explicitly.
 
-### Rounded window shadow ownership (2026-07-13)
+### Rounded window shadow ownership (2026-07-13, superseded 2026-07-14)
 
 - **BorderController owns replacement shadows**: while window hint masking is active, each normal
   tracked window has a dedicated `cornerShadow` actor below its window actor. This preserves a

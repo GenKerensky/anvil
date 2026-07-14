@@ -29,6 +29,7 @@ import { WINDOW_MODES, INVALID_WINDOW_TYPES } from "./window/constants.js";
 import type { AnvilMetaWindow, AnvilWindowActor } from "./window/types.js";
 import type { PointerFocusSource } from "./pointer-policy.js";
 import type { EventSchedulerPort } from "./event-scheduler.js";
+import type { BorderRefreshMode } from "./render-scheduler.js";
 
 export interface WindowTrackerHost {
   readonly coreTilingEngine: boolean;
@@ -46,13 +47,15 @@ export interface WindowTrackerHost {
   updateMetaWorkspaceMonitor(from: string, monitor: number | null, metaWindow: Meta.Window): void;
   updateMetaPositionSize(metaWindow: Meta.Window, from: string): void;
 
-  renderTree(from: string, force?: boolean): void;
+  renderTree(from: string, force?: boolean, borderRefresh?: BorderRefreshMode): void;
   readonly scheduler: EventSchedulerPort;
   unfreezeRender(): void;
-  ensureBorderActors(actor: AnvilWindowActor): void;
-  destroyWindowActors(actor: AnvilWindowActor): void;
-  hideActorBorder(actor: AnvilWindowActor | null): void;
+  registerWindowDecoration(metaWindow: Meta.Window, actor: AnvilWindowActor): void;
+  unregisterWindowDecoration(metaWindow: Meta.Window, actorDestroyed?: boolean): void;
   updateBorderLayout(): void;
+  setActiveWindowDecoration(nextWindow: Meta.Window | null): void;
+  reconcileWindowDecoration(metaWindow: Meta.Window): void;
+  reconcileActiveWindowDecoration(): void;
   updateDecorationLayout(): void;
   updateStackedFocus(focusNodeWindow: Node<any> | null | undefined): void;
   updateTabbedFocus(focusNodeWindow: Node<any> | null | undefined): void;
@@ -406,11 +409,13 @@ export class WindowTracker {
               const from = "position-changed";
               host.observePortableFrame(_metaWindow);
               host.updateMetaPositionSize(_metaWindow, from);
+              host.reconcileWindowDecoration(_metaWindow);
             }),
             metaWindow.connect("size-changed", (_metaWindow: Meta.Window) => {
               const from = "size-changed";
               host.observePortableFrame(_metaWindow);
               host.updateMetaPositionSize(_metaWindow, from);
+              host.reconcileWindowDecoration(_metaWindow);
             }),
             // Re-classify on property changes so late-arriving metadata (for
             // Inkscape, Brave, etc.) causes a re-render + processFloats.
@@ -424,29 +429,33 @@ export class WindowTracker {
             }),
             metaWindow.connect("notify::minimized", () => {
               host.observePortableWindow(metaWindow);
+              host.reconcileWindowDecoration(metaWindow);
               host.renderTree("minimized-notify", true);
             }),
             metaWindow.connect("notify::fullscreen", () => {
               host.observePortableWindow(metaWindow);
+              host.reconcileWindowDecoration(metaWindow);
               host.renderTree("fullscreen-notify", true);
             }),
             metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
               host.withdrawPortableWindow(_metaWindow);
-              host.hideActorBorder(windowActor);
+              host.unregisterWindowDecoration(_metaWindow);
             }),
             metaWindow.connect("focus", (_metaWindowFocus: Meta.Window) => {
               host.observePortableFocus(_metaWindowFocus);
               if (Utils.isEphemeralHelperWindow(_metaWindowFocus)) {
+                host.setActiveWindowDecoration(null);
                 return;
               }
+              host.setActiveWindowDecoration(_metaWindowFocus);
               host.scheduler.enqueue({
                 name: "focus-update",
                 callback: () => {
                   host.unfreezeRender();
-                  host.updateBorderLayout();
                   host.updateDecorationLayout();
                   host.updateStackedFocus(undefined);
                   host.updateTabbedFocus(undefined);
+                  host.reconcileActiveWindowDecoration();
                   const focusNodeWindow = host.tree.findNode(host.focusMetaWindow);
                   host.notifyFocusChanged(focusNodeWindow, "signal");
                 },
@@ -465,11 +474,12 @@ export class WindowTracker {
                 }
                 host.tree.attachNode = focusNodeWindow;
               }
-              host.renderTree("focus", true);
+              host.renderTree("focus", true, "skip");
             }),
             metaWindow.connect("workspace-changed", (_metaWindow: Meta.Window) => {
               host.observePortableWindow(_metaWindow);
               host.updateMetaWorkspaceMonitor("metawindow-workspace-changed", null, _metaWindow);
+              host.reconcileWindowDecoration(_metaWindow);
               host.trackCurrentMonWs();
             }),
           ];
@@ -477,12 +487,16 @@ export class WindowTracker {
         }
 
         if (windowActor && !windowActor.actorSignals) {
-          const actorSignals = [windowActor.connect("destroy", this.windowDestroy.bind(this))];
+          const actorSignals = [
+            windowActor.connect("destroy", (actor: AnvilWindowActor) => {
+              this.windowDestroy(actor, metaWindow, true);
+            }),
+          ];
           windowActor.actorSignals = actorSignals;
         }
 
         if (windowActor) {
-          host.ensureBorderActors(windowActor);
+          host.registerWindowDecoration(metaWindow, windowActor);
 
           // Re-classify on first-frame: this is when the client has provided
           // its first buffer, which is typically after it has set final
@@ -516,7 +530,7 @@ export class WindowTracker {
     this._trackedWindows.add(metaWindow);
     const updateBorder = () => {
       const actor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-      if (actor) host.ensureBorderActors(actor);
+      if (actor) host.registerWindowDecoration(metaWindow, actor);
     };
 
     if (!anvilMetaWin.windowSignals) {
@@ -541,14 +555,18 @@ export class WindowTracker {
         }),
         metaWindow.connect("focus", (_metaWindow: Meta.Window) => {
           host.observePortableFocus(_metaWindow);
-          updateBorder();
+          host.setActiveWindowDecoration(
+            Utils.isEphemeralHelperWindow(_metaWindow) ? null : _metaWindow
+          );
         }),
         metaWindow.connect("workspace-changed", (_metaWindow: Meta.Window) => {
           host.observePortableWindow(_metaWindow);
+          host.reconcileWindowDecoration(_metaWindow);
         }),
         metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
           this._trackedWindows.delete(_metaWindow);
           host.withdrawPortableWindow(_metaWindow);
+          host.unregisterWindowDecoration(_metaWindow);
         }),
       ];
     }
@@ -560,16 +578,16 @@ export class WindowTracker {
     const host = this._host;
     const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
     if (windowActor && !windowActor.actorSignals) {
-      host.ensureBorderActors(windowActor);
+      host.registerWindowDecoration(metaWindow, windowActor);
       windowActor.actorSignals = [
         windowActor.connect("destroy", () => {
           this._trackedWindows.delete(metaWindow);
           host.withdrawPortableWindow(metaWindow);
-          host.destroyWindowActors(windowActor);
+          host.unregisterWindowDecoration(metaWindow, true);
         }),
         windowActor.connect("first-frame", () => {
           host.observePortableWindow(metaWindow);
-          host.ensureBorderActors(windowActor);
+          host.registerWindowDecoration(metaWindow, windowActor);
         }),
       ];
     }
@@ -616,24 +634,23 @@ export class WindowTracker {
    *   4. update attachNode
    *   5. single render (no dual quick + queued pass)
    */
-  windowDestroy(actor: AnvilWindowActor) {
+  windowDestroy(actor: AnvilWindowActor, knownMetaWindow?: Meta.Window, actorDestroyed = false) {
     const host = this._host;
     if (host.coreTilingEngine) {
-      const metaWindow = actor.meta_window ?? actor.get_meta_window?.();
+      const metaWindow = knownMetaWindow;
       if (metaWindow) {
         this._trackedWindows.delete(metaWindow);
         host.withdrawPortableWindow(metaWindow);
+        host.unregisterWindowDecoration(metaWindow, actorDestroyed);
       }
       return;
     }
     const nodeWindow = host.tree.findNodeByActor(actor) as unknown as Node<any> | null;
-    const metaWindow = (nodeWindow?.nodeValue ?? actor.meta_window ?? actor.get_meta_window?.()) as
-      | Meta.Window
-      | undefined;
+    const metaWindow = (nodeWindow?.nodeValue ?? knownMetaWindow) as Meta.Window | undefined;
     if (metaWindow) host.withdrawPortableWindow(metaWindow);
 
     // 1. Border actors
-    host.destroyWindowActors(actor);
+    if (metaWindow) host.unregisterWindowDecoration(metaWindow, actorDestroyed);
 
     const hadFocus = !!metaWindow && host.focusMetaWindow === metaWindow;
 

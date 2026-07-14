@@ -70,7 +70,7 @@ describe("Borders and Gaps", function () {
     expect(restored).toBe(false);
   });
 
-  it("attaches and restores corner masks across window states", async function () {
+  it("attaches and restores the surface mask across window states", async function () {
     getSettings().set_boolean("focus-border-toggle", true);
     await launchApp("org.gnome.Nautilus.desktop");
     await waitForWindowCount(1, 5000);
@@ -78,30 +78,30 @@ describe("Borders and Gaps", function () {
     const window = global.display.get_focus_window();
     expect(window).not.toBeNull();
     const actor = /** @type {any} */ (window.get_compositor_private());
-    const mask = () => actor.get_effect("anvil-window-corner-mask");
+    const mask = () => actor.get_first_child()?.get_effect("anvil-window-corner-mask") ?? null;
 
     expect(mask()).not.toBeNull();
-    expect(actor.cornerShadow).not.toBeNull();
-    expect(actor.cornerShadow.visible).toBe(true);
-    expect(actor.cornerShadow.style_class).toBe("window-focused-shadow");
+    expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
+
+    window.minimize();
+    await sleep(400);
+    expect(mask()).toBeNull();
+
+    window.unminimize();
+    await sleep(400);
+    expect(mask()).not.toBeNull();
 
     maximizeWindow(window);
     await sleep(400);
     expect(mask()).toBeNull();
-    expect(actor.border.visible).toBe(false);
-    expect(actor.cornerShadow.visible).toBe(false);
 
     unmaximizeWindow(window);
     await sleep(400);
     expect(mask()).not.toBeNull();
-    expect(actor.border.visible).toBe(true);
-    expect(actor.cornerShadow.visible).toBe(true);
 
     window.make_fullscreen();
     await sleep(400);
     expect(mask()).toBeNull();
-    expect(actor.border.visible).toBe(false);
-    expect(actor.cornerShadow.visible).toBe(false);
 
     window.unmake_fullscreen();
     await sleep(400);

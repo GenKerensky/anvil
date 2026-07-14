@@ -57,15 +57,25 @@ export function createMockWorkspaceManager(options = {}) {
 
 export function createMockWindowGroup() {
   const children = [];
-  return {
+  const attach = (child) => {
+    child._parent = group;
+    child.get_previous_sibling = () => {
+      const index = children.indexOf(child);
+      return index > 0 ? children[index - 1] : null;
+    };
+  };
+  const group = {
     _children: children,
+    get_children: vi.fn(() => [...children]),
     contains: vi.fn((child) => children.includes(child)),
     add_child: vi.fn((child) => {
       if (!children.includes(child)) children.push(child);
+      attach(child);
     }),
     remove_child: vi.fn((child) => {
       const index = children.indexOf(child);
       if (index !== -1) children.splice(index, 1);
+      child._parent = null;
     }),
     insert_child_below: vi.fn((child, sibling) => {
       const index = sibling ? children.indexOf(sibling) : -1;
@@ -74,6 +84,7 @@ export function createMockWindowGroup() {
       } else {
         children.push(child);
       }
+      attach(child);
     }),
     insert_child_above: vi.fn((child, sibling) => {
       const index = sibling ? children.indexOf(sibling) : -1;
@@ -82,8 +93,18 @@ export function createMockWindowGroup() {
       } else {
         children.push(child);
       }
+      attach(child);
+    }),
+    set_child_below_sibling: vi.fn((child, sibling) => {
+      const childIndex = children.indexOf(child);
+      if (childIndex !== -1) children.splice(childIndex, 1);
+      const siblingIndex = sibling ? children.indexOf(sibling) : -1;
+      if (siblingIndex >= 0) children.splice(siblingIndex, 0, child);
+      else children.push(child);
+      attach(child);
     }),
   };
+  return group;
 }
 
 export function createMockStage(options = {}) {

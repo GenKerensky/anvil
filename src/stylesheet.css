@@ -107,18 +107,6 @@
   border-radius: 18px;
 }
 
-.window-focused-shadow {
-  background-color: transparent;
-  border-radius: 18px;
-  box-shadow: 0 4px 18px 2px rgba(0, 0, 0, 0.35);
-}
-
-.window-unfocused-shadow {
-  background-color: transparent;
-  border-radius: 18px;
-  box-shadow: 0 3px 12px 0 rgba(0, 0, 0, 0.22);
-}
-
 .window-tilepreview-tiled {
   border-width: 1px;
   border-color: rgba(236, 94, 94, 0.4);

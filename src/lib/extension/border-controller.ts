@@ -1,27 +1,31 @@
 /**
- * BorderController — focus / split border actors (B7-2).
+ * BorderController — lifecycle owner for window decoration actors.
  *
- * Owns create/hide/show/update of tiled focus borders and split hints.
- * AnvilRuntime wires this owner behind its private composition seam.
+ * Focus and split hints are singletons moved between windows. Rounded masks
+ * are attached to each window's surface actor without replacing native shadows.
+ * All state application is idempotent.
  */
 
 import Gio from "gi://Gio";
 import Meta from "gi://Meta";
 import St from "gi://St";
+import Clutter from "gi://Clutter";
 
 import { Logger } from "../shared/logger.js";
 import { NODE_TYPES, type Node, type Tree } from "./tree.js";
 import { WINDOW_MODES } from "./window/constants.js";
 import { WindowCornerMaskEffect } from "./window-corner-mask-effect.js";
-import {
-  deriveWindowMaskRadius,
-  getWindowMaskBounds,
-  shouldMaskWindow,
-} from "./window-corner-mask.js";
+import { deriveWindowMaskRadius, getWindowMaskBounds } from "./window-corner-mask.js";
 import type { AnvilMetaWindow, AnvilWindowActor } from "./window/types.js";
 
 const WINDOW_MASK_EFFECT_NAME = "anvil-window-corner-mask";
 const DEFAULT_BORDER_INSET = 3;
+
+interface DecorationRecord {
+  readonly window: Meta.Window;
+  readonly actor: AnvilWindowActor;
+  maskTarget: Clutter.Actor | null;
+}
 
 export interface BorderControllerHost {
   readonly tree: Tree;
@@ -31,13 +35,16 @@ export interface BorderControllerHost {
 }
 
 export class BorderController {
-  private _host: BorderControllerHost;
+  private readonly _records = new Map<Meta.Window, DecorationRecord>();
+  private _activeWindow: Meta.Window | null = null;
+  private _focusBorder: St.Bin | null = null;
+  private _splitBorder: St.Bin | null = null;
+  private _focusOwner: AnvilWindowActor | null = null;
+  private _splitOwner: AnvilWindowActor | null = null;
+  private _activeTab: St.Widget | null = null;
   private _maskFailureLogged = false;
-  private readonly _windowActors = new Set<AnvilWindowActor>();
 
-  constructor(host: BorderControllerHost) {
-    this._host = host;
-  }
+  constructor(private readonly _host: BorderControllerHost) {}
 
   bordersEnabled(): boolean {
     const settings = this._host.settings;
@@ -46,88 +53,136 @@ export class BorderController {
     );
   }
 
-  ensureBorderActors(windowActor: AnvilWindowActor | null) {
-    if (!windowActor) return;
-    this._windowActors.add(windowActor);
-    if (!this.bordersEnabled()) return;
-    if (!windowActor.border) {
-      const border = new St.Bin({ style_class: "window-tiled-border" });
-      if (global.window_group) global.window_group.add_child(border);
-      windowActor.border = border;
-      border.show();
-    }
-    if (!windowActor.cornerShadow) {
-      const shadow = new St.Bin({ style_class: "window-unfocused-shadow" });
-      if (global.window_group) global.window_group.insert_child_below(shadow, windowActor);
-      windowActor.cornerShadow = shadow;
-    }
-    this.updateWindowMask(windowActor);
-    this.updateWindowShadow(windowActor);
-    this.updateWindowBorderVisibility(windowActor);
-  }
-
-  ensureAllBorderActors() {
-    this._windowActors.forEach((actor) => this.ensureBorderActors(actor));
-  }
-
-  destroyAllBorderActors() {
-    this._windowActors.forEach((actor) => this._removeBorderActors(actor));
-  }
-
-  destroyWindowActors(actor: AnvilWindowActor) {
-    this._removeBorderActors(actor);
-    this._windowActors.delete(actor);
-  }
-
-  private _removeBorderActors(actor: AnvilWindowActor) {
-    this.removeWindowMask(actor);
-    if (actor.border) {
-      if (global.window_group) global.window_group.remove_child(actor.border);
-      actor.border.hide();
-      actor.border = undefined;
-    }
-    if (actor.cornerShadow) {
-      if (global.window_group) global.window_group.remove_child(actor.cornerShadow);
-      actor.cornerShadow.hide();
-      actor.cornerShadow = undefined;
-    }
-    if (actor.splitBorder) {
-      if (global.window_group) global.window_group.remove_child(actor.splitBorder);
-      actor.splitBorder.hide();
-      actor.splitBorder = undefined;
-    }
-  }
-
-  updateWindowMask(actor: AnvilWindowActor) {
-    const metaWindow = actor.get_meta_window?.() ?? actor.meta_window ?? null;
-    if (!metaWindow) return;
-
-    const maximized = this._isMaximized(metaWindow);
-    const fullscreen = metaWindow.is_fullscreen();
-    if (!shouldMaskWindow({ hintsEnabled: this.bordersEnabled(), maximized, fullscreen })) {
-      actor.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
+  registerWindow(metaWindow: Meta.Window, actor: AnvilWindowActor): void {
+    const existing = this._records.get(metaWindow);
+    if (existing?.actor === actor) {
+      this.reconcileWindow(metaWindow);
+      if (this._host.focusMetaWindow === metaWindow) this.setActiveWindow(metaWindow);
       return;
     }
+    if (existing) this.unregisterWindow(metaWindow);
 
+    this._records.set(metaWindow, { window: metaWindow, actor, maskTarget: null });
+    this.reconcileWindow(metaWindow);
+    if (this._host.focusMetaWindow === metaWindow) this.setActiveWindow(metaWindow);
+  }
+
+  unregisterWindow(metaWindow: Meta.Window, actorDestroyed = false): void {
+    const record = this._records.get(metaWindow);
+    if (!record) return;
+    this._records.delete(metaWindow);
+    if (this._activeWindow === metaWindow) {
+      if (actorDestroyed) {
+        this._activeWindow = null;
+        this._clearActiveTab();
+        this._setVisible(this._focusBorder, false);
+        this._setVisible(this._splitBorder, false);
+        this._focusOwner = null;
+        this._splitOwner = null;
+      } else {
+        this.setActiveWindow(null);
+      }
+    }
+    // Mutter has already disposed the surface and its effects by the actor's
+    // destroy signal. The earlier `unmanaged` path performs explicit removal;
+    // touching either GObject here would itself trigger a GJS critical.
+    if (actorDestroyed) return;
+    this._removeWindowMask(record);
+    record.actor.border = undefined;
+    record.actor.splitBorder = undefined;
+  }
+
+  setActiveWindow(nextWindow: Meta.Window | null): void {
+    const next = nextWindow && this._records.has(nextWindow) ? nextWindow : null;
+    const previous = this._activeWindow;
+    if (previous === next) return;
+
+    this._clearActiveTab();
+    if (previous) this._detachSingletons(this._records.get(previous)?.actor);
+    this._activeWindow = next;
+    if (next) this.reconcileActiveWindow();
+    else this._hideSingletonHints();
+  }
+
+  reconcileWindow(metaWindow: Meta.Window): void {
+    const record = this._records.get(metaWindow);
+    if (!record) return;
+    const active = metaWindow === this._activeWindow;
+    const drawable = this._isDrawable(metaWindow);
+
+    this._reconcileMask(record, drawable);
+    if (active) this._reconcileSingletonHints(record, drawable);
+    this._reconcileStack(record, active);
+  }
+
+  reconcileActiveWindow(): void {
+    if (!this._activeWindow) {
+      this._hideSingletonHints();
+      return;
+    }
+    const record = this._records.get(this._activeWindow);
+    if (!record) {
+      this._hideSingletonHints();
+      return;
+    }
+    this._reconcileSingletonHints(record, this._isDrawable(record.window));
+    this._reconcileStack(record, true);
+  }
+
+  reconcileAll(): void {
+    const focused = this._host.focusMetaWindow;
+    if (focused !== this._activeWindow) this.setActiveWindow(focused);
+    for (const metaWindow of this._records.keys()) this.reconcileWindow(metaWindow);
+  }
+
+  suspendAll(): void {
+    this._hideSingletonHints();
+    this._clearActiveTab();
+    for (const record of this._records.values()) this._removeWindowMask(record);
+  }
+
+  destroy(): void {
+    this._activeWindow = null;
+    this._clearActiveTab();
+    for (const record of [...this._records.values()]) this.unregisterWindow(record.window);
+    if (this._focusBorder) this._removeActor(this._focusBorder);
+    if (this._splitBorder) this._removeActor(this._splitBorder);
+    this._focusBorder = null;
+    this._splitBorder = null;
+    this._focusOwner = null;
+    this._splitOwner = null;
+  }
+
+  private _reconcileMask(record: DecorationRecord, drawable: boolean): void {
+    const target = this._getMaskTarget(record.actor);
+    if (record.maskTarget !== target) {
+      this._removeWindowMask(record);
+      record.maskTarget = target;
+      target?.connect("destroy", () => {
+        if (record.maskTarget === target) record.maskTarget = null;
+      });
+    }
+    if (!drawable || !target) {
+      this._removeWindowMask(record);
+      return;
+    }
     try {
-      let effect = actor.get_effect(WINDOW_MASK_EFFECT_NAME) as WindowCornerMaskEffect | null;
+      let effect = target.get_effect(WINDOW_MASK_EFFECT_NAME) as WindowCornerMaskEffect | null;
       if (!effect) {
         effect = new WindowCornerMaskEffect();
-        actor.add_effect_with_name(WINDOW_MASK_EFFECT_NAME, effect);
+        target.add_effect_with_name(WINDOW_MASK_EFFECT_NAME, effect);
       }
-
-      const themeNode = actor.border?.get_theme_node();
-      if (!themeNode) return;
-      // ThemeNode measurements already include the theme scale factor and use the same
-      // physical-pixel coordinate space as Clutter actor sizes.
-      const borderRadius = themeNode.get_border_radius(St.Corner.TOPLEFT);
-      const radius = deriveWindowMaskRadius(borderRadius, DEFAULT_BORDER_INSET);
+      const themeNode = this._ensureFocusBorder().get_theme_node();
+      const radius = deriveWindowMaskRadius(
+        themeNode.get_border_radius(St.Corner.TOPLEFT),
+        DEFAULT_BORDER_INSET
+      );
       effect.update(
-        getWindowMaskBounds(metaWindow.get_frame_rect(), metaWindow.get_buffer_rect()),
+        getWindowMaskBounds(record.window.get_frame_rect(), record.window.get_buffer_rect()),
         radius
       );
     } catch (error) {
-      actor.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
+      this._removeWindowMask(record);
       if (!this._maskFailureLogged) {
         Logger.warn(`window corner mask unavailable: ${error}`);
         this._maskFailureLogged = true;
@@ -135,49 +190,208 @@ export class BorderController {
     }
   }
 
-  removeWindowMask(actor: AnvilWindowActor) {
-    actor.remove_effect_by_name?.(WINDOW_MASK_EFFECT_NAME);
-  }
-
-  updateWindowShadow(actor: AnvilWindowActor) {
-    const shadow = actor.cornerShadow;
-    const metaWindow = actor.get_meta_window?.() ?? actor.meta_window ?? null;
-    if (!shadow || !metaWindow) return;
-
-    const showShadow = shouldMaskWindow({
-      hintsEnabled: this.bordersEnabled(),
-      maximized: this._isMaximized(metaWindow),
-      fullscreen: metaWindow.is_fullscreen(),
-    });
-    if (!showShadow) {
-      shadow.hide();
+  private _reconcileSingletonHints(record: DecorationRecord, drawable: boolean): void {
+    const metaWindow = record.window;
+    const nodeWindow = this._host.findNodeWindow(metaWindow);
+    if (!drawable) {
+      this._hideSingletonHints();
       return;
     }
 
-    shadow.set_style_class_name(
-      this._appearsFocused(metaWindow) ? "window-focused-shadow" : "window-unfocused-shadow"
-    );
-    const rect = metaWindow.get_frame_rect();
-    shadow.set_size(rect.width + DEFAULT_BORDER_INSET * 2, rect.height + DEFAULT_BORDER_INSET * 2);
-    shadow.set_position(rect.x - DEFAULT_BORDER_INSET, rect.y - DEFAULT_BORDER_INSET);
-    shadow.show();
+    if (!nodeWindow) {
+      const focusBorder = this._ensureFocusBorder();
+      if (this._host.settings.get_boolean("focus-border-toggle")) {
+        this._setStyle(focusBorder, "window-tiled-border");
+        this._setFrameGeometry(focusBorder, metaWindow.get_frame_rect());
+        this._setVisible(focusBorder, true);
+        this._setFocusOwner(record.actor);
+      } else {
+        this._setVisible(focusBorder, false);
+        this._setFocusOwner(null);
+      }
+      if (this._splitBorder) this._setVisible(this._splitBorder, false);
+      this._setSplitOwner(null);
+      return;
+    }
 
-    if (global.window_group?.contains(shadow)) {
-      global.window_group.remove_child(shadow);
-      global.window_group.insert_child_below(shadow, actor);
+    const parentNode = nodeWindow.parentNode!;
+    const floating = nodeWindow.isFloat();
+    const settings = this._host.settings;
+    const focusBorder = this._ensureFocusBorder();
+    const focusEnabled = settings.get_boolean("focus-border-toggle");
+    const tilingEnabled = settings.get_boolean("tiling-mode-enabled");
+    const monitorNode = this._host.tree.findParent(nodeWindow, NODE_TYPES.MONITOR);
+    const tiledOnMonitor = monitorNode
+      ? monitorNode
+          .getNodeByMode(WINDOW_MODES.TILE)
+          .filter((node: Node<any>) => node.isWindow() && !node.nodeValue.minimized)
+      : [];
+    const hideSingle =
+      settings.get_boolean("focus-border-hidden-on-single") &&
+      tiledOnMonitor.length === 1 &&
+      global.display.get_n_monitors() === 1 &&
+      !floating;
+
+    if (focusEnabled && !hideSingle) {
+      let style = "window-tiled-border";
+      if (!tilingEnabled || floating) style = "window-floated-border";
+      else if (parentNode.isStacked()) style = "window-stacked-border";
+      else if (parentNode.isTabbed()) style = "window-tabbed-border";
+      this._setStyle(focusBorder, style);
+      this._setFrameGeometry(focusBorder, metaWindow.get_frame_rect());
+      this._setVisible(focusBorder, true);
+      this._setFocusOwner(record.actor);
+    } else {
+      this._setVisible(focusBorder, false);
+      this._setFocusOwner(null);
+    }
+
+    const desiredTab =
+      parentNode.isTabbed() && nodeWindow.tab ? (nodeWindow.tab as St.Widget) : null;
+    if (this._activeTab !== desiredTab) {
+      this._clearActiveTab();
+      this._activeTab = desiredTab;
+      this._activeTab?.add_style_class_name("window-tabbed-tab-active");
+    }
+
+    const splitBorder = this._ensureSplitBorder();
+    const showSplit =
+      settings.get_boolean("split-border-toggle") &&
+      focusEnabled &&
+      tilingEnabled &&
+      !floating &&
+      parentNode.childNodes.length === 1 &&
+      (parentNode.isCon() || parentNode.isMonitor()) &&
+      !(parentNode.isTabbed() || parentNode.isStacked());
+    if (showSplit) {
+      const splitStyle = parentNode.isVSplit()
+        ? "window-split-border window-split-vertical"
+        : "window-split-border window-split-horizontal";
+      this._setStyle(splitBorder, splitStyle);
+      this._setFrameGeometry(splitBorder, metaWindow.get_frame_rect());
+      this._setVisible(splitBorder, true);
+      this._setSplitOwner(record.actor);
+    } else {
+      this._setVisible(splitBorder, false);
+      this._setSplitOwner(null);
     }
   }
 
-  private updateWindowBorderVisibility(actor: AnvilWindowActor) {
-    const border = actor.border;
-    const metaWindow = actor.get_meta_window?.() ?? actor.meta_window ?? null;
-    if (!border || !metaWindow) return;
-    const visible =
-      this._host.settings.get_boolean("focus-border-toggle") &&
-      !this._isMaximized(metaWindow) &&
-      !metaWindow.is_fullscreen();
-    if (visible) border.show();
-    else border.hide();
+  private _ensureFocusBorder(): St.Bin {
+    if (!this._focusBorder) {
+      this._focusBorder = new St.Bin({ style_class: "window-tiled-border" });
+      this._focusBorder.hide();
+      global.window_group?.add_child(this._focusBorder);
+    }
+    return this._focusBorder;
+  }
+
+  private _ensureSplitBorder(): St.Bin {
+    if (!this._splitBorder) {
+      this._splitBorder = new St.Bin({ style_class: "window-split-border" });
+      this._splitBorder.hide();
+      global.window_group?.add_child(this._splitBorder);
+    }
+    return this._splitBorder;
+  }
+
+  private _hideSingletonHints(): void {
+    if (this._focusBorder) this._setVisible(this._focusBorder, false);
+    if (this._splitBorder) this._setVisible(this._splitBorder, false);
+    this._setFocusOwner(null);
+    this._setSplitOwner(null);
+  }
+
+  private _detachSingletons(actor: AnvilWindowActor | undefined): void {
+    if (!actor) return;
+    if (actor === this._focusOwner) this._setFocusOwner(null);
+    if (actor === this._splitOwner) this._setSplitOwner(null);
+  }
+
+  private _setFocusOwner(actor: AnvilWindowActor | null): void {
+    if (this._focusOwner === actor) return;
+    if (this._focusOwner?.border === this._focusBorder) this._focusOwner.border = undefined;
+    this._focusOwner = actor;
+    if (actor && this._focusBorder) actor.border = this._focusBorder;
+  }
+
+  private _setSplitOwner(actor: AnvilWindowActor | null): void {
+    if (this._splitOwner === actor) return;
+    if (this._splitOwner?.splitBorder === this._splitBorder) {
+      this._splitOwner.splitBorder = undefined;
+    }
+    this._splitOwner = actor;
+    if (actor && this._splitBorder) actor.splitBorder = this._splitBorder;
+  }
+
+  private _reconcileStack(record: DecorationRecord, active: boolean): void {
+    let sibling: Clutter.Actor = record.actor;
+    const actors = active ? [this._splitBorder, this._focusBorder] : [];
+    for (const actor of actors) {
+      if (!actor?.visible) continue;
+      this._stackBelow(actor, sibling);
+      sibling = actor;
+    }
+  }
+
+  private _clearActiveTab(): void {
+    if (!this._activeTab) return;
+    try {
+      this._activeTab.remove_style_class_name("window-tabbed-tab-active");
+    } catch {
+      /* actor already destroyed */
+    }
+    this._activeTab = null;
+  }
+
+  private _setFrameGeometry(
+    actor: St.Bin,
+    rect: { x: number; y: number; width: number; height: number }
+  ): void {
+    const width = rect.width + DEFAULT_BORDER_INSET * 2;
+    const height = rect.height + DEFAULT_BORDER_INSET * 2;
+    const x = rect.x - DEFAULT_BORDER_INSET;
+    const y = rect.y - DEFAULT_BORDER_INSET;
+    if (actor.width !== width || actor.height !== height) actor.set_size(width, height);
+    if (actor.x !== x || actor.y !== y) actor.set_position(x, y);
+  }
+
+  private _setStyle(actor: St.Widget, style: string): void {
+    if (actor.style_class !== style) actor.set_style_class_name(style);
+  }
+
+  private _setVisible(actor: Clutter.Actor | null, visible: boolean): void {
+    if (!actor) return;
+    if (actor.visible === visible) return;
+    if (visible) actor.show();
+    else actor.hide();
+  }
+
+  private _stackBelow(actor: Clutter.Actor, sibling: Clutter.Actor): void {
+    if (!global.window_group?.contains(actor)) return;
+    if (sibling.get_previous_sibling?.() === actor) return;
+    global.window_group.set_child_below_sibling(actor, sibling);
+  }
+
+  private _removeWindowMask(record: DecorationRecord): void {
+    if (record.maskTarget?.get_effect(WINDOW_MASK_EFFECT_NAME)) {
+      record.maskTarget.remove_effect_by_name(WINDOW_MASK_EFFECT_NAME);
+    }
+  }
+
+  private _getMaskTarget(actor: AnvilWindowActor): Clutter.Actor | null {
+    // Meta.WindowActor.get_texture() returns Meta.ShapedTexture (Clutter.Content),
+    // which cannot own a Clutter.Effect. The first child is Mutter's surface
+    // actor and keeps the effect below Mutter's X11 shadow paint.
+    return actor.get_first_child?.() ?? null;
+  }
+
+  private _removeActor(actor: Clutter.Actor): void {
+    const parent =
+      actor.get_parent?.() ?? (actor as Clutter.Actor & { _parent?: Clutter.Actor })._parent;
+    if (parent && "remove_child" in parent) parent.remove_child(actor);
+    this._setVisible(actor, false);
+    actor.destroy();
   }
 
   private _isMaximized(metaWindow: Meta.Window): boolean {
@@ -188,136 +402,14 @@ export class BorderController {
     }
   }
 
-  private _appearsFocused(metaWindow: Meta.Window): boolean {
-    const value = metaWindow.appears_focused as boolean | (() => boolean);
-    return typeof value === "function" ? value.call(metaWindow) : value;
-  }
-
-  hideActorBorder(actor: AnvilWindowActor | null) {
-    if (!actor) return;
-    if (actor.border) actor.border.hide();
-    if (actor.splitBorder) actor.splitBorder.hide();
-  }
-
-  hideWindowBorders() {
-    if (!this.bordersEnabled()) return;
-    this._host.tree.nodeWindows.forEach((nodeWindow) => {
-      const actor = nodeWindow.windowActor;
-      if (actor) this.hideActorBorder(actor);
-      if (nodeWindow!.parentNode!.isTabbed()) {
-        if (nodeWindow.tab && !(nodeWindow.tab as any)._destroyed && nodeWindow.tab.get_parent()) {
-          try {
-            nodeWindow.tab.remove_style_class_name("window-tabbed-tab-active");
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-    });
-  }
-
-  showWindowBorders() {
-    if (!this.bordersEnabled()) return;
-    const host = this._host;
-    const metaWindow = host.focusMetaWindow;
-    if (!metaWindow) return;
-    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-    if (!windowActor) return;
-    this.ensureBorderActors(windowActor);
-    const nodeWindow = host.findNodeWindow(metaWindow);
-    if (!nodeWindow) return;
-    if (metaWindow.get_wm_class() === null) return;
-
-    const borders: St.Bin[] = [];
-    const focusBorderEnabled = host.settings.get_boolean("focus-border-toggle");
-    const splitBorderEnabled = host.settings.get_boolean("split-border-toggle");
-    const tilingModeEnabled = host.settings.get_boolean("tiling-mode-enabled");
-    const maximized = () => this._isMaximized(metaWindow) || metaWindow.is_fullscreen();
-    const monitorCount = global.display.get_n_monitors();
-    const inset = DEFAULT_BORDER_INSET;
-    const parentNode = nodeWindow!.parentNode!;
-    const floatingWindow = nodeWindow.isFloat();
-    const tiledBorder = windowActor.border;
-
-    if (parentNode.isTabbed() && nodeWindow.tab) {
-      nodeWindow.tab.add_style_class_name("window-tabbed-tab-active");
-    }
-
-    const focusBorderHiddenOnSingle = host.settings.get_boolean("focus-border-hidden-on-single");
-    const monitorNode = host.tree.findParent(nodeWindow!, NODE_TYPES.MONITOR);
-    const tiledOnMonitor = monitorNode
-      ? monitorNode
-          .getNodeByMode(WINDOW_MODES.TILE)
-          .filter((t: Node<any>) => t.isWindow() && !t.nodeValue.minimized)
-      : [];
-    const isSingleWindow = tiledOnMonitor.length === 1 && monitorCount === 1;
-    const skipBorderForSingle = focusBorderHiddenOnSingle && isSingleWindow && !floatingWindow;
-
-    if (tiledBorder && focusBorderEnabled && !skipBorderForSingle) {
-      if (!maximized()) {
-        if (tilingModeEnabled) {
-          if (parentNode.isStacked()) {
-            tiledBorder.set_style_class_name(
-              floatingWindow ? "window-floated-border" : "window-stacked-border"
-            );
-          } else if (parentNode.isTabbed()) {
-            if (!floatingWindow) {
-              tiledBorder.set_style_class_name("window-tabbed-border");
-              if (nodeWindow.backgroundTab) tiledBorder.add_style_class_name("window-tabbed-bg");
-            } else {
-              tiledBorder.set_style_class_name("window-floated-border");
-            }
-          } else {
-            tiledBorder.set_style_class_name(
-              floatingWindow ? "window-floated-border" : "window-tiled-border"
-            );
-          }
-        } else {
-          tiledBorder.set_style_class_name("window-floated-border");
-        }
-        borders.push(tiledBorder);
-      }
-    }
-
-    if (
-      splitBorderEnabled &&
-      focusBorderEnabled &&
-      tilingModeEnabled &&
-      !nodeWindow.isFloat() &&
-      !maximized() &&
-      parentNode.childNodes.length === 1 &&
-      (parentNode.isCon() || parentNode.isMonitor()) &&
-      !(parentNode.isTabbed() || parentNode.isStacked())
-    ) {
-      if (!windowActor.splitBorder) {
-        const splitBorder = new St.Bin({ style_class: "window-split-border" });
-        global.window_group.add_child(splitBorder);
-        windowActor.splitBorder = splitBorder;
-      }
-      const splitBorder = windowActor.splitBorder;
-      splitBorder.remove_style_class_name("window-split-vertical");
-      splitBorder.remove_style_class_name("window-split-horizontal");
-      if (parentNode.isVSplit()) splitBorder.add_style_class_name("window-split-vertical");
-      else if (parentNode.isHSplit()) splitBorder.add_style_class_name("window-split-horizontal");
-      borders.push(splitBorder);
-    }
-
-    const rect = metaWindow.get_frame_rect();
-    borders.forEach((border) => {
-      border.set_size(rect.width + inset * 2, rect.height + inset * 2);
-      border.set_position(rect.x - inset, rect.y - inset);
-      if (metaWindow.appears_focused && !metaWindow.minimized) border.show();
-      if (global.window_group && global.window_group.contains(border)) {
-        global.window_group.remove_child(border);
-        global.window_group.insert_child_below(border, metaWindow.get_compositor_private());
-      }
-    });
-  }
-
-  updateBorderLayout() {
-    if (!this.bordersEnabled()) return;
-    this.ensureAllBorderActors();
-    this.hideWindowBorders();
-    this.showWindowBorders();
+  private _isDrawable(metaWindow: Meta.Window): boolean {
+    const showing = metaWindow.showing_on_its_workspace?.() ?? true;
+    return (
+      this.bordersEnabled() &&
+      showing &&
+      !metaWindow.minimized &&
+      !this._isMaximized(metaWindow) &&
+      !metaWindow.is_fullscreen()
+    );
   }
 }
