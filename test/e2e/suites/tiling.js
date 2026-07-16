@@ -29,6 +29,7 @@ async function expectPortableShadowParity() {
   expect(comparison.mismatches).toEqual([]);
 }
 
+/** @param {number} count */
 async function launchFlatSplitWindows(count) {
   await launchApp("org.gnome.Nautilus.desktop");
   await waitForWindowCount(1, 5000);
