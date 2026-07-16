@@ -150,6 +150,12 @@ python3 test/e2e/run.py --no-build --tag focus
 `constraints.js`) — use it to keep PR loops short. Each run receives a unique
 `ANVIL_E2E_RESULTS_PATH`, so concurrent sessions do not race on a global `/tmp` result file.
 
+Monitor churn and cross-surface swap are intentionally explicit-tag-only suites. Run their
+dedicated Make targets: each starts a fresh two-monitor Shell so native Mutter state accumulated by
+other window-moving suites cannot contaminate the result. For a change to either isolated suite,
+that dedicated target is the required change gate; `make test-e2e` remains the separate
+pre-release gate for the ordinary shared-process matrix.
+
 ### Geometry assertions (D2-1)
 
 Wayland clients may not accept exact pixel rects. Prefer:
