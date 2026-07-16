@@ -47,6 +47,9 @@ testing, and ongoing maintainability.
 
 #### Fixed
 
+- **Xwayland window teardown** — Unmanaged windows are now withdrawn from the legacy Tiling Tree
+  even when Mutter has already destroyed their compositor actor, preventing stale tiling nodes
+  from surviving an Xwayland window close.
 - **Preferences window reuse across workspaces** — Opening preferences now searches workspace zero
   and every later workspace without an out-of-range lookup, activating an existing Anvil
   preferences window instead of opening a duplicate.

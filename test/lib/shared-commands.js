@@ -311,6 +311,22 @@ export async function closeFocusedWindow(timeoutMs = 5000) {
   throw new Error("Timed out waiting for focused window to close after " + timeoutMs + "ms");
 }
 
+/**
+ * Count window facts still owned by the active tiling writer.
+ *
+ * Core mode retains floated windows as non-participating facts until it
+ * observes WindowWithdrawn, so cleanup must wait for every fact rather than
+ * only those currently participating in layout.
+ *
+ * @param {any} state
+ * @param {number} legacyWindowCount
+ * @returns {number}
+ */
+export function countTrackedWriterWindows(state, legacyWindowCount) {
+  if (state.tilingEngineMode === "core") return state.portableTiling?.windows?.length ?? 0;
+  return legacyWindowCount;
+}
+
 export async function closeAllWindows() {
   function windowsAcrossWorkspaces() {
     const workspaceManager = global.display.get_workspace_manager();
@@ -356,15 +372,9 @@ export async function closeAllWindows() {
     }
     countTransientContainers(state.tree);
 
-    const portableWindows = /** @type {Array<{participating: boolean}>} */ (
-      state.portableTiling?.windows || []
-    );
-    const tracked =
-      state.tilingEngineMode === "core"
-        ? portableWindows.filter(function (window) {
-            return window.participating;
-          }).length
-        : getRuntimeWindowStates().length;
+    const legacyWindowCount =
+      state.tilingEngineMode === "core" ? 0 : getRuntimeWindowStates().length;
+    const tracked = countTrackedWriterWindows(state, legacyWindowCount);
     remainingTrackedWindows = tracked;
     remainingContainers = transientContainers;
     if (tracked === 0 && (state.tilingEngineMode === "core" || transientContainers === 0)) return;
