@@ -6,7 +6,7 @@
  * Ported from jcrussell/forge
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
@@ -22,6 +22,11 @@ describe("AnvilRuntime - Lifecycle", () => {
 
   beforeEach(() => {
     ctx = createAnvilRuntimeFixture();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    ctx.cleanup();
   });
 
   const wm = () => ctx.anvilRuntime;
