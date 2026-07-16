@@ -16,8 +16,8 @@ surface and stale packaged resources, and finally deepen the remaining large leg
 stage is independently releasable and keeps the production runtime usable.
 
 > **Workstream boundary:** The experimental platform-independent Tiling State Machine is governed
-> by [`portable-tiling-state-machine.md`](./portable-tiling-state-machine.md) and the accepted
-> architecture decisions in [`ADR 0001`](../adr/0001-platform-independent-tiling-state.md) and
+> by [`portable-tiling-state-machine.md`](./portable-tiling-state-machine.md), accepted
+> [`ADR 0001`](../adr/0001-platform-independent-tiling-state.md), and proposed
 > [`ADR 0002`](../adr/0002-surface-rooted-tiling-tree.md). Ordinary production debt remediation
 > must not change engine selection, make the portable core the default, remove the legacy Tree, or
 > create a second production writer.
