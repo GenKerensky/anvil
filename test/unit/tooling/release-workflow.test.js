@@ -13,4 +13,14 @@ describe("release workflow", () => {
       /uses: \.\/\.github\/workflows\/testing\.yml\n\s+with:\n\s+ref: \$\{\{ inputs\.ref \}\}/
     );
   });
+
+  it("keeps the called test run in a distinct concurrency group", () => {
+    const concurrencyGroup = /concurrency:\n\s+group:\s+(.+)/;
+    const releaseGroup = releaseWorkflow.match(concurrencyGroup)?.[1];
+    const testingGroup = testingWorkflow.match(concurrencyGroup)?.[1];
+
+    expect(releaseGroup).toBe("${{ github.workflow }}-${{ github.ref }}");
+    expect(testingGroup).toBe("${{ github.workflow }}-testing-${{ github.ref }}");
+    expect(testingGroup).not.toBe(releaseGroup);
+  });
 });
