@@ -171,6 +171,20 @@ describe("AnvilRuntime - Lifecycle", () => {
       expect(ctx.tree.findNode(metaWindow)).toBeNull();
     });
 
+    it("removes the node after Mutter disposes the window actor", () => {
+      const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      const actor = metaWindow.get_compositor_private();
+      vi.spyOn(metaWindow, "get_compositor_private").mockReturnValue(null);
+      const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+
+      wm()._tracker.windowDestroy(actor, metaWindow, true);
+
+      expect(ctx.tree.findNode(metaWindow)).toBeNull();
+      expect(renderSpy).toHaveBeenCalledWith("window-destroy", true);
+    });
+
     it("should remove float override on destroy", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const { monitor } = getWorkspaceAndMonitor(ctx);

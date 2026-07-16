@@ -646,7 +646,9 @@ export class WindowTracker {
       }
       return;
     }
-    const nodeWindow = host.findNodeWindowByActor(actor);
+    const nodeWindow =
+      (knownMetaWindow ? host.tree.findNode(knownMetaWindow) : null) ??
+      host.findNodeWindowByActor(actor);
     const metaWindow = (nodeWindow?.nodeValue ?? knownMetaWindow) as Meta.Window | undefined;
     if (metaWindow) host.withdrawPortableWindow(metaWindow);
 
