@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-14 04:16-0400\n"
+"POT-Creation-Date: 2026-07-14 09:42+0000\n"
 "PO-Revision-Date: 2023-02-28 17:16-0500\n"
 "Last-Translator: Wedone <wedoneofficiel@outlook.fr>\n"
 "Language-Team: French - Canada <wroy@proton.me>\n"
@@ -17,7 +17,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 "X-Generator: Gtranslator 42.0\n"
 
-#: src/lib/extension/anvil-runtime.ts:153 src/lib/extension/indicator.ts:118
+#: src/lib/extension/anvil-runtime.ts:156 src/lib/extension/indicator.ts:118
 msgid "Settings"
 msgstr "Paramètres"
 

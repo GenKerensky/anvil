@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-14 04:16-0400\n"
+"POT-Creation-Date: 2026-07-14 09:42+0000\n"
 "PO-Revision-Date: 2025-08-22 12:00+0300\n"
 "Last-Translator: Mucahit Sahin <mucahitsahin786@gmail.com>\n"
 "Language-Team: Turkish\n"
@@ -15,7 +15,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 
-#: src/lib/extension/anvil-runtime.ts:153 src/lib/extension/indicator.ts:118
+#: src/lib/extension/anvil-runtime.ts:156 src/lib/extension/indicator.ts:118
 msgid "Settings"
 msgstr "Ayarlar"
 

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-14 04:16-0400\n"
+"POT-Creation-Date: 2026-07-14 09:42+0000\n"
 "PO-Revision-Date: 2024-09-15 20:16+0100\n"
 "Last-Translator: Albano Battistella <albanobattistella@gmail.com>\n"
 "Language-Team: Italian <albanobattistella@gmail.com>\n"
@@ -16,7 +16,7 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 "X-Generator: Gtranslator 42.0\n"
 
-#: src/lib/extension/anvil-runtime.ts:153 src/lib/extension/indicator.ts:118
+#: src/lib/extension/anvil-runtime.ts:156 src/lib/extension/indicator.ts:118
 msgid "Settings"
 msgstr "Impostazioni"
 
