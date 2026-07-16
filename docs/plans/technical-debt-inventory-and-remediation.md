@@ -1,8 +1,10 @@
 # Technical debt inventory and remediation plan
 
-**Status:** In progress — Stages 0 through 6 complete
+**Status:** Complete — all stages reviewed and validated
 
 **Date:** 2026-07-15
+
+**Completed:** 2026-07-16
 
 **Scope:** Production GNOME integration, preferences, shared configuration, tests, schemas, assets,
 and developer tooling.
@@ -95,7 +97,7 @@ All remediation work must preserve these constraints:
 | TD-017 | Complete   | P3       | Module depth          | Deep seams extracted; remaining size exceptions are justified |
 | TD-018 | Complete   | P3       | Tree ownership        | GNOME topology projection moved behind one dedicated owner    |
 | TD-019 | Complete   | P3       | Grab-Resize design    | Pure policy is separated from session mechanics               |
-| TD-020 | Open       | P3       | Debt governance       | Owned marker gate is implemented and awaiting review          |
+| TD-020 | Complete   | P3       | Debt governance       | Owned marker gate covers production and maintained tooling    |
 | TD-021 | Superseded | Tracked  | CSS parser            | The reported source-wide type exemption does not exist        |
 | TD-022 | Deferred   | Tracked  | Portable core         | Experimental migration remains owned by its separate plan     |
 
@@ -440,7 +442,7 @@ was introduced, and both Stage 6 review axes passed.
 
 ### TD-020: TODOs do not have one meaning
 
-Current TODOs include:
+The pre-remediation inventory included raw markers for:
 
 - confirmed defects: cross-monitor freeze and skipped resize candidates;
 - architecture work: workspace/monitor extraction;
@@ -456,12 +458,14 @@ comment.
 stable debt ID or tracker reference, move the feature to a product backlog, or remove it after
 proving it obsolete. Do not leave unowned prose TODOs in production modules.
 
-**Current implementation, pending review:** `npm run check:debt` now scans tracked production and
-tooling files for raw `TODO`, `FIXME`, `HACK`, and `XXX` markers against an empty baseline. Deferred
-product and design work is owned by [`product-follow-ups.md`](./product-follow-ups.md), including
-GNOME Extensions publication, while resolved and obsolete markers have been removed. Historical
-plans and tests remain outside the marker gate so evidence and fixture text cannot hide a new
-production finding.
+**Completion evidence:** `npm run check:debt` scans tracked production, release/build tooling, and
+canonical `.agents/skills/**/scripts/` files for raw `TODO`, `FIXME`, `HACK`, and `XXX` markers
+against an empty baseline. The scanner audits its own source without embedding marker literals, and
+fixtures prove self-hosting, tracked-file scope, ignored/untracked exclusions, word boundaries, and
+deterministic line reporting. Deferred product and design work is owned by
+[`product-follow-ups.md`](./product-follow-ups.md), including GNOME Extensions publication, while
+resolved and obsolete markers have been removed. Historical plans and tests remain outside the
+gate so evidence and fixture text do not create false production findings.
 
 ### TD-021: CSS parser exemption claim is superseded
 
@@ -496,7 +500,7 @@ output hotplug validation, and disposition of proposed ADR 0002.
 - [x] Stage 4: Remove dead compatibility and enforce unused-code checks
 - [x] Stage 5: Remove stale schema, resources, and tool entry points
 - [x] Stage 6: Deepen legacy production modules
-- [ ] Stage 7: Close the inventory and establish ongoing governance
+- [x] Stage 7: Close the inventory and establish ongoing governance
 
 ### Stage 0: Establish reproducible debt gates
 
@@ -762,24 +766,25 @@ their size.
 
 ### Stage 7: Close the inventory and establish ongoing governance
 
-**Status:** In progress — implementation and deterministic validation pass; review is pending.
+**Status:** Complete — reviewed with no blocking or important findings.
 
 **Purpose:** Resolve TD-020 and prevent the plan from becoming a stale checklist.
 
 **Work:**
 
-1. [ ] Re-run the full debt audit and update each debt ID as complete, deferred, or superseded.
-2. [ ] Remove resolved TODOs and convert remaining product ideas into tracked feature work.
-3. [ ] Update `CHANGELOG.md` for user-visible fixes and removed settings.
-4. [ ] Update architecture context and decisions for new module ownership.
-5. [ ] Re-run package, unit, portable, tooling, and focused E2E validation.
-6. [ ] Retain this plan as a completed historical record and link its ongoing governance owners.
+1. [x] Re-run the full debt audit and update each debt ID as complete, deferred, or superseded.
+2. [x] Remove resolved TODOs and convert remaining product ideas into tracked feature work.
+3. [x] Update `CHANGELOG.md` for user-visible fixes and removed settings.
+4. [x] Update architecture context and decisions for new module ownership.
+5. [x] Re-run package, unit, portable, tooling, and focused E2E validation.
+6. [x] Retain this plan as a completed historical record and link its ongoing governance owners.
 
-**Current implementation evidence, pending review (2026-07-16):**
+**Completion evidence (2026-07-16):**
 
 - The tracked-file debt audit enforces an empty baseline for unowned raw markers in production,
-  scripts, release workflows, and root build tooling. Fixture coverage proves ignored, untracked,
-  documentation, test, partial-word, and self-reference exclusions cannot hide or fabricate debt.
+  scripts, canonical skill scripts, release workflows, and root build tooling. Fixture coverage
+  proves the self-hosting scanner and ignored, untracked, documentation, test, and partial-word
+  boundaries cannot hide or fabricate debt.
 - All live product/design deferrals have an owner, rationale, and next decision point in
   `product-follow-ups.md`; release automation points to that owner instead of retaining an inactive
   upload recipe.
@@ -788,6 +793,18 @@ their size.
   proposed ADR disposition named explicitly.
 - Architecture context no longer claims a nonexistent CSS-parser type exemption, and the changelog
   includes every user-visible bounded fix and removed setting from this remediation series.
+- `npm test` passes with 55 portable tests, 1,049 unit tests, and 45 tooling tests (two expected
+  host-smoke skips). The built extension ZIP passes integrity inspection.
+- Fresh Fedora Devbox validation passes preferences lifecycle (1/1), stylesheet migration/reload
+  (1/1), installed icons (2/2), cross-surface swap (1/1), resize and constraints (78/78), workspace
+  topology (3/3), and extension lifecycle (4/4). The first resize run exhausted its 180-second
+  evidence timeout while still progressing; the 600-second rerun completed without test failures.
+- Standards and spec reviewers both returned `PASS — no blocking or important findings` after the
+  self-hosting audit, maintained-tooling scope, Xwayland changelog, and portable cleanup findings
+  were remediated.
+- Ongoing governance belongs to `npm run check:debt`,
+  [`product-follow-ups.md`](./product-follow-ups.md), and the experimental
+  [`portable-tiling-state-machine.md`](./portable-tiling-state-machine.md) workstream.
 
 **Exit gate:** No unowned TODO remains in production code, no high-priority debt ID is unresolved,
 and deferred items name an owner, rationale, and next decision point.
