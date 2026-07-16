@@ -107,6 +107,18 @@ export class GnomeIntentionApplier {
             const metaWindow = resolveWindow(intention);
             if (!metaWindow) break;
             const rect = this.host.toGlobalRect(intention.surfaceId, intention.frame);
+            const actor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+            // `window-created` can precede compositor actor creation. Any
+            // size-state or frame mutation at that point can crash Mutter.
+            // Reconciliation issues a fresh placement once the actor maps.
+            if (!actor) {
+              pendingFrames.push({
+                windowId: intention.windowId,
+                surfaceId: intention.surfaceId,
+                causalToken: token(intention),
+              });
+              break;
+            }
             try {
               metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
               metaWindow.unmaximize();
@@ -117,18 +129,6 @@ export class GnomeIntentionApplier {
               legacyWindow.unmaximize(Meta.MaximizeFlags.HORIZONTAL);
               legacyWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
               legacyWindow.unmaximize(Meta.MaximizeFlags.BOTH);
-            }
-            const actor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-            // `window-created` can precede compositor actor creation. Moving the frame at
-            // that point crashes Mutter. Defer by observing the unchanged frame at settle;
-            // reconciliation will issue a fresh placement once the mapped actor exists.
-            if (!actor) {
-              pendingFrames.push({
-                windowId: intention.windowId,
-                surfaceId: intention.surfaceId,
-                causalToken: token(intention),
-              });
-              break;
             }
             actor.remove_all_transitions();
             metaWindow.move_frame(true, rect.x, rect.y);

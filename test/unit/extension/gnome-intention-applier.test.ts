@@ -150,6 +150,7 @@ describe("GnomeIntentionApplier", () => {
     const id = windowId("window:1");
     const window = createMockWindow({ rect: { x: 0, y: 0, width: 100, height: 100 } });
     vi.spyOn(window, "get_compositor_private").mockReturnValue(null);
+    const unmaximize = vi.spyOn(window, "unmaximize");
     const moveResize = vi.spyOn(window, "move_resize_frame");
     const applier = new GnomeIntentionApplier({
       resolveWindow: () => window,
@@ -175,6 +176,7 @@ describe("GnomeIntentionApplier", () => {
     ]);
 
     expect(applied.facts).toEqual([]);
+    expect(unmaximize).not.toHaveBeenCalled();
     expect(moveResize).not.toHaveBeenCalled();
     expect(applied.pendingFrames).toHaveLength(1);
     globals.cleanup();

@@ -74,10 +74,12 @@ describe("GNOME window operations", () => {
     it("should handle null actor gracefully", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       metaWindow.get_compositor_private = vi.fn(() => null) as any;
+      const unmaximizeSpy = vi.spyOn(metaWindow, "unmaximize");
 
       expect(() =>
         operations.move(metaWindow, { x: 0, y: 0, width: 100, height: 100 })
       ).not.toThrow();
+      expect(unmaximizeSpy).not.toHaveBeenCalled();
     });
   });
 

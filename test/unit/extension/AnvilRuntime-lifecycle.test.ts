@@ -540,6 +540,34 @@ describe("AnvilRuntime - Lifecycle", () => {
   });
 
   describe("bindWorkspaceSignals", () => {
+    it("defers admission unmaximize until after workspace window-added returns", () => {
+      const workspace = ctx.workspaces[0];
+      const window = createMockWindow({
+        id: 42,
+        wm_class: "Godot",
+        title: "Gray Horizon - Godot Engine",
+        workspace,
+        maximized_horizontally: true,
+        maximized_vertically: true,
+      });
+      const unmaximize = vi.spyOn(window, "unmaximize");
+      const enqueue = vi.spyOn(wm()._eventScheduler, "enqueue");
+
+      (wm() as any)._signalManager._signalsBound = true;
+      (wm() as any)._signalManager.bindWorkspaceSignals(workspace);
+      workspace.emit("window-added", workspace, window);
+
+      expect(unmaximize).not.toHaveBeenCalled();
+      const admissionUnmaximize = enqueue.mock.calls
+        .map(([event]) => event as { name: string; callback: () => void })
+        .find((event) => event.name === "admission-unmaximize:42");
+      expect(admissionUnmaximize).toBeDefined();
+
+      admissionUnmaximize!.callback();
+
+      expect(unmaximize).toHaveBeenCalledOnce();
+    });
+
     it("should track valid windows immediately from workspace window-added callbacks", () => {
       const workspace = ctx.workspaces[0];
       const window = createMockWindow({

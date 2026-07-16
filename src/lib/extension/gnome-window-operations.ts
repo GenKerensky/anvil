@@ -18,6 +18,8 @@ import type { AnvilWindowActor } from "./window/types.js";
 export class GnomeWindowOperations {
   move(metaWindow: Meta.Window | null, rect: RectLike): void {
     if (!metaWindow || (metaWindow as Meta.Window & { grabbed?: boolean }).grabbed) return;
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+    if (!windowActor) return;
     try {
       metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
       metaWindow.unmaximize();
@@ -30,9 +32,6 @@ export class GnomeWindowOperations {
       legacyWindow.unmaximize(Meta.MaximizeFlags.VERTICAL);
       legacyWindow.unmaximize(Meta.MaximizeFlags.BOTH);
     }
-
-    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-    if (!windowActor) return;
     windowActor.remove_all_transitions();
     metaWindow.move_frame(true, rect.x, rect.y);
     metaWindow.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);

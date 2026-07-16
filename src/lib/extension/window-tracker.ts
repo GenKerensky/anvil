@@ -82,6 +82,7 @@ export class WindowTracker {
   private _host: WindowTrackerHost;
   private _windowReconcileSrcId = 0;
   private readonly _trackedWindows = new WeakSet<Meta.Window>();
+  private readonly _pendingAdmissionUnmaximize = new WeakSet<Meta.Window>();
 
   constructor(host: WindowTrackerHost) {
     this._host = host;
@@ -187,7 +188,11 @@ export class WindowTracker {
   trackWhenReady(display: Meta.Display, metaWindow: Meta.Window, afterTrack?: () => void) {
     const host = this._host;
     if (this._trackedWindows.has(metaWindow) || host.tree.findNode(metaWindow)) {
-      if (host.coreTilingEngine) this.trackCoreActor(metaWindow);
+      if (host.coreTilingEngine) {
+        this.trackCoreActor(metaWindow);
+      } else {
+        this._scheduleAdmissionUnmaximize(metaWindow);
+      }
       this.clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
       return;
     }
@@ -231,6 +236,30 @@ export class WindowTracker {
       (metaWindow as any).unmaximize(Meta.MaximizeFlags.VERTICAL);
       (metaWindow as any).unmaximize(Meta.MaximizeFlags.BOTH);
     }
+  }
+
+  /**
+   * `Meta.Workspace::window-added` fires while X11 windows are still inside
+   * Mutter construction. Calling unmaximize from that signal can reach the
+   * compositor before its window actor exists. Return to Mutter first, then
+   * apply the admission effect only if the window is still tracked and mapped.
+   */
+  private _scheduleAdmissionUnmaximize(metaWindow: Meta.Window) {
+    if (this._pendingAdmissionUnmaximize.has(metaWindow)) return;
+    this._pendingAdmissionUnmaximize.add(metaWindow);
+    this._host.scheduler.enqueue(
+      {
+        name: `admission-unmaximize:${metaWindow.get_id()}`,
+        callback: () => {
+          this._pendingAdmissionUnmaximize.delete(metaWindow);
+          if (!this._trackedWindows.has(metaWindow) && !this._host.tree.findNode(metaWindow))
+            return;
+          if (!metaWindow.get_compositor_private()) return;
+          this._unmaximizeWindow(metaWindow);
+        },
+      },
+      0
+    );
   }
 
   trackMappedActor(
@@ -512,7 +541,7 @@ export class WindowTracker {
         }
 
         this.postProcessWindow(nodeWindow as Node | null);
-        this._unmaximizeWindow(metaWindow);
+        this._scheduleAdmissionUnmaximize(metaWindow);
         host.renderTree("window-create", true);
 
         if (nodeWindow?.parentNode) {

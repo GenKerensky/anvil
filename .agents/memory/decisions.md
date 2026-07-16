@@ -672,3 +672,14 @@ A second audit of the refactor found remaining work; all resolved.
   handlers, and window operations.
 - **A further split needs a deeper interface**: line-count-only file moves and re-export facades
   fail the deletion test because they leave the same knowledge at the same caller interfaces.
+
+### Meta window construction mutation guard (2026-07-16)
+
+- **Workspace admission signals are observation-only until they return**:
+  `Meta.Workspace::window-added` may run while an X11 `Meta.Window` is still inside Mutter
+  construction. `WindowTracker` queues admission-time unmaximize as a named zero-delay scheduler
+  event so no size-state mutation re-enters Mutter from that signal.
+- **A compositor actor is the mutation readiness gate**: admission unmaximize, legacy frame moves,
+  and portable `PlaceWindow` effects must not call `unmaximize`, `move_frame`, or
+  `move_resize_frame` until `get_compositor_private()` returns an actor. A later map/reconcile edge
+  retries work that was skipped before actor creation.
