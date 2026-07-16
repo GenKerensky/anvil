@@ -793,15 +793,15 @@ their size.
   proposed ADR disposition named explicitly.
 - Architecture context no longer claims a nonexistent CSS-parser type exemption, and the changelog
   includes every user-visible bounded fix and removed setting from this remediation series.
-- `npm test` passes with 55 portable tests, 1,049 unit tests, and 45 tooling tests (two expected
+- `npm test` passes with 55 portable tests, 1,050 unit tests, and 45 tooling tests (two expected
   host-smoke skips). The built extension ZIP passes integrity inspection.
 - Fresh Fedora Devbox validation passes preferences lifecycle (1/1), stylesheet migration/reload
   (1/1), installed icons (2/2), cross-surface swap (1/1), resize and constraints (78/78), workspace
   topology (3/3), and extension lifecycle (4/4). The first resize run exhausted its 180-second
   evidence timeout while still progressing; the 600-second rerun completed without test failures.
 - Standards and spec reviewers both returned `PASS — no blocking or important findings` after the
-  self-hosting audit, maintained-tooling scope, Xwayland changelog, and portable cleanup findings
-  were remediated.
+  self-hosting audit, maintained-tooling scope, release-workflow reuse contract, Xwayland changelog,
+  and portable cleanup findings were remediated.
 - Ongoing governance belongs to `npm run check:debt`,
   [`product-follow-ups.md`](./product-follow-ups.md), and the experimental
   [`portable-tiling-state-machine.md`](./portable-tiling-state-machine.md) workstream.
