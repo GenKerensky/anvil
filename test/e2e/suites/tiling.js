@@ -9,6 +9,7 @@ import {
   windowsOverlap,
   closeAllWindows,
   getSettings,
+  getAnvilSettings,
   openWindow,
   sendAnvilCommandAndSettle,
   waitForWindowCount,
@@ -17,13 +18,9 @@ import {
   refreshPortableShadowComparison,
 } from "../../lib/shared-commands.js";
 
-beforeEach(async function () {
-  await closeAllWindows();
-});
-
-afterEach(async function () {
-  await closeAllWindows();
-});
+const extensionSettings = getAnvilSettings();
+const originalAutoSplit = extensionSettings.get_boolean("auto-split-enabled");
+const originalGapSize = extensionSettings.get_uint("window-gap-size");
 
 async function expectPortableShadowParity() {
   const comparison = await refreshPortableShadowComparison();
@@ -33,6 +30,20 @@ async function expectPortableShadowParity() {
 }
 
 describe("Window Tiling", function () {
+  beforeEach(async function () {
+    // The documented shadow acceptance matrix is flat-split, gapless geometry.
+    // Auto-split and full gap-policy parity remain owned by TD-022.
+    extensionSettings.set_boolean("auto-split-enabled", false);
+    extensionSettings.set_uint("window-gap-size", 0);
+    await closeAllWindows();
+  });
+
+  afterEach(async function () {
+    await closeAllWindows();
+    extensionSettings.set_boolean("auto-split-enabled", originalAutoSplit);
+    extensionSettings.set_uint("window-gap-size", originalGapSize);
+  });
+
   it("tiling-mode-enabled is true by default", function () {
     expect(getSettings().get_boolean("tiling-mode-enabled")).toBe(true);
   });

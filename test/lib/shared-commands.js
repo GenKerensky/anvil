@@ -318,12 +318,37 @@ export async function closeAllWindows() {
   windows.forEach(function (w) {
     w.delete(t);
   });
-  // Poll until all windows are closed
+  // Poll until both Mutter and the active tiling writer have withdrawn the
+  // windows. The legacy writer must also remove transient containers or the
+  // next spec can inherit an empty layout slot.
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     await sleep(200);
-    if (getWindowCount() === 0) return;
+    if (getWindowCount() !== 0) continue;
+    try {
+      getAnvilRuntime().forceRender("e2e-close-all");
+    } catch {
+      /* runtime may be between lifecycle states in lifecycle-focused specs */
+    }
+
+    const state = JSON.parse(getAnvilRuntime().getStateJson());
+    let transientContainers = 0;
+    function countTransientContainers(node) {
+      if (!node) return;
+      if (node.type === "CON") transientContainers += 1;
+      for (const child of node.children || []) countTransientContainers(child);
+    }
+    countTransientContainers(state.tree);
+
+    const tracked =
+      state.tilingEngineMode === "core"
+        ? (state.portableTiling?.windows || []).filter(function (window) {
+            return window.participating;
+          }).length
+        : getRuntimeWindowStates().length;
+    if (tracked === 0 && (state.tilingEngineMode === "core" || transientContainers === 0)) return;
   }
+  throw new Error("Timed out waiting for Mutter and the tiling writer to close all windows");
 }
 
 // ---------------------------------------------------------------------------
