@@ -94,7 +94,7 @@ All remediation work must preserve these constraints:
 | TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate    |
 | TD-017 | Open     | P3       | Module depth          | Eight production modules exceed the soft 500-line budget       |
 | TD-018 | Open     | P3       | Tree ownership        | Legacy topology extraction is implemented and awaiting review  |
-| TD-019 | Complete | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved        |
+| TD-019 | Open     | P3       | Grab-Resize design    | Pure policy extraction is implemented and awaiting review      |
 | TD-020 | Open     | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions |
 | TD-021 | Tracked  | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`             |
 | TD-022 | Tracked  | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open    |
@@ -431,7 +431,7 @@ reversible snapshots, live polling, percent algebra, constraints, and cleanup.
 **Impact:** Edge-case fixes require touching a large stateful module, and candidate-selection
 behavior is difficult to test without constructing a full session.
 
-**Completion evidence:** `grab-resize-policy.ts` now owns pure candidate walking and percent-plan
+**Current implementation, pending review:** `grab-resize-policy.ts` now owns pure candidate walking and percent-plan
 calculation. GrabResizeSession retains recognition, operation state, polling, snapshots, exemption
 state, cleanup, and the only percent-application path. Policy tests cover horizontal and vertical
 same/different-parent plans, invalid geometry and indices, missing rectangles, invalid directions,
@@ -696,7 +696,7 @@ amount of code being moved.
 1. [ ] Extract legacy workspace/monitor discovery and reindexing from Tree into one topology owner.
 2. [ ] Reduce AnvilRuntime to composition, lifecycle, engine routing, and its intentional
        shell-facing facade.
-3. [x] Keep the Stage 3 resize selector pure and make GrabResizeSession the narrow session
+3. [ ] Keep the Stage 3 resize selector pure and make GrabResizeSession the narrow session
        coordinator.
 4. Split other modules only when a proposed interface hides meaningful complexity and preserves
    the owner table.
@@ -714,8 +714,8 @@ amount of code being moved.
   observation hooks when those actions must update portable state.
 - `grab-resize-policy.ts` is a 103-line pure planner; GrabResizeSession delegates candidate/percent
   planning while retaining all session mechanics and percent application.
-- AnvilRuntime has fallen from approximately 1,496 to 1,133 lines and Tree from approximately 1,071
-  to 973 lines. The eight remaining over-budget production modules have explicit deletion-test
+- AnvilRuntime has fallen from 1,404 to 1,133 lines and Tree from 1,054 to 973 lines. The eight
+  remaining over-budget production modules have explicit deletion-test
   rationales under TD-017 rather than line-count-only split proposals.
 - The ownership changes are recorded in the architecture rules, source map, and decision log. This
   evidence does not close TD-017, TD-018, or Stage 6 until focused tests and both reviewer axes pass

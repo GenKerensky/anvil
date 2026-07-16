@@ -66,7 +66,9 @@ export class GnomeWindowOperations {
     if (!rect && node.mode === WINDOW_MODES.FLOAT) rect = metaWindow.get_frame_rect();
     if (!rect) return null;
 
-    const projected = { ...rect };
+    // Preserve the legacy runtime contract: projecting a stored Tree rect also
+    // updates that rect in place before the caller commits the monitor move.
+    const projected = rect;
     projected.height *= targetWorkArea.height / currentWorkArea.height;
     projected.width *= targetWorkArea.width / currentWorkArea.width;
 

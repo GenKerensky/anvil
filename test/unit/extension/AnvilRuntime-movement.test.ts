@@ -140,7 +140,7 @@ describe("GNOME window operations", () => {
       expect(result!.height).toBeLessThanOrEqual(1080);
     });
 
-    it("returns a projection without mutating the node rect", () => {
+    it("projects the node rect in place for legacy behavior parity", () => {
       const metaWindow = createMockWindow({
         wm_class: "TestApp",
         title: "Test",
@@ -154,9 +154,9 @@ describe("GNOME window operations", () => {
       const result = operations.rectForMonitor(node, 1);
 
       expect(result).not.toBeNull();
-      expect(result).not.toBe(original);
+      expect(result).toBe(original);
       expect(node.rect).toBe(original);
-      expect(node.rect).toEqual({ x: 100, y: 50, width: 960, height: 540 });
+      expect(node.rect).toEqual({ x: 2020, y: 50, width: 960, height: 540 });
     });
 
     it("should return null for window without rect and tile mode", () => {

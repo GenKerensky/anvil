@@ -334,16 +334,14 @@ This improves depth, leverage (one load for the default path), and removes dupli
 - **Grab state**: `grabOp`/`cancelGrab`/`resizedWindows` storage lives **only** on
   `GrabResizeSession`. WM's `grabOp`/`cancelGrab`/`_resizedWindows` facades were removed; tests +
   `test/e2e/lib/commands.js` now read `wm._grab.*` directly.
-- **`bindWorkspaceSignals` (C11)**: `SignalManager` owns the connect/disconnect implementation.
-  WM's `bindWorkspaceSignals(ws)` is a thin TreeHost/test facade that delegates to
-  `this._signalManager.bindWorkspaceSignals(ws)`. SignalManager is constructed **before** Tree in
-  the WM constructor because Tree.\_initWorkspaces() calls `bindWorkspaceSignals` during construction;
-  all SignalManager host accessors are lazy, so later subsystems need not yet exist. This removed a
-  dead duplicate of the method that had been left on WM.
+- **`bindWorkspaceSignals` (C11, superseded 2026-07-16)**: The historical extraction retained a
+  thin Runtime/TreeHost facade and let `Tree._initWorkspaces()` request signal binding. Stage 6
+  removed both surfaces: `LegacyWorkspaceTopology` now requests binding through its narrow host,
+  while `SignalManager` remains the connect/disconnect lifetime owner.
 - **Dead-state removal (C5)**: `fromOverview`/`toOverview` were dead writes (zero readers) — deleted
-  from `SessionFlagsState` and WM accessors; `TODO(overview-thrash)` markers left at the overview
-  hiding/showing handlers. Overview-thrash skip was intended but never wired — suspected latent bug
-  logged for deliberate re-implementation if needed.
+  from `SessionFlagsState` and WM accessors. The later debt-governance pass removed the raw
+  `TODO(overview-thrash)` markers; the deferred design question now has an owner, rationale, and
+  decision point in `docs/plans/product-follow-ups.md`.
 - **C8 correction**: `_prefsOpenSrcId` was vestigial dead state in the original WM (declared,
   removed in `_removeSignals`, but **never assigned** — `handlePrefsOpen` calls
   `host.ext.openPreferences()`). Rather than own the dead source in a command-handlers `dispose()`, it
@@ -356,9 +354,10 @@ This improves depth, leverage (one load for the default path), and removes dupli
   `windowsActiveWorkspace`. Tests updated to call owner subsystems directly (`_tracker.*`,
   `_borders.*`). SignalManager now calls `host.tracker.trackCurrentWindows()` (removed from
   `SignalManagerHost`); RenderSchedulerHost routes `trackCurrentWindows` to `self._tracker.*`.
-  Host-contract facades (`renderTree`, `ensureBorderActors`, `queueEvent`, `move`, `rectForMonitor`,
-  `floatingWindow`, etc.) and the public test API (`getTestStateJson`, `toggleFloatingMode`, `resize`,
-  `isActiveWindowWorkspaceTiled`, `floatAllWindows`, …) are retained.
+  Host-contract facades (`renderTree`, `ensureBorderActors`, `queueEvent`, `floatingWindow`, etc.)
+  and the public test API (`getTestStateJson`, `toggleFloatingMode`, `resize`,
+  `isActiveWindowWorkspaceTiled`, `floatAllWindows`, …) were retained at that checkpoint. Stage 6
+  later moved `move` and `rectForMonitor` to `GnomeWindowOperations`.
 - **Dependency direction (rule §12)**: `tree.ts` and all six new modules import **no** concrete
   `WindowManager`. Verified by grep on build.
 - **LOC budget reconciliation (rule §8, Stage 6 gate `≤ 600`)**: The `≤ 600` target is **not

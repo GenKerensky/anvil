@@ -91,9 +91,9 @@ describe("percentsFromSizeDelta", () => {
     });
   });
 
-  it("rejects nonpositive parent geometry", () => {
+  it.each([0, -1])("rejects nonpositive parent geometry (%i)", (parentSize) => {
     expect(
-      percentsFromSizeDelta({ firstSize: 10, secondSize: 10, parentSize: 0, changePx: 5 })
+      percentsFromSizeDelta({ firstSize: 10, secondSize: 10, parentSize, changePx: 5 })
     ).toBeNull();
   });
 });
@@ -117,6 +117,37 @@ describe("planPercentResize", () => {
       initRect: focus.rect,
       currentRect: { x: 0, y: 0, width: 600, height: 800 },
       orientation: ORIENTATION_TYPES.HORIZONTAL,
+      position: POSITION.AFTER,
+      tiledChildCount: (candidate) => candidate.childNodes.length,
+    });
+
+    expect(plan).toMatchObject({
+      firstNode: focus,
+      secondNode: pair,
+      firstPercent: 0.6,
+      secondPercent: 0.4,
+    });
+    expect([focus.percent, pair.percent]).toEqual([0.5, 0.5]);
+  });
+
+  it("plans a vertical same-parent resize without mutating node shares", () => {
+    const parent = node("parent");
+    parent.rect = { x: 0, y: 0, width: 800, height: 1000 };
+    const focus = node("focus", NODE_TYPES.WINDOW);
+    const pair = node("pair", NODE_TYPES.WINDOW);
+    focus.rect = { x: 0, y: 0, width: 800, height: 500 };
+    pair.rect = { x: 0, y: 500, width: 800, height: 500 };
+    focus.percent = 0.5;
+    pair.percent = 0.5;
+    parent.appendChild(focus);
+    parent.appendChild(pair);
+
+    const plan = planPercentResize({
+      focusNode: focus,
+      resizePair: pair,
+      initRect: focus.rect,
+      currentRect: { x: 0, y: 0, width: 800, height: 600 },
+      orientation: ORIENTATION_TYPES.VERTICAL,
       position: POSITION.AFTER,
       tiledChildCount: (candidate) => candidate.childNodes.length,
     });
@@ -206,6 +237,162 @@ describe("planPercentResize", () => {
         orientation: ORIENTATION_TYPES.HORIZONTAL,
         position: POSITION.AFTER,
         tiledChildCount: (candidate) => candidate.childNodes.length,
+      })
+    ).toBeNull();
+  });
+
+  it.each(["resize pair", "initial rect", "orientation", "position"] as const)(
+    "rejects a missing or invalid %s",
+    (invalidField) => {
+      const parent = node("parent");
+      parent.rect = { x: 0, y: 0, width: 1000, height: 800 };
+      const focus = node("focus", NODE_TYPES.WINDOW);
+      const pair = node("pair", NODE_TYPES.WINDOW);
+      focus.rect = { x: 0, y: 0, width: 500, height: 800 };
+      pair.rect = { x: 500, y: 0, width: 500, height: 800 };
+      parent.appendChild(focus);
+      parent.appendChild(pair);
+      const args: Parameters<typeof planPercentResize>[0] = {
+        focusNode: focus,
+        resizePair: pair,
+        initRect: focus.rect,
+        currentRect: { x: 0, y: 0, width: 600, height: 800 },
+        orientation: ORIENTATION_TYPES.HORIZONTAL,
+        position: POSITION.AFTER,
+        tiledChildCount: (candidate) => candidate.childNodes.length,
+      };
+
+      if (invalidField === "resize pair") args.resizePair = null;
+      if (invalidField === "initial rect") args.initRect = null;
+      if (invalidField === "orientation") args.orientation = ORIENTATION_TYPES.NONE;
+      if (invalidField === "position") args.position = POSITION.UNKNOWN;
+
+      expect(planPercentResize(args)).toBeNull();
+    }
+  );
+
+  it.each(["pair", "parent"] as const)("rejects a missing %s rectangle", (missingRect) => {
+    const parent = node("parent");
+    parent.rect = { x: 0, y: 0, width: 1000, height: 800 };
+    const focus = node("focus", NODE_TYPES.WINDOW);
+    const pair = node("pair", NODE_TYPES.WINDOW);
+    focus.rect = { x: 0, y: 0, width: 500, height: 800 };
+    pair.rect = { x: 500, y: 0, width: 500, height: 800 };
+    parent.appendChild(focus);
+    parent.appendChild(pair);
+    if (missingRect === "pair") pair.rect = null;
+    if (missingRect === "parent") parent.rect = null;
+
+    expect(
+      planPercentResize({
+        focusNode: focus,
+        resizePair: pair,
+        initRect: focus.rect,
+        currentRect: { x: 0, y: 0, width: 600, height: 800 },
+        orientation: ORIENTATION_TYPES.HORIZONTAL,
+        position: POSITION.AFTER,
+        tiledChildCount: (candidate) => candidate.childNodes.length,
+      })
+    ).toBeNull();
+  });
+
+  it("rejects a resize pair whose parent does not contain it", () => {
+    const focusParent = node("focus-parent");
+    const focus = node("focus", NODE_TYPES.WINDOW);
+    focusParent.appendChild(focus);
+    const pairParent = node("pair-parent");
+    pairParent.rect = { x: 0, y: 0, width: 1000, height: 800 };
+    const pair = node("pair", NODE_TYPES.WINDOW);
+    pair.rect = { x: 500, y: 0, width: 500, height: 800 };
+    pair.parentNode = pairParent;
+
+    expect(
+      planPercentResize({
+        focusNode: focus,
+        resizePair: pair,
+        initRect: { x: 0, y: 0, width: 500, height: 800 },
+        currentRect: { x: 0, y: 0, width: 600, height: 800 },
+        orientation: ORIENTATION_TYPES.HORIZONTAL,
+        position: POSITION.AFTER,
+        tiledChildCount: () => 2,
+      })
+    ).toBeNull();
+  });
+
+  it.each([
+    { position: POSITION.AFTER, pairFirst: true },
+    { position: POSITION.BEFORE, pairFirst: false },
+  ])("rejects an out-of-range $position opposite sibling", ({ position, pairFirst }) => {
+    const focusParent = node("focus-parent");
+    const focus = node("focus", NODE_TYPES.WINDOW);
+    focusParent.appendChild(focus);
+    const pairParent = node("pair-parent");
+    pairParent.rect = { x: 0, y: 0, width: 1000, height: 800 };
+    const pair = node("pair", NODE_TYPES.WINDOW);
+    const sibling = node("sibling", NODE_TYPES.WINDOW);
+    pair.rect = { x: 0, y: 0, width: 500, height: 800 };
+    sibling.rect = { x: 500, y: 0, width: 500, height: 800 };
+    (pairFirst ? [pair, sibling] : [sibling, pair]).forEach((candidate) =>
+      pairParent.appendChild(candidate)
+    );
+
+    expect(
+      planPercentResize({
+        focusNode: focus,
+        resizePair: pair,
+        initRect: { x: 0, y: 0, width: 500, height: 800 },
+        currentRect: { x: 0, y: 0, width: 600, height: 800 },
+        orientation: ORIENTATION_TYPES.HORIZONTAL,
+        position,
+        tiledChildCount: (candidate) => candidate.childNodes.length,
+      })
+    ).toBeNull();
+  });
+
+  it("rejects a boundary whose opposite sibling has no rectangle", () => {
+    const focusParent = node("focus-parent");
+    const focus = node("focus", NODE_TYPES.WINDOW);
+    focusParent.appendChild(focus);
+    const pairParent = node("pair-parent");
+    pairParent.rect = { x: 0, y: 0, width: 1000, height: 800 };
+    const first = node("first", NODE_TYPES.WINDOW);
+    const pair = node("pair", NODE_TYPES.WINDOW);
+    pair.rect = { x: 500, y: 0, width: 500, height: 800 };
+    pairParent.appendChild(first);
+    pairParent.appendChild(pair);
+
+    expect(
+      planPercentResize({
+        focusNode: focus,
+        resizePair: pair,
+        initRect: { x: 0, y: 0, width: 500, height: 800 },
+        currentRect: { x: 0, y: 0, width: 600, height: 800 },
+        orientation: ORIENTATION_TYPES.HORIZONTAL,
+        position: POSITION.AFTER,
+        tiledChildCount: (candidate) => candidate.childNodes.length,
+      })
+    ).toBeNull();
+  });
+
+  it("rejects a same-parent resize with fewer than two tiled children", () => {
+    const parent = node("parent");
+    parent.rect = { x: 0, y: 0, width: 1000, height: 800 };
+    const focus = node("focus", NODE_TYPES.WINDOW);
+    const pair = node("pair", NODE_TYPES.WINDOW);
+    focus.rect = { x: 0, y: 0, width: 500, height: 800 };
+    pair.rect = { x: 500, y: 0, width: 500, height: 800 };
+    parent.appendChild(focus);
+    parent.appendChild(pair);
+
+    expect(
+      planPercentResize({
+        focusNode: focus,
+        resizePair: pair,
+        initRect: focus.rect,
+        currentRect: { x: 0, y: 0, width: 600, height: 800 },
+        orientation: ORIENTATION_TYPES.HORIZONTAL,
+        position: POSITION.AFTER,
+        tiledChildCount: () => 1,
       })
     ).toBeNull();
   });
