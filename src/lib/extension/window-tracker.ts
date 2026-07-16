@@ -439,8 +439,10 @@ export class WindowTracker {
               host.renderTree("fullscreen-notify", true);
             }),
             metaWindow.connect("unmanaged", (_metaWindow: Meta.Window) => {
-              host.withdrawPortableWindow(_metaWindow);
-              host.unregisterWindowDecoration(_metaWindow);
+              // Xwayland does not reliably keep its compositor actor alive
+              // long enough for the actor's destroy signal to own teardown.
+              // Meta.Window::unmanaged is the authoritative withdrawal edge.
+              this.windowDestroy(windowActor, _metaWindow);
             }),
             metaWindow.connect("focus", (_metaWindowFocus: Meta.Window) => {
               host.observePortableFocus(_metaWindowFocus);
@@ -635,7 +637,11 @@ export class WindowTracker {
    *   4. update attachNode
    *   5. single render (no dual quick + queued pass)
    */
-  windowDestroy(actor: AnvilWindowActor, knownMetaWindow?: Meta.Window, actorDestroyed = false) {
+  windowDestroy(
+    actor: AnvilWindowActor | null,
+    knownMetaWindow?: Meta.Window,
+    actorDestroyed = false
+  ) {
     const host = this._host;
     if (host.coreTilingEngine) {
       const metaWindow = knownMetaWindow;
@@ -648,9 +654,12 @@ export class WindowTracker {
     }
     const nodeWindow =
       (knownMetaWindow ? host.tree.findNode(knownMetaWindow) : null) ??
-      host.findNodeWindowByActor(actor);
+      (actor ? host.findNodeWindowByActor(actor) : null);
     const metaWindow = (nodeWindow?.nodeValue ?? knownMetaWindow) as Meta.Window | undefined;
-    if (metaWindow) host.withdrawPortableWindow(metaWindow);
+    if (metaWindow) {
+      this._trackedWindows.delete(metaWindow);
+      host.withdrawPortableWindow(metaWindow);
+    }
 
     // 1. Border actors
     if (metaWindow) host.unregisterWindowDecoration(metaWindow, actorDestroyed);

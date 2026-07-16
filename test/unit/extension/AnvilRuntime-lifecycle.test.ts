@@ -273,6 +273,16 @@ describe("AnvilRuntime - Lifecycle", () => {
   });
 
   describe("trackWindow", () => {
+    it("removes a legacy node when the Meta window becomes unmanaged", () => {
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      wm()._tracker.trackWindow(ctx.display, window);
+      expect(ctx.tree.findNode(window)).not.toBeNull();
+
+      window.emit("unmanaged", window);
+
+      expect(ctx.tree.findNode(window)).toBeNull();
+    });
+
     it("observes the portable fact before mutating the legacy tree", () => {
       const window = createMockWindow({ workspace: ctx.workspaces[0] });
       const observe = vi.spyOn(wm()._tilingShadow, "observeWindow");
