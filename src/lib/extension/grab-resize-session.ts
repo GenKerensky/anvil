@@ -20,13 +20,14 @@ import Meta from "gi://Meta";
 import { Logger } from "../shared/logger.js";
 import * as Utils from "./utils.js";
 import {
+  NODE_TYPES,
   ORIENTATION_TYPES,
   POSITION,
-  NODE_TYPES,
   type Node,
   type RectLike,
   type Tree,
 } from "./tree.js";
+import { findEligibleResizePair, planPercentResize } from "./grab-resize-policy.js";
 import { WINDOW_MODES, GRAB_TYPES } from "./window/constants.js";
 import type { AnvilMetaWindow } from "./window/types.js";
 import type { EventSchedulerPort } from "./event-scheduler.js";
@@ -69,52 +70,6 @@ export interface GrabResizeHost {
     eligible: boolean
   ): void;
   readonly previewPresenter: DragPreviewPresenter;
-}
-
-/**
- * Pure percent update from a size delta against a sibling pair.
- * changePx = currentSize - firstSize for the edge being dragged.
- */
-export function percentsFromSizeDelta(args: {
-  firstSize: number;
-  secondSize: number;
-  parentSize: number;
-  changePx: number;
-}): { firstPercent: number; secondPercent: number } {
-  const { firstSize, secondSize, parentSize, changePx } = args;
-  if (parentSize <= 0) {
-    return { firstPercent: 0, secondPercent: 0 };
-  }
-  return {
-    firstPercent: (firstSize + changePx) / parentSize,
-    secondPercent: (secondSize - changePx) / parentSize,
-  };
-}
-
-/**
- * Walk directional tree candidates until one can participate in Grab-Resize.
- * The traversal callback preserves Tree's nested/opposite-edge semantics while
- * this owner applies floating/minimized eligibility consistently for both axes.
- */
-export function findEligibleResizePair(args: {
-  focusNode: Node;
-  direction: Meta.MotionDirection;
-  nextVisible: (node: Node, direction: Meta.MotionDirection) => Node | null;
-  isEligible: (node: Node) => boolean;
-  isBoundary?: (node: Node) => boolean;
-}): Node | null {
-  const { focusNode, direction, nextVisible, isEligible, isBoundary = () => false } = args;
-  const visited = new Set<Node>([focusNode]);
-  let cursor = focusNode;
-
-  while (true) {
-    const candidate = nextVisible(cursor, direction);
-    if (!candidate || visited.has(candidate)) return null;
-    if (isBoundary(candidate)) return null;
-    if (isEligible(candidate)) return candidate;
-    visited.add(candidate);
-    cursor = candidate;
-  }
 }
 
 type NodeGrabState = {
@@ -371,7 +326,6 @@ export class GrabResizeSession {
       const initGrabOp = nodeGrab.initGrabOp;
       const direction = Utils.directionFromGrab(grabOp);
       const orientation = Utils.orientationFromGrab(grabOp);
-      let parentNodeForFocus = focusNodeWindow!.parentNode!;
       const position = Utils.positionFromGrabOp(grabOp);
       // normalize the rect without gaps
       const focusMeta = host.focusMetaWindow;
@@ -379,10 +333,7 @@ export class GrabResizeSession {
       const frameRect = focusMeta.get_frame_rect();
       const gaps = host.calculateGaps(focusNodeWindow);
       const currentRect = Utils.removeGapOnRect(frameRect, gaps);
-      let firstRect;
-      let secondRect;
-      let parentRect;
-      let resizePairForWindow;
+      let resizePairForWindow: Node | null = null;
 
       if (initGrabOp === Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN) {
         Logger.debug(`_handleResizing: KEYBOARD_RESIZING_UNKNOWN — return early`);
@@ -430,130 +381,18 @@ export class GrabResizeSession {
         }`
       );
 
-      if (orientation === ORIENTATION_TYPES.HORIZONTAL) {
-        if (sameParent) {
-          // use the window or con pairs
-          if (host.tree.getTiledChildren(parentNodeForFocus.childNodes).length <= 1) {
-            return;
-          }
-
-          firstRect = nodeGrab.initRect;
-          if (resizePairForWindow) secondRect = resizePairForWindow.rect;
-
-          if (!firstRect || !secondRect) {
-            return;
-          }
-
-          parentRect = parentNodeForFocus.rect!;
-          const changePx = currentRect.width - firstRect!.width;
-          const { firstPercent, secondPercent } = percentsFromSizeDelta({
-            firstSize: firstRect!.width,
-            secondSize: secondRect!.width,
-            parentSize: parentRect.width,
-            changePx,
-          });
-          focusNodeWindow.percent = firstPercent;
-          resizePairForWindow!.percent = secondPercent;
-        } else {
-          // use the parent pairs (con to another con or window)
-          if (resizePairForWindow && resizePairForWindow.parentNode) {
-            if (host.tree.getTiledChildren(resizePairForWindow.parentNode.childNodes).length <= 1) {
-              return;
-            }
-            const firstWindowRect = nodeGrab.initRect;
-            let index: number | null = resizePairForWindow.index;
-            if (position === POSITION.BEFORE) {
-              // Find the opposite node
-              index = index! + 1;
-            } else {
-              index = index! - 1;
-            }
-            const childNodes = resizePairForWindow.parentNode.childNodes;
-            if (index === null || index < 0 || index >= childNodes.length) return;
-            parentNodeForFocus = childNodes[index!];
-            firstRect = parentNodeForFocus.rect;
-            secondRect = resizePairForWindow.rect;
-            if (!firstRect || !secondRect) {
-              return;
-            }
-
-            parentRect = parentNodeForFocus.parentNode!.rect!;
-            const changePx = currentRect.width - firstWindowRect!.width;
-            const { firstPercent, secondPercent } = percentsFromSizeDelta({
-              firstSize: firstRect.width,
-              secondSize: secondRect.width,
-              parentSize: parentRect.width,
-              changePx,
-            });
-            parentNodeForFocus.percent = firstPercent;
-            resizePairForWindow.percent = secondPercent;
-            Logger.debug(
-              `_handleResizing HORIZONTAL diffParent: changePx=${changePx} firstPercent=${firstPercent} secondPercent=${secondPercent} parentW=${parentRect.width}`
-            );
-          }
-        }
-      } else if (orientation === ORIENTATION_TYPES.VERTICAL) {
-        if (sameParent) {
-          // use the window or con pairs
-          if (host.tree.getTiledChildren(parentNodeForFocus.childNodes).length <= 1) {
-            return;
-          }
-          firstRect = nodeGrab.initRect;
-          if (resizePairForWindow) secondRect = resizePairForWindow.rect;
-          if (!firstRect || !secondRect) {
-            return;
-          }
-          parentRect = parentNodeForFocus.rect!;
-          const changePx = currentRect.height - firstRect!.height;
-          const { firstPercent, secondPercent } = percentsFromSizeDelta({
-            firstSize: firstRect!.height,
-            secondSize: secondRect!.height,
-            parentSize: parentRect.height,
-            changePx,
-          });
-          focusNodeWindow.percent = firstPercent;
-          resizePairForWindow!.percent = secondPercent;
-          Logger.debug(
-            `_handleResizing VERTICAL sameParent: changePx=${changePx} firstPercent=${firstPercent} secondPercent=${secondPercent} parentH=${parentRect.height}`
-          );
-        } else {
-          // use the parent pairs (con to another con or window)
-          if (resizePairForWindow && resizePairForWindow.parentNode) {
-            if (host.tree.getTiledChildren(resizePairForWindow.parentNode.childNodes).length <= 1) {
-              return;
-            }
-            const firstWindowRect = nodeGrab.initRect;
-            let index: number | null = resizePairForWindow.index;
-            if (position === POSITION.BEFORE) {
-              // Find the opposite node
-              index = index! + 1;
-            } else {
-              index = index! - 1;
-            }
-            const childNodes = resizePairForWindow.parentNode.childNodes;
-            if (index === null || index < 0 || index >= childNodes.length) return;
-            parentNodeForFocus = childNodes[index!];
-            firstRect = parentNodeForFocus.rect;
-            secondRect = resizePairForWindow.rect;
-            if (!firstRect || !secondRect) {
-              return;
-            }
-
-            parentRect = parentNodeForFocus.parentNode!.rect!;
-            const changePx = currentRect.height - firstWindowRect!.height;
-            const { firstPercent, secondPercent } = percentsFromSizeDelta({
-              firstSize: firstRect.height,
-              secondSize: secondRect.height,
-              parentSize: parentRect.height,
-              changePx,
-            });
-            parentNodeForFocus.percent = firstPercent;
-            resizePairForWindow.percent = secondPercent;
-            Logger.debug(
-              `_handleResizing VERTICAL diffParent: changePx=${changePx} firstPercent=${firstPercent} secondPercent=${secondPercent} parentH=${parentRect.height}`
-            );
-          }
-        }
+      const plan = planPercentResize({
+        focusNode: focusNodeWindow,
+        resizePair: resizePairForWindow,
+        initRect: nodeGrab.initRect,
+        currentRect,
+        orientation,
+        position,
+        tiledChildCount: (node) => host.tree.getTiledChildren(node.childNodes).length,
+      });
+      if (plan) {
+        plan.firstNode.percent = plan.firstPercent;
+        plan.secondNode.percent = plan.secondPercent;
       }
     }
 

@@ -8,15 +8,20 @@ import { describe, it, expect, vi } from "vitest";
 import {
   LAYOUT_TYPES,
   NODE_TYPES,
+  ORIENTATION_TYPES,
+  POSITION,
   type Node,
   type RectLike,
 } from "../../../src/lib/extension/tree.js";
 import {
   GrabResizeSession,
-  findEligibleResizePair,
-  percentsFromSizeDelta,
   type GrabResizeHost,
 } from "../../../src/lib/extension/grab-resize-session.js";
+import {
+  findEligibleResizePair,
+  percentsFromSizeDelta,
+  planPercentResize,
+} from "../../../src/lib/extension/grab-resize-policy.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
   createMockWindow,
@@ -569,25 +574,25 @@ describe("findEligibleResizePair", () => {
 
 describe("percentsFromSizeDelta", () => {
   it("updates sibling percents from a positive width delta", () => {
-    const { firstPercent, secondPercent } = percentsFromSizeDelta({
+    const result = percentsFromSizeDelta({
       firstSize: 500,
       secondSize: 500,
       parentSize: 1000,
       changePx: 100,
     });
-    expect(firstPercent).toBeCloseTo(0.6);
-    expect(secondPercent).toBeCloseTo(0.4);
+    expect(result?.firstPercent).toBeCloseTo(0.6);
+    expect(result?.secondPercent).toBeCloseTo(0.4);
   });
 
   it("updates sibling percents from a negative delta", () => {
-    const { firstPercent, secondPercent } = percentsFromSizeDelta({
+    const result = percentsFromSizeDelta({
       firstSize: 500,
       secondSize: 500,
       parentSize: 1000,
       changePx: -100,
     });
-    expect(firstPercent).toBeCloseTo(0.4);
-    expect(secondPercent).toBeCloseTo(0.6);
+    expect(result?.firstPercent).toBeCloseTo(0.4);
+    expect(result?.secondPercent).toBeCloseTo(0.6);
   });
 
   it("returns zeros when parentSize is non-positive", () => {
@@ -598,6 +603,143 @@ describe("percentsFromSizeDelta", () => {
         parentSize: 0,
         changePx: 5,
       })
-    ).toEqual({ firstPercent: 0, secondPercent: 0 });
+    ).toBeNull();
   });
+});
+
+describe("planPercentResize", () => {
+  it("returns a same-parent horizontal plan without mutating nodes", () => {
+    const { nodes } = createTiledSessionFixture();
+    const initial = nodes.map((candidate) => candidate.percent);
+
+    const plan = planPercentResize({
+      focusNode: nodes[0],
+      resizePair: nodes[1],
+      initRect: nodes[0].rect,
+      currentRect: { x: 0, y: 0, width: 1060, height: 1080 },
+      orientation: ORIENTATION_TYPES.HORIZONTAL,
+      position: POSITION.AFTER,
+      tiledChildCount: (parent) => parent.childNodes.length,
+    });
+
+    expect(plan).toMatchObject({
+      firstNode: nodes[0],
+      secondNode: nodes[1],
+      firstPercent: 1060 / 1920,
+      secondPercent: 860 / 1920,
+    });
+    expect(nodes.map((candidate) => candidate.percent)).toEqual(initial);
+  });
+
+  it("returns null instead of applying zero shares for invalid parent geometry", () => {
+    const { container, nodes } = createTiledSessionFixture();
+    container.rect = { x: 0, y: 0, width: 0, height: 1080 };
+
+    expect(
+      planPercentResize({
+        focusNode: nodes[0],
+        resizePair: nodes[1],
+        initRect: nodes[0].rect,
+        currentRect: { x: 0, y: 0, width: 1060, height: 1080 },
+        orientation: ORIENTATION_TYPES.HORIZONTAL,
+        position: POSITION.AFTER,
+        tiledChildCount: (parent) => parent.childNodes.length,
+      })
+    ).toBeNull();
+  });
+
+  it.each([
+    {
+      name: "horizontal BEFORE",
+      orientation: ORIENTATION_TYPES.HORIZONTAL,
+      position: POSITION.BEFORE,
+      pairFirst: true,
+      parentRect: { x: 0, y: 0, width: 1000, height: 800 },
+      firstRect: { x: 500, y: 0, width: 500, height: 800 },
+      pairRect: { x: 0, y: 0, width: 500, height: 800 },
+      initRect: { x: 0, y: 0, width: 500, height: 400 },
+      currentRect: { x: 0, y: 0, width: 600, height: 400 },
+    },
+    {
+      name: "vertical AFTER",
+      orientation: ORIENTATION_TYPES.VERTICAL,
+      position: POSITION.AFTER,
+      pairFirst: false,
+      parentRect: { x: 0, y: 0, width: 800, height: 1000 },
+      firstRect: { x: 0, y: 0, width: 800, height: 500 },
+      pairRect: { x: 0, y: 500, width: 800, height: 500 },
+      initRect: { x: 0, y: 0, width: 400, height: 500 },
+      currentRect: { x: 0, y: 0, width: 400, height: 600 },
+    },
+  ])(
+    "plans a different-parent $name resize without mutating topology",
+    ({
+      orientation,
+      position,
+      pairFirst,
+      parentRect,
+      firstRect,
+      pairRect,
+      initRect,
+      currentRect,
+    }) => {
+      const ctx = createTreeFixture({ fullExtWm: true });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const focusContainer = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.CON,
+        "focus-container"
+      );
+      const pairContainer = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.CON,
+        "pair-container"
+      );
+      pairContainer.rect = parentRect;
+      const focus = ctx.tree.createNode(
+        focusContainer.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 80, rect: initRect })
+      );
+      const createFirst = () =>
+        ctx.tree.createNode(
+          pairContainer.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 81, rect: firstRect })
+        );
+      const createPair = () =>
+        ctx.tree.createNode(
+          pairContainer.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 82, rect: pairRect })
+        );
+      const pair = pairFirst ? createPair() : null;
+      const first = createFirst();
+      const finalPair = pair ?? createPair();
+      focus.rect = initRect;
+      first.rect = firstRect;
+      finalPair.rect = pairRect;
+      first.percent = 0.5;
+      finalPair.percent = 0.5;
+
+      const plan = planPercentResize({
+        focusNode: focus,
+        resizePair: finalPair,
+        initRect,
+        currentRect,
+        orientation,
+        position,
+        tiledChildCount: (parent) => parent.childNodes.length,
+      });
+
+      expect(plan).toMatchObject({
+        firstNode: first,
+        secondNode: finalPair,
+        firstPercent: 0.6,
+        secondPercent: 0.4,
+      });
+      expect(first.percent).toBe(0.5);
+      expect(finalPair.percent).toBe(0.5);
+    }
+  );
 });

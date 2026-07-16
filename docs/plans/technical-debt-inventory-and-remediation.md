@@ -92,7 +92,7 @@ All remediation work must preserve these constraints:
 | TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate     |
 | TD-017 | Open     | P3       | Module depth          | Six production modules exceed the soft 500-line budget          |
 | TD-018 | Open     | P3       | Tree ownership        | Legacy Tree still owns platform workspace/monitor orchestration |
-| TD-019 | Open     | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved         |
+| TD-019 | Complete | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved         |
 | TD-020 | Open     | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions  |
 | TD-021 | Tracked  | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`              |
 | TD-022 | Tracked  | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open     |
@@ -677,7 +677,8 @@ amount of code being moved.
 1. Extract legacy workspace/monitor discovery and reindexing from Tree into one topology owner.
 2. Reduce AnvilRuntime to composition, lifecycle, engine routing, and its intentional shell-facing
    facade.
-3. Keep the Stage 3 resize selector pure and make GrabResizeSession the narrow session coordinator.
+3. [x] Keep the Stage 3 resize selector pure and make GrabResizeSession the narrow session
+       coordinator.
 4. Split other modules only when a proposed interface hides meaningful complexity and preserves
    the owner table.
 

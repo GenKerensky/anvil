@@ -605,3 +605,12 @@ A second audit of the refactor found remaining work; all resolved.
   show/hide/destroy through that presenter instead of hanging preview state on a node.
 - **The portable core remains separate and experimental**: this production cleanup does not reuse,
   alter, or advance the portable presenters and does not change the default tiling engine.
+
+### Grab-Resize policy ownership (2026-07-16)
+
+- **`grab-resize-policy.ts` owns pure resize planning**: candidate walking and percent calculation
+  accept structural inputs and return a plan without mutating nodes or starting lifecycle work.
+- **`GrabResizeSession` remains the sole percent writer**: it owns grab state, polling, snapshots,
+  cleanup, and applies a successful pure plan to the selected pair.
+- **Invalid geometry is a no-op**: a nonpositive parent span or an ineligible boundary returns no
+  plan, preserving the current shares instead of manufacturing zero percentages.
