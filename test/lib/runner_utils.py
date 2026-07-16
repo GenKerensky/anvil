@@ -188,6 +188,7 @@ def wait_for_results(
     Deletes the file after reading so re-runs start clean.
     """
     deadline = time.monotonic() + timeout
+    process_exit_deadline: float | None = None
     while time.monotonic() < deadline:
         if results_path.is_file():
             try:
@@ -207,10 +208,17 @@ def wait_for_results(
         if watched_process is not None:
             return_code = watched_process.poll()
             if return_code is not None:
-                raise RuntimeError(
-                    "GNOME Shell exited before writing E2E results "
-                    f"(status {return_code})"
-                )
+                # The automation script writes immediately before the headless
+                # Shell exits. Give the filesystem a short visibility/read
+                # grace instead of racing the process-status observation.
+                process_exit_deadline = process_exit_deadline or (time.monotonic() + 1.0)
+                if time.monotonic() >= process_exit_deadline:
+                    raise RuntimeError(
+                        "GNOME Shell exited before writing E2E results "
+                        f"(status {return_code})"
+                    )
+                time.sleep(0.05)
+                continue
         time.sleep(0.5)
     raise TimeoutError(f"Results file {results_path} did not appear within {timeout}s")
 

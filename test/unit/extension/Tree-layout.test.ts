@@ -83,7 +83,6 @@ describe("TilingRender Layout Algorithms", () => {
       notifyFocusChanged: vi.fn(),
       moveWindow: vi.fn(),
       rectForMonitor: vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1080 })),
-      sameParentMonitor: vi.fn(() => true),
       floatingWindow: vi.fn(() => false),
     });
     tilingRender = new TilingRender({

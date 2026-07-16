@@ -1,6 +1,6 @@
 # Technical debt inventory and remediation plan
 
-**Status:** In progress — Stages 0 through 2 complete
+**Status:** In progress — Stages 0 through 3 complete
 
 **Date:** 2026-07-15
 
@@ -78,8 +78,8 @@ All remediation work must preserve these constraints:
 | TD-002 | Complete    | P0       | Configuration         | Parsed window overrides bypass their runtime validator          |
 | TD-003 | Complete    | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected        |
 | TD-004 | Complete    | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
-| TD-005 | Open        | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
-| TD-006 | Open        | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
+| TD-005 | Complete    | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
+| TD-006 | Complete    | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
 | TD-007 | Open        | P2       | Runtime API           | Thirteen private compatibility members exist only for tests     |
 | TD-008 | Complete    | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain          |
 | TD-009 | Open        | P2       | Shared helpers        | Several helpers and conversions have no production consumer     |
@@ -452,7 +452,7 @@ change the default engine or retire the legacy writer.
 - [x] Stage 0: Establish reproducible debt gates
 - [x] Stage 1: Close bounded correctness and lifecycle hazards
 - [x] Stage 2: Make stylesheet upgrades non-destructive
-- [ ] Stage 3: Finish interaction edge behavior
+- [x] Stage 3: Finish interaction edge behavior
 - [ ] Stage 4: Remove dead compatibility and enforce unused-code checks
 - [ ] Stage 5: Remove stale schema, resources, and tool entry points
 - [ ] Stage 6: Deepen legacy production modules
@@ -554,19 +554,30 @@ cross-process stylesheet selection.
 
 ### Stage 3: Finish interaction edge behavior
 
+**Status:** Complete — reviewed with no blocking or important findings.
+
 **Purpose:** Resolve known behavior gaps without combining them with module extraction.
 
 **Work order:**
 
-1. TD-006: extract and use eligible resize-pair selection.
-2. Verify live Wayland Grab-Resize remains smooth and reconciliation does not fight the operation.
-3. TD-005: reproduce the cross-monitor freeze in isolation.
-4. Implement atomic cross-surface swap or an explicit supported rejection contract.
-5. Update tests that currently expect a silent cross-monitor no-op.
+1. [x] TD-006: extract and use eligible resize-pair selection.
+2. [x] Verify live Wayland Grab-Resize remains smooth and reconciliation does not fight the
+       operation.
+3. [x] TD-005: reproduce the cross-monitor freeze in isolation.
+4. [x] Implement atomic cross-surface swap or an explicit supported rejection contract.
+5. [x] Update tests that currently expect a silent cross-monitor no-op.
 
 **Exit gate:** Unit tests prove topology and percent invariants; focused resize and swap E2E tests
 pass; cross-monitor testing runs through the repository's dedicated fresh-process monitor gate to
 avoid contaminating the rest of the E2E run with the known native Mutter monitor-churn failure.
+
+**Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 1,120 unit tests,
+and 41 tooling tests (two host-only cases skipped by the deterministic gate). The isolated
+two-monitor swap E2E passes both directions without extension errors, lost focus, or a frozen
+renderer; the focused resize and monitor-constraint E2E gate passes 78/78. Regression tests cover
+ineligible-neighbor walking, same-surface boundaries, atomic topology/percent exchange,
+direction-aware nested edge selection, pre-existing freeze ownership, and target-tree monitor
+constraints before Mutter reports the move. Both review axes passed after one remediation round.
 
 **Suggested commits:**
 

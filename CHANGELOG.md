@@ -37,6 +37,11 @@ testing, and ongoing maintainability.
 
 #### Fixed
 
+- **Cross-monitor window swaps** — Directional swaps now commit both Tiling Tree changes
+  atomically, render once, retain focus, and work in either direction at a monitor boundary without
+  leaving rendering frozen.
+- **Grab-Resize across skipped neighbors** — Floating and minimized adjacent windows no longer
+  prevent resizing against the next eligible tiled neighbor.
 - **Unsafe mode ownership** — Test mode no longer sets GNOME Shell's global
   `context.unsafe_mode`; automation continues through direct in-process GJS APIs.
 - **4-window focus cycle test navigation** — The 4-window focus test now

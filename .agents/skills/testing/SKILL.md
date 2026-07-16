@@ -67,28 +67,29 @@ make test-e2e
       → export async function run()
         → test-mode=true, wait ACTIVE + __anvil_test_state + __anvil_runtime
         → boot Jasmine, import suites/*.js, execute
-        → write /tmp/anvil-e2e-results.json
+        → write $ANVIL_E2E_RESULTS_PATH under ignored test/e2e/output/
     ← poll results, print summary
 ```
 
 ### Suites (`test/e2e/suites/`)
 
-| File             | Coverage                                                   |
-| ---------------- | ---------------------------------------------------------- |
-| `extension.js`   | Load, ACTIVE, test-mode, disable/re-enable                 |
-| `tiling.js`      | Fill work area, multi-window no-overlap, after swap/toggle |
-| `keyboard.js`    | Super+H / Super+J / Super+C                                |
-| `operations.js`  | Alt+F4 re-tile                                             |
-| `resize.js`      | Keyboard resize + 6×3×4 constraint matrix (~74)            |
-| `focus.js`       | Focus directions                                           |
-| `swap.js`        | Swap directions + WindowSwapLastActive                     |
-| `move.js`        | Move directions                                            |
-| `floating.js`    | Float, snap layout, tiling mode toggle                     |
-| `layouts.js`     | Split, stacked, tabbed, layout toggle                      |
-| `workspace.js`   | WorkspaceActiveTileToggle                                  |
-| `borders.js`     | Focus border + gap size                                    |
-| `minimize.js`    | Minimize/unminimize re-tile                                |
-| `constraints.js` | Monitor constraint clamp/exempt                            |
+| File                    | Coverage                                                   |
+| ----------------------- | ---------------------------------------------------------- |
+| `extension.js`          | Load, ACTIVE, test-mode, disable/re-enable                 |
+| `tiling.js`             | Fill work area, multi-window no-overlap, after swap/toggle |
+| `keyboard.js`           | Super+H / Super+J / Super+C                                |
+| `operations.js`         | Alt+F4 re-tile                                             |
+| `resize.js`             | Keyboard resize + 6×3×4 constraint matrix (~74)            |
+| `focus.js`              | Focus directions                                           |
+| `swap.js`               | Swap directions + WindowSwapLastActive                     |
+| `move.js`               | Move directions                                            |
+| `floating.js`           | Float, snap layout, tiling mode toggle                     |
+| `layouts.js`            | Split, stacked, tabbed, layout toggle                      |
+| `workspace.js`          | WorkspaceActiveTileToggle                                  |
+| `borders.js`            | Focus border + gap size                                    |
+| `minimize.js`           | Minimize/unminimize re-tile                                |
+| `cross-surface-swap.js` | Atomic two-monitor swap in both directions                 |
+| `constraints.js`        | Monitor constraint clamp/exempt                            |
 
 ### Writing an E2E suite
 
@@ -132,6 +133,7 @@ On immutable hosts (Bazzite), install inside a distrobox that has gnome-shell, o
 
 ```bash
 make test-e2e
+make test-e2e-cross-surface-swap
 python3 test/e2e/run.py --tag resize
 python3 test/e2e/run.py --no-build --tag focus
 ```
@@ -144,7 +146,9 @@ python3 test/e2e/run.py --no-build --tag focus
 | **Local PR smoke**    | `python3 test/e2e/run.py --tag focus` (or `resize`) | Before merge when touching focus/layout |
 | **Nightly / release** | `make test-e2e` (full suite)                        | Pre-release, local                      |
 
-`--tag` filters by suite/spec name substring — use it to keep PR loops short.
+`--tag` filters imported suite filenames (with explicit expansions such as `resize` also loading
+`constraints.js`) — use it to keep PR loops short. Each run receives a unique
+`ANVIL_E2E_RESULTS_PATH`, so concurrent sessions do not race on a global `/tmp` result file.
 
 ### Geometry assertions (D2-1)
 

@@ -5,7 +5,7 @@ MSGSRC = $(wildcard src/po/*.po)
 .PHONY: all build install uninstall clean dist debug \
         enable disable restart purge log journal \
         potfile compilemsgs metadata schemas format lint check \
-        test-unit test-e2e test-e2e-monitor-churn test-e2e-preferences \
+        test-unit test-e2e test-e2e-monitor-churn test-e2e-cross-surface-swap test-e2e-preferences \
         test-e2e-stylesheet test-debug-loop-lib
 
 all: build install
@@ -123,6 +123,11 @@ test-e2e: dist
 test-e2e-monitor-churn: dist
 	python3 test/e2e/run.py --no-build --tag monitor-churn --virtual-monitors 2
 	python3 test/e2e/run.py --no-build --engine core --tag monitor-churn --virtual-monitors 2
+
+# Cross-surface legacy swap gets its own fresh Shell process so monitor-moving
+# signal traffic cannot contaminate or be contaminated by other E2E suites.
+test-e2e-cross-surface-swap: dist
+	python3 test/e2e/run.py --no-build --tag cross-surface-swap --virtual-monitors 2 --results-timeout 120
 
 test-e2e-preferences: dist
 	python3 test/e2e/run.py --no-build --tag preferences

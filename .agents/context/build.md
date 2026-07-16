@@ -39,6 +39,8 @@ distrobox enter fedora-devbox -- bash -lc \
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && make test-e2e-monitor-churn'
 distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && make test-e2e-cross-surface-swap'
+distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && make test-e2e-preferences'
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && make test-e2e-stylesheet'
@@ -55,7 +57,9 @@ python3 test/e2e/run.py --no-build         # Skip make dist
 CI runs the deterministic `npm test` gate only. Host tooling smoke and E2E remain local gates.
 Prefer `--tag` for PR-local E2E; run the full E2E suite before release (D2-2). Each E2E session
 uses a temporary `XDG_CONFIG_HOME`, so stylesheet and preferences tests do not mutate the host
-Anvil configuration.
+Anvil configuration. The in-Shell result file uses a unique name under the ignored
+`test/e2e/output/` directory, allowing independent E2E processes to run without sharing stale
+results even when the nested Shell has a separate `/tmp` namespace.
 
 The installed preferences, icon, Quick Settings, and stylesheet validation procedure is recorded
 in `docs/testing/installed-package-smoke.md`.
@@ -63,7 +67,7 @@ in `docs/testing/installed-package-smoke.md`.
 `test/e2e/runner.js` is loaded by `--automation-script`. Exports `async function run()`
 (called by gnome-shell). Sets `test-mode=true`, waits for ACTIVE extension with
 `__anvil_test_state` and `__anvil_runtime`, bootstraps Jasmine from `/usr/share/jasmine-gjs/`, writes
-`/tmp/anvil-e2e-results.json`.
+the JSON result to the session-specific `ANVIL_E2E_RESULTS_PATH`, and then exits.
 
 Requires `gnome-shell` + `jasmine-gjs` + `glib2-devel`. The core-default Xwayland soak also requires
 `xterm`; install it inside the mutable Devbox with `sudo dnf install -y xterm`. On Bazzite, the

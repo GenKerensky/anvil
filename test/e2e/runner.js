@@ -4,7 +4,8 @@
  * Loaded by gnome-shell --wayland --headless --automation-script.
  * GNOME calls `export async function run()` on the automation script.
  *
- * Results are written to /tmp/anvil-e2e-results.json for test/e2e/run.py to poll.
+ * Results are written to ANVIL_E2E_RESULTS_PATH for test/e2e/run.py to poll.
+ * The fallback path supports direct/manual execution of this script.
  */
 
 import GLib from "gi://GLib";
@@ -21,7 +22,7 @@ import {
 
 const UUID = "anvil@GenKerensky.github.com";
 const SCHEMA_ID = "org.gnome.shell.extensions.anvil";
-const RESULTS_PATH = "/tmp/anvil-e2e-results.json";
+const RESULTS_PATH = GLib.getenv("ANVIL_E2E_RESULTS_PATH") || "/tmp/anvil-e2e-results.json";
 const OUTPUT_DIR = GLib.getenv("ANVIL_E2E_OUTPUT_DIR") || "/tmp/anvil-e2e-output";
 const JASMINE_DIR = "/usr/share/jasmine-gjs";
 
@@ -309,6 +310,7 @@ export async function run() {
     "./suites/workspace.js",
     "./suites/borders.js",
     "./suites/minimize.js",
+    "./suites/cross-surface-swap.js",
     "./suites/monitor-churn.js",
     "./suites/session-mode.js",
     "./suites/constraints.js",

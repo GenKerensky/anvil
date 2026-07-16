@@ -71,7 +71,9 @@ export interface CommandHandlerHost {
   endGrab(metaWindow: Meta.Window, grabOp: Meta.GrabOp): void;
   setCancelGrab(v: boolean): void;
 
-  // Freeze caller (C2) — only unfreeze is needed from handlers.
+  // Freeze caller (C2) — cross-surface swap commits topology before one render.
+  isRenderFrozen(): boolean;
+  freezeRender(): void;
   unfreezeRender(): void;
 }
 
@@ -173,9 +175,16 @@ function handleFocus(host: CommandHandlerHost, action: DirectionAction) {
 function handleSwap(host: CommandHandlerHost, action: DirectionAction) {
   const focusNodeWindow = host.findNodeWindow(host.focusMetaWindow!);
   if (!focusNodeWindow) return;
-  host.unfreezeRender();
   const swapDirection = Utils.resolveDirection(action.direction)!;
-  host.layoutEngine.swap(focusNodeWindow, swapDirection);
+  let swapped: Node | undefined;
+  const wasFrozen = host.isRenderFrozen();
+  if (!wasFrozen) host.freezeRender();
+  try {
+    swapped = host.layoutEngine.swap(focusNodeWindow, swapDirection);
+  } finally {
+    if (!wasFrozen) host.unfreezeRender();
+  }
+  if (!swapped) return;
   const swapWin = focusNodeWindow.nodeValue as Meta.Window;
   safeRaise(swapWin);
   safeActivate(swapWin, global.display.get_current_time());

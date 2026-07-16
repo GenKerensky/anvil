@@ -226,7 +226,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
       moveWindow: (w, rect) => self.move(w, rect),
       rectForMonitor: (n, i) => self.rectForMonitor(n, i),
-      sameParentMonitor: (a, b) => self.sameParentMonitor(a, b),
       floatingWindow: (n) => self.floatingWindow(n),
     });
     // SignalManager owns workspace signal binding; host getters resolve after the graph is complete.
@@ -742,6 +741,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       setCancelGrab: (v) => {
         self._grab!.cancelGrab = v;
       },
+      isRenderFrozen: () => self._freezeRender,
+      freezeRender: () => self.freezeRender(),
       unfreezeRender: () => self.unfreezeRender(),
     };
     this._commandBus = new CommandBus(createCommandHandlers(this._commandHandlerHost!));
@@ -1224,18 +1225,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private reloadTree(from: string) {
     if (this._tilingEngineMode === "core") return;
     this._renderScheduler!.reloadTree(from);
-  }
-
-  private sameParentMonitor(firstNode: Node, secondNode: Node) {
-    if (!firstNode || !secondNode) return false;
-    if (!firstNode.nodeValue || !secondNode.nodeValue) return false;
-    const firstWin = firstNode.nodeValue as Meta.Window;
-    const secondWin = secondNode.nodeValue as Meta.Window;
-    if (!firstWin.get_workspace()) return false;
-    if (!secondWin.get_workspace()) return false;
-    const firstMonWs = `mo${firstWin.get_monitor()}ws${firstWin.get_workspace().index()}`;
-    const secondMonWs = `mo${secondWin.get_monitor()}ws${secondWin.get_workspace().index()}`;
-    return firstMonWs === secondMonWs;
   }
 
   private updateBorderLayout() {

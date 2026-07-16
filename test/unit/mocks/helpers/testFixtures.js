@@ -195,7 +195,6 @@ export function createTreeFixture(options = {}) {
       focusMetaWindow: null,
       currentMonWsNode: null,
       rectForMonitor: vi.fn(() => ({ x: 0, y: 0, width: 1920, height: 1080 })),
-      sameParentMonitor: vi.fn(() => true),
       floatingWindow: vi.fn(() => false),
       tilingRender: {
         render: vi.fn(),
@@ -232,7 +231,6 @@ export function createTreeFixture(options = {}) {
     moveWindow: (...args) => mockAnvilRuntime.move?.(...args),
     rectForMonitor: (...args) =>
       mockAnvilRuntime.rectForMonitor?.(...args) ?? { x: 0, y: 0, width: 1920, height: 1080 },
-    sameParentMonitor: (...args) => mockAnvilRuntime.sameParentMonitor?.(...args) ?? true,
     floatingWindow: (...args) => mockAnvilRuntime.floatingWindow?.(...args) ?? false,
   });
   mockAnvilRuntime.determineSplitLayout = (...args) =>

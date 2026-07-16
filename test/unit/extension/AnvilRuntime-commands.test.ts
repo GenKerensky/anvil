@@ -158,18 +158,112 @@ describe("AnvilRuntime - Commands", () => {
 
   describe("Swap", () => {
     it("should swap window in the given direction", () => {
-      const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
+      const metaWindow = createMockWindow({ id: 1, wm_class: "TestApp", title: "Test" });
+      const targetWindow = createMockWindow({ id: 2, wm_class: "Target", title: "Target" });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, targetWindow);
+      monitor.layout = LAYOUT_TYPES.HSPLIT;
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
       const swapSpy = vi.spyOn(wm().layoutEngine, "swap");
       const pointerSpy = vi.spyOn(wm(), "notifyFocusChanged");
+      const renderSpy = vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+      const raiseSpy = vi.spyOn(metaWindow, "raise");
+      const activateSpy = vi.spyOn(metaWindow, "activate");
+      const focusSpy = vi.spyOn(metaWindow, "focus");
+      const freezeSpy = vi.spyOn(wm(), "freezeRender");
+      const unfreezeSpy = vi.spyOn(wm(), "unfreezeRender");
 
       wm().command({ name: "Swap", direction: "RIGHT" });
 
-      expect(swapSpy).toHaveBeenCalled();
-      expect(pointerSpy).toHaveBeenCalled();
+      expect(swapSpy).toHaveBeenCalledOnce();
+      expect(freezeSpy).toHaveBeenCalledOnce();
+      expect(unfreezeSpy).toHaveBeenCalledOnce();
+      expect(pointerSpy).toHaveBeenCalledOnce();
+      expect(renderSpy).toHaveBeenCalledExactlyOnceWith("swap", true);
+      expect(raiseSpy).toHaveBeenCalledOnce();
+      expect(activateSpy).toHaveBeenCalledOnce();
+      expect(focusSpy).toHaveBeenCalledOnce();
+      expect(freezeSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        swapSpy.mock.invocationCallOrder[0]
+      );
+      expect(swapSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        unfreezeSpy.mock.invocationCallOrder[0]
+      );
+      expect(unfreezeSpy.mock.invocationCallOrder[0]).toBeLessThan(
+        renderSpy.mock.invocationCallOrder[0]
+      );
+    });
+
+    it("restores rendering if the structural swap throws", () => {
+      const metaWindow = createMockWindow({ id: 1, wm_class: "TestApp", title: "Test" });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      ctx.display.get_focus_window.mockReturnValue(metaWindow);
+      vi.spyOn(wm().layoutEngine, "swap").mockImplementation(() => {
+        throw new Error("swap failed");
+      });
+      const unfreezeSpy = vi.spyOn(wm(), "unfreezeRender");
+
+      expect(() => wm().command({ name: "Swap", direction: "RIGHT" })).toThrow("swap failed");
+      expect(unfreezeSpy).toHaveBeenCalledOnce();
+      expect(wm()._freezeRender).toBe(false);
+    });
+
+    it.each(["success", "no-target", "exception"] as const)(
+      "preserves a pre-existing render freeze on %s",
+      (outcome) => {
+        const metaWindow = createMockWindow({ id: 1, wm_class: "TestApp", title: "Test" });
+        const targetWindow = createMockWindow({ id: 2, wm_class: "Target", title: "Target" });
+        const { monitor } = getWorkspaceAndMonitor(ctx);
+        ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+        ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, targetWindow);
+        monitor.layout = LAYOUT_TYPES.HSPLIT;
+        ctx.display.get_focus_window.mockReturnValue(metaWindow);
+        const swapSpy = vi.spyOn(wm().layoutEngine, "swap");
+        if (outcome === "no-target") swapSpy.mockReturnValue(undefined);
+        if (outcome === "exception") {
+          swapSpy.mockImplementation(() => {
+            throw new Error("swap failed");
+          });
+        }
+        vi.spyOn(wm(), "renderTree").mockImplementation(() => {});
+        const freezeSpy = vi.spyOn(wm(), "freezeRender");
+        const unfreezeSpy = vi.spyOn(wm(), "unfreezeRender");
+        wm()._freezeRender = true;
+
+        let error: unknown;
+        try {
+          wm().command({ name: "Swap", direction: "RIGHT" });
+        } catch (caught) {
+          error = caught;
+        }
+
+        expect(error).toEqual(outcome === "exception" ? new Error("swap failed") : undefined);
+        expect(wm()._freezeRender).toBe(true);
+        expect(freezeSpy).not.toHaveBeenCalled();
+        expect(unfreezeSpy).not.toHaveBeenCalled();
+        wm()._freezeRender = false;
+      }
+    );
+
+    it("does not focus, notify, or render when no swap target exists", () => {
+      const metaWindow = createMockWindow({ id: 1, wm_class: "TestApp", title: "Test" });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      ctx.display.get_focus_window.mockReturnValue(metaWindow);
+      vi.spyOn(wm().layoutEngine, "swap").mockReturnValue(undefined);
+      const pointerSpy = vi.spyOn(wm(), "notifyFocusChanged");
+      const renderSpy = vi.spyOn(wm(), "renderTree");
+      const activateSpy = vi.spyOn(metaWindow, "activate");
+
+      wm().command({ name: "Swap", direction: "RIGHT" });
+
+      expect(pointerSpy).not.toHaveBeenCalled();
+      expect(renderSpy).not.toHaveBeenCalled();
+      expect(activateSpy).not.toHaveBeenCalled();
+      expect(wm()._freezeRender).toBe(false);
     });
 
     it("should do nothing if no focus node window", () => {

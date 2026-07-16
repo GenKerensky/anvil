@@ -38,7 +38,6 @@ export interface LayoutHost {
   notifyFocusChanged(node: Node | null, source: PointerFocusSource): void;
   moveWindow(metaWindow: Meta.Window, rect: RectLike): void;
   rectForMonitor(node: Node, monitorIndex: number): RectLike | null;
-  sameParentMonitor(a: Node, b: Node): boolean;
   floatingWindow(node: Node): boolean;
 }
 
@@ -499,7 +498,11 @@ export class LayoutEngine {
         if (nextSwapNode.layout === LAYOUT_TYPES.STACKED) {
           nextSwapNode = childWindowNodes[childWindowNodes.length - 1];
         } else {
-          nextSwapNode = childWindowNodes[0];
+          const entersFromEnd =
+            direction === Meta.MotionDirection.LEFT || direction === Meta.MotionDirection.UP;
+          nextSwapNode = entersFromEnd
+            ? childWindowNodes[childWindowNodes.length - 1]
+            : childWindowNodes[0];
         }
         break;
       }
@@ -507,51 +510,54 @@ export class LayoutEngine {
 
     const isNextNodeWin =
       nextSwapNode && nextSwapNode.nodeValue && nextSwapNode.nodeType === NODE_TYPES.WINDOW;
-    if (isNextNodeWin) {
-      if (!host.sameParentMonitor(node, nextSwapNode)) {
-        // TODO, there is a freeze bug if there are not in same monitor.
-        return;
-      }
-      this.swapPairs(node, nextSwapNode);
+    if (!isNextNodeWin) return undefined;
+
+    const fromMonitor = tree.findAncestorMonitor(node);
+    const toMonitor = tree.findAncestorMonitor(nextSwapNode);
+    if (!fromMonitor || !toMonitor) return undefined;
+    if (
+      fromMonitor !== toMonitor &&
+      (fromMonitor.parentNode !== toMonitor.parentNode || !node.isTile() || !nextSwapNode.isTile())
+    ) {
+      return undefined;
     }
-    return nextSwapNode;
+
+    if (this.swapPairs(node, nextSwapNode, false)) return nextSwapNode;
+    return undefined;
   }
 
   swapPairs(fromNode: Node, toNode: Node, focus: boolean = true) {
-    const host = this._host;
-    if (!(this._swappable(fromNode) && this._swappable(toNode))) return;
-    // Swap the items in the array
-    const parentForFrom = fromNode ? fromNode.parentNode : undefined;
+    if (!(this._swappable(fromNode) && this._swappable(toNode))) return false;
+    const parentForFrom = fromNode.parentNode;
     const parentForTo = toNode.parentNode;
-    if (parentForTo && parentForFrom) {
-      const nextIndex = toNode.index;
-      const focusIndex = fromNode.index;
-
-      const transferMode = fromNode.mode;
-      fromNode.mode = toNode.mode;
-      toNode.mode = transferMode;
-
-      const transferRect = (fromNode.nodeValue as Meta.Window).get_frame_rect();
-      const transferToRect = (toNode.nodeValue as Meta.Window).get_frame_rect();
-      const transferPercent = fromNode.percent;
-
-      fromNode.percent = toNode.percent;
-      toNode.percent = transferPercent;
-
-      parentForTo.childNodes[nextIndex!] = fromNode;
-      fromNode.parentNode = parentForTo;
-      parentForFrom.childNodes[focusIndex!] = toNode;
-      toNode.parentNode = parentForFrom;
-
-      host.moveWindow(fromNode.nodeValue as Meta.Window, transferToRect);
-      host.moveWindow(toNode.nodeValue as Meta.Window, transferRect);
-
-      if (focus) {
-        // The fromNode is now on the parent-target
-        safeRaise(fromNode.nodeValue as Meta.Window);
-        safeFocus(fromNode.nodeValue as Meta.Window, global.get_current_time());
-      }
+    const fromIndex = fromNode.index;
+    const toIndex = toNode.index;
+    if (
+      !parentForFrom ||
+      !parentForTo ||
+      fromIndex === null ||
+      toIndex === null ||
+      parentForFrom.childNodes[fromIndex] !== fromNode ||
+      parentForTo.childNodes[toIndex] !== toNode
+    ) {
+      return false;
     }
+
+    // Commit the complete structural/percent transaction before Tiling Render
+    // applies either window's final frame. Avoiding intermediate Meta moves is
+    // what makes cross-surface swaps non-reentrant.
+    [fromNode.mode, toNode.mode] = [toNode.mode, fromNode.mode];
+    [fromNode.percent, toNode.percent] = [toNode.percent, fromNode.percent];
+    parentForTo.childNodes[toIndex] = fromNode;
+    parentForFrom.childNodes[fromIndex] = toNode;
+    fromNode.parentNode = parentForTo;
+    toNode.parentNode = parentForFrom;
+
+    if (focus) {
+      safeRaise(fromNode.nodeValue as Meta.Window);
+      safeFocus(fromNode.nodeValue as Meta.Window, global.get_current_time());
+    }
+    return true;
   }
 
   private _swappable(node: Node | null) {

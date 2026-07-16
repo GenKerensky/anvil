@@ -26,7 +26,7 @@ The dependency chain looks like this:
       │
       ├─► install + enable Anvil extension
       │
-      └─► wait for /tmp/anvil-e2e-results.json
+      └─► wait for a unique result file under test/e2e/output/
 
 Why Python instead of Bash?
 ===========================
@@ -90,7 +90,6 @@ PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 E2E_DIR = pathlib.Path(__file__).resolve().parent
 OUTPUT_DIR = E2E_DIR / "output"
 
-RESULTS_PATH = pathlib.Path("/tmp/anvil-e2e-results.json")
 JASMINE_BOOT = pathlib.Path("/usr/share/jasmine-gjs/jasmineBoot.js")
 
 
@@ -311,9 +310,24 @@ class DevkitSession:
         self.engine: str = engine
         self.virtual_monitors: int = virtual_monitors
         self._xdg_config: tempfile.TemporaryDirectory[str] | None = None
+        self._results_path: pathlib.Path | None = None
+
+    @property
+    def results_path(self) -> pathlib.Path:
+        if self._results_path is None:
+            raise RuntimeError("E2E results path requested outside an active session")
+        return self._results_path
 
     def __enter__(self) -> "DevkitSession":
         self._xdg_config = tempfile.TemporaryDirectory(prefix="anvil-e2e-config-")
+        # Keep the result handoff on the repository mount. A nested Shell may
+        # see a different /tmp namespace than the Python runner, while both
+        # processes share test/e2e/output. PID + monotonic time also lets
+        # independent E2E sessions run without clobbering one another.
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        self._results_path = (
+            OUTPUT_DIR / f"results-{os.getpid()}-{time.monotonic_ns()}.json"
+        )
         try:
             return self._start()
         except Exception:
@@ -367,6 +381,7 @@ class DevkitSession:
                 "ANVIL_E2E_DIR": str(E2E_DIR),
                 "ANVIL_E2E_TAG": self.tag_filter,
                 "ANVIL_E2E_OUTPUT_DIR": str(OUTPUT_DIR),
+                "ANVIL_E2E_RESULTS_PATH": str(self.results_path),
                 "ANVIL_TILING_ENGINE": "core" if self.engine == "core" else "shadow",
                 "ANVIL_E2E_VIRTUAL_MONITORS": str(self.virtual_monitors),
                 "XDG_CONFIG_HOME": self._xdg_config.name,
@@ -422,6 +437,9 @@ class DevkitSession:
         if self._xdg_config is not None:
             self._xdg_config.cleanup()
             self._xdg_config = None
+        if self._results_path is not None:
+            self._results_path.unlink(missing_ok=True)
+        self._results_path = None
         _info("Done")
 
 
@@ -431,6 +449,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Anvil Devkit E2E Test Runner")
     parser.add_argument("--no-build", action="store_true", help="Skip make dist")
     parser.add_argument("--tag", action="append", default=[], help="Suite tag filter")
+    parser.add_argument(
+        "--results-timeout",
+        type=float,
+        default=900.0,
+        metavar="SECONDS",
+        help="Maximum time to wait for the in-Shell result file (default: 900)",
+    )
     parser.add_argument(
         "--engine",
         choices=("legacy", "core"),
@@ -446,6 +471,8 @@ def main() -> int:
         help="Persistent virtual monitors to create (default: 1)",
     )
     args = parser.parse_args()
+    if args.results_timeout <= 0:
+        parser.error("--results-timeout must be greater than zero")
 
     print("")
     print("══════════════════════════════════")
@@ -454,10 +481,6 @@ def main() -> int:
     print("")
 
     require_jasmine_gjs()
-
-    # Clean up stale results file from a previous run
-    if RESULTS_PATH.exists():
-        RESULTS_PATH.unlink()
 
     if not args.no_build:
         build_extension()
@@ -473,7 +496,7 @@ def main() -> int:
     ) as session:
         _info("Running E2E tests inside headless gnome-shell…")
         results = wait_for_results(
-            RESULTS_PATH, timeout=900.0, watched_process=session.shell_proc
+            session.results_path, timeout=args.results_timeout, watched_process=session.shell_proc
         )
         exit_code = print_results(results, title="Anvil E2E Results")
 

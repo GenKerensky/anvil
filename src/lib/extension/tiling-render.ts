@@ -141,7 +141,14 @@ export class TilingRender extends GObject.Object {
       return rect;
     }
     const metaWindow = node.nodeValue as Meta.Window;
-    const monitorIndex = metaWindow.get_monitor();
+    // Tree topology is authoritative during an atomic cross-surface operation:
+    // Mutter still reports the source monitor until this render applies the
+    // target frame. Fall back to Meta only for a detached/incomplete node.
+    const monitorNode = this._deps.findParent(node, NODE_TYPES.MONITOR);
+    const targetMonitorIndex = monitorNode
+      ? Utils.monitorIndex(monitorNode.nodeValue as string)
+      : -1;
+    const monitorIndex = targetMonitorIndex >= 0 ? targetMonitorIndex : metaWindow.get_monitor();
     Logger.debug(
       `enforceUltrawideSize: window_id=${metaWindow.get_id()}, monitorIndex=${monitorIndex}, rect=${JSON.stringify(
         rect

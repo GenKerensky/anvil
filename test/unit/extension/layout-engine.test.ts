@@ -27,7 +27,6 @@ describe("LayoutEngine", () => {
         notifyFocusChanged: vi.fn(),
         moveWindow: vi.fn(),
         rectForMonitor: vi.fn(),
-        sameParentMonitor: vi.fn(),
         floatingWindow: vi.fn(),
       });
       expect(engine.determineSplitLayout({ width: 1080, height: 1920 })).toBe(LAYOUT_TYPES.VSPLIT);
@@ -42,7 +41,6 @@ describe("LayoutEngine", () => {
         notifyFocusChanged: vi.fn(),
         moveWindow: vi.fn(),
         rectForMonitor: vi.fn(),
-        sameParentMonitor: vi.fn(),
         floatingWindow: vi.fn(),
       });
       expect(engine.determineSplitLayout({ width: 1920, height: 1080 })).toBe(LAYOUT_TYPES.HSPLIT);
@@ -61,7 +59,6 @@ describe("LayoutEngine", () => {
         notifyFocusChanged: vi.fn(),
         moveWindow: vi.fn(),
         rectForMonitor: vi.fn(),
-        sameParentMonitor: vi.fn(),
         floatingWindow: vi.fn(),
       });
     });
@@ -120,7 +117,6 @@ describe("LayoutEngine", () => {
         notifyFocusChanged: vi.fn(),
         moveWindow: vi.fn(),
         rectForMonitor: vi.fn(),
-        sameParentMonitor: vi.fn(),
         floatingWindow: vi.fn(),
       });
     });

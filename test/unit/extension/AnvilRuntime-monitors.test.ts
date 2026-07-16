@@ -307,6 +307,34 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
+
+    it("uses target tree monitor constraints before Mutter reports the move", () => {
+      ctx = createAnvilRuntimeFixture({ globals: { display: { monitorCount: 2 } } });
+      const sourceConnector = new Meta.Monitor({ connector: "eDP-1" });
+      const targetConnector = new Meta.Monitor({ connector: "DP-1" });
+      getMonitorManager().set_logical_monitors([
+        new Meta.LogicalMonitor({ monitors: [sourceConnector] }),
+        new Meta.LogicalMonitor({ monitors: [targetConnector] }),
+      ]);
+      ctx.settings._values["monitor-constraints"] = [
+        ["eDP-1", 3000, 1400, true, false],
+        ["DP-1", 1600, 900, true, false],
+      ];
+      const metaWindow = createMockWindow({ id: 77, monitor: 0 });
+      metaWindow._workspace = ctx.workspaces[0];
+      const { monitor: sourceMonitor } = getWorkspaceAndMonitor(ctx, 0, 0);
+      const { monitor: targetMonitor } = getWorkspaceAndMonitor(ctx, 0, 1);
+      const node = ctx.tree.createNode(sourceMonitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      targetMonitor.appendChild(node);
+
+      expect(metaWindow.get_monitor()).toBe(0);
+      expect(wm().tilingRender.enforceUltrawideSize(node, BIG_RECT)).toEqual({
+        x: Math.floor((3440 - 1600) / 2),
+        y: Math.floor((1440 - 900) / 2),
+        width: 1600,
+        height: 900,
+      });
+    });
   });
 
   // ----------------------------------------------------------------

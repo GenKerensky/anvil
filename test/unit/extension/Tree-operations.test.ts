@@ -285,7 +285,7 @@ describe("Tree Operations", () => {
       expect(node2.percent).toBe(0.7);
     });
 
-    it("should call AnvilRuntime.move for both windows", () => {
+    it("leaves frame application to the final Tiling Render", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
 
       const window1 = createMockWindow();
@@ -295,7 +295,7 @@ describe("Tree Operations", () => {
 
       ctx.layoutEngine.swapPairs(node1, node2, false);
 
-      expect(ctx.runtime.move).toHaveBeenCalledTimes(2);
+      expect(ctx.runtime.move).not.toHaveBeenCalled();
     });
 
     it("should focus first window if focus=true", () => {
@@ -389,6 +389,36 @@ describe("Tree Operations", () => {
       expect(result).toBe(node2);
     });
 
+    it("should swap left with the last tiled window in a nested container", () => {
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      monitor.layout = LAYOUT_TYPES.HSPLIT;
+
+      const container = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "outer");
+      container.layout = LAYOUT_TYPES.HSPLIT;
+      const nested = ctx.tree.createNode(container.nodeValue, NODE_TYPES.CON, "inner");
+      nested.layout = LAYOUT_TYPES.HSPLIT;
+      const first = ctx.tree.createNode(
+        nested.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 11 })
+      );
+      const edge = ctx.tree.createNode(
+        nested.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 12 })
+      );
+      const source = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 13 })
+      );
+      for (const candidate of [first, edge, source]) candidate.mode = WINDOW_MODES.TILE;
+
+      expect(ctx.layoutEngine.swap(source, Meta.MotionDirection.LEFT)).toBe(edge);
+      expect(edge.parentNode).toBe(monitor);
+      expect(source.parentNode).toBe(nested);
+    });
+
     it("should swap with last window in stacked container", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       monitor.layout = LAYOUT_TYPES.HSPLIT;
@@ -428,23 +458,122 @@ describe("Tree Operations", () => {
       expect(result).toBeUndefined();
     });
 
-    it("should return undefined if nodes not in same monitor", () => {
-      const { monitor } = getWorkspaceAndMonitor(ctx);
+    it("atomically swaps windows across monitor surfaces", () => {
+      const crossCtx = createTreeFixture({
+        fullExtWm: true,
+        globals: { display: { monitorCount: 2 } },
+      });
+      try {
+        const { monitor: monitor0 } = getWorkspaceAndMonitor(crossCtx, 0, 0);
+        const { monitor: monitor1 } = getWorkspaceAndMonitor(crossCtx, 0, 1);
+        monitor0.layout = LAYOUT_TYPES.HSPLIT;
+        monitor1.layout = LAYOUT_TYPES.HSPLIT;
+        crossCtx.display.get_monitor_neighbor_index.mockReturnValue(1);
 
-      const window1 = createMockWindow();
-      const window2 = createMockWindow();
-      const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window1);
-      const node2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, window2);
+        const leftSibling = crossCtx.tree.createNode(
+          monitor0.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 1, monitor: 0 })
+        );
+        const from = crossCtx.tree.createNode(
+          monitor0.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 2, monitor: 0 })
+        );
+        const to = crossCtx.tree.createNode(
+          monitor1.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 3, monitor: 1 })
+        );
+        const rightSibling = crossCtx.tree.createNode(
+          monitor1.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 4, monitor: 1 })
+        );
+        for (const candidate of [leftSibling, from, to, rightSibling]) {
+          candidate.mode = WINDOW_MODES.TILE;
+          candidate.nodeValue._workspace = crossCtx.workspaces[0];
+        }
+        leftSibling.percent = 0.3;
+        from.percent = 0.7;
+        to.percent = 0.4;
+        rightSibling.percent = 0.6;
 
-      node1.mode = WINDOW_MODES.TILE;
-      node2.mode = WINDOW_MODES.TILE;
+        const result = crossCtx.layoutEngine.swap(from, Meta.MotionDirection.RIGHT);
 
-      // Mock sameParentMonitor to return false
-      ctx.runtime.sameParentMonitor.mockReturnValue(false);
+        expect(result).toBe(to);
+        expect(crossCtx.tree.findAncestorMonitor(from)).toBe(monitor1);
+        expect(crossCtx.tree.findAncestorMonitor(to)).toBe(monitor0);
+        expect(
+          monitor0.childNodes.reduce(
+            (sum: number, child: { percent?: number }) => sum + (child.percent ?? 0),
+            0
+          )
+        ).toBeCloseTo(1);
+        expect(
+          monitor1.childNodes.reduce(
+            (sum: number, child: { percent?: number }) => sum + (child.percent ?? 0),
+            0
+          )
+        ).toBeCloseTo(1);
 
-      const result = ctx.layoutEngine.swap(node1, Meta.MotionDirection.RIGHT);
+        // The unit Meta window still reports its pre-render monitor. Pin the
+        // navigation result to the adjacent surface so this assertion covers
+        // direction-aware edge selection independently of Mutter's move.
+        vi.spyOn(crossCtx.tree, "next").mockReturnValue(monitor0);
+        const reverseResult = crossCtx.layoutEngine.swap(from, Meta.MotionDirection.LEFT);
 
-      expect(result).toBeUndefined();
+        expect(reverseResult).toBe(to);
+        expect(crossCtx.tree.findAncestorMonitor(from)).toBe(monitor0);
+        expect(crossCtx.tree.findAncestorMonitor(to)).toBe(monitor1);
+        expect(
+          monitor0.childNodes.reduce(
+            (sum: number, child: { percent?: number }) => sum + (child.percent ?? 0),
+            0
+          )
+        ).toBeCloseTo(1);
+        expect(
+          monitor1.childNodes.reduce(
+            (sum: number, child: { percent?: number }) => sum + (child.percent ?? 0),
+            0
+          )
+        ).toBeCloseTo(1);
+      } finally {
+        crossCtx.cleanup();
+      }
+    });
+
+    it("rejects a directional swap across workspaces", () => {
+      const crossCtx = createTreeFixture({
+        fullExtWm: true,
+        globals: {
+          display: { monitorCount: 1 },
+          workspaceManager: { workspaceCount: 2 },
+        },
+      });
+      try {
+        const { monitor: workspace0Monitor } = getWorkspaceAndMonitor(crossCtx, 0, 0);
+        const { monitor: workspace1Monitor } = getWorkspaceAndMonitor(crossCtx, 1, 0);
+        const from = crossCtx.tree.createNode(
+          workspace0Monitor.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 1 })
+        );
+        const to = crossCtx.tree.createNode(
+          workspace1Monitor.nodeValue,
+          NODE_TYPES.WINDOW,
+          createMockWindow({ id: 2 })
+        );
+        from.mode = WINDOW_MODES.TILE;
+        to.mode = WINDOW_MODES.TILE;
+        vi.spyOn(crossCtx.tree, "next").mockReturnValue(to);
+
+        expect(crossCtx.layoutEngine.swap(from, Meta.MotionDirection.RIGHT)).toBeUndefined();
+        expect(from.parentNode).toBe(workspace0Monitor);
+        expect(to.parentNode).toBe(workspace1Monitor);
+      } finally {
+        crossCtx.cleanup();
+      }
     });
   });
 
