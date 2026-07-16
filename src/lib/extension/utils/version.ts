@@ -10,10 +10,6 @@ export function dpi() {
   return St.ThemeContext.get_for_stage(global.stage).scale_factor;
 }
 
-export function isGnome(majorVersion: number) {
-  return major == majorVersion;
-}
-
 export function isGnomeGTE(majorVersion: number) {
   return major >= majorVersion;
 }

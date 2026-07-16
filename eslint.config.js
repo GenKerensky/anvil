@@ -31,10 +31,7 @@ export default [
     },
     rules: {
       "no-unused-vars": "off",
-      "@typescript-eslint/no-unused-vars": [
-        "warn",
-        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
-      ],
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       "no-empty": ["error", { allowEmptyCatch: true }],
       // GJS/Meta interop still needs any in places; prefer unknown for new public APIs.
       "@typescript-eslint/no-explicit-any": "off",
@@ -78,7 +75,7 @@ export default [
     rules: {
       ...vitest.configs.recommended.rules,
       "@typescript-eslint/no-explicit-any": "off",
-      "@typescript-eslint/no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
       "vitest/no-disabled-tests": "warn",
       "vitest/no-focused-tests": "error",
     },

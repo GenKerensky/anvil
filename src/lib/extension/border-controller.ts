@@ -15,7 +15,11 @@ import { Logger } from "../shared/logger.js";
 import { NODE_TYPES, type Node, type Tree } from "./tree.js";
 import { WINDOW_MODES } from "./window/constants.js";
 import { WindowCornerMaskEffect } from "./window-corner-mask-effect.js";
-import { deriveWindowMaskRadius, getWindowMaskBounds } from "./window-corner-mask.js";
+import {
+  deriveWindowMaskRadius,
+  getWindowMaskBounds,
+  shouldMaskWindow,
+} from "./window-corner-mask.js";
 import type { AnvilMetaWindow, AnvilWindowActor } from "./window/types.js";
 
 const WINDOW_MASK_EFFECT_NAME = "anvil-window-corner-mask";
@@ -407,11 +411,13 @@ export class BorderController {
   private _isDrawable(metaWindow: Meta.Window): boolean {
     const showing = metaWindow.showing_on_its_workspace?.() ?? true;
     return (
-      this.bordersEnabled() &&
       showing &&
       !metaWindow.minimized &&
-      !this._isMaximized(metaWindow) &&
-      !metaWindow.is_fullscreen()
+      shouldMaskWindow({
+        hintsEnabled: this.bordersEnabled(),
+        maximized: this._isMaximized(metaWindow),
+        fullscreen: metaWindow.is_fullscreen(),
+      })
     );
   }
 }

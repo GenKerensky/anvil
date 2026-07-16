@@ -121,48 +121,4 @@ describe("AnvilRuntime - Focus", () => {
       expect(raiseSpy).not.toHaveBeenCalled();
     });
   });
-
-  describe("_restoreFocusAfterWindowClosed", () => {
-    it("should return early when closedNodeWindow is null", () => {
-      expect(() => wm()._tracker.restoreFocusAfterWindowClosed(null)).not.toThrow();
-    });
-
-    it("should focus sibling window when available", () => {
-      const metaWindow1 = createMockWindow({ id: 1, wm_class: "App1", title: "Win1" });
-      const metaWindow2 = createMockWindow({ id: 2, wm_class: "App2", title: "Win2" });
-      const { monitor } = getWorkspaceAndMonitor(ctx);
-      const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow1);
-      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow2);
-
-      const raiseSpy = vi.spyOn(metaWindow2, "raise");
-      const focusSpy = vi.spyOn(metaWindow2, "focus");
-
-      wm()._tracker.restoreFocusAfterWindowClosed(node1);
-
-      expect(raiseSpy).toHaveBeenCalled();
-      expect(focusSpy).toHaveBeenCalled();
-    });
-
-    it("should fall back to workspace windows when no siblings", () => {
-      const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
-      const { monitor } = getWorkspaceAndMonitor(ctx);
-      const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-
-      const metaWindowWs = createMockWindow({ id: 99, wm_class: "Other", title: "Other" });
-      ctx.workspaces[0]._windows = [metaWindowWs];
-
-      const raiseSpy = vi.spyOn(metaWindowWs, "raise");
-      wm()._tracker.restoreFocusAfterWindowClosed(node);
-      expect(raiseSpy).toHaveBeenCalled();
-    });
-
-    it("should do nothing when there are no windows on workspace", () => {
-      const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
-      ctx.workspaces[0]._windows = [];
-
-      const node = ctx.tree.createNode(ctx.tree.rootNode, NODE_TYPES.WINDOW, metaWindow);
-
-      expect(() => wm()._tracker.restoreFocusAfterWindowClosed(node)).not.toThrow();
-    });
-  });
 });

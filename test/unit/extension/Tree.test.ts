@@ -83,7 +83,7 @@ describe("Tree", () => {
     });
 
     it("should initialize workspaces during explicit activation", () => {
-      const workspaces = tree.nodeWorkpaces;
+      const workspaces = tree.getNodeByType(NODE_TYPES.WORKSPACE);
       expect(workspaces.length).toBeGreaterThan(0);
     });
   });
@@ -93,7 +93,7 @@ describe("Tree", () => {
       const before = (global as any).window_group.add_child.mock.calls.length;
       const inertTree = new Tree(mockAnvilRuntime as any);
 
-      expect(inertTree.nodeWorkpaces).toHaveLength(0);
+      expect(inertTree.getNodeByType(NODE_TYPES.WORKSPACE)).toHaveLength(0);
       expect((global as any).window_group.add_child).toHaveBeenCalledTimes(before);
     });
 
@@ -114,7 +114,7 @@ describe("Tree", () => {
     });
 
     it("should find workspace node", () => {
-      const ws = tree.nodeWorkpaces[0];
+      const ws = tree.getNodeByType(NODE_TYPES.WORKSPACE)[0];
       const found = tree.findNode(ws.nodeValue);
 
       expect(found).toBe(ws);
@@ -127,7 +127,9 @@ describe("Tree", () => {
     });
 
     it("should find nested nodes", () => {
-      const monitors = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR);
+      const monitors = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR);
       const containerBin = "con";
       const container = tree.createNode(monitors[0].nodeValue, NODE_TYPES.CON, containerBin);
       const found = tree.findNode(containerBin);
@@ -138,7 +140,9 @@ describe("Tree", () => {
 
   describe("createNode", () => {
     it("should create node under parent", () => {
-      const monitors = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR);
+      const monitors = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR);
       const containerBin = "con";
       const newNode = tree.createNode(monitors[0].nodeValue, NODE_TYPES.CON, containerBin);
 
@@ -148,7 +152,9 @@ describe("Tree", () => {
     });
 
     it("should add node to parent children", () => {
-      const monitor = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
+      const monitor = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR)[0];
       const initialChildCount = monitor.childNodes.length;
 
       tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
@@ -157,14 +163,16 @@ describe("Tree", () => {
     });
 
     it("should set node settings from tree", () => {
-      const workspace = tree.nodeWorkpaces[0];
+      const workspace = tree.getNodeByType(NODE_TYPES.WORKSPACE)[0];
       const newNode = tree.createNode(workspace.nodeValue, NODE_TYPES.CON, "con");
 
       expect(newNode!.settings).toBe(tree.settings);
     });
 
     it("should create node with default TILE mode", () => {
-      const monitor = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
+      const monitor = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR)[0];
       const newNode = tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
 
       expect(newNode).toBeDefined();
@@ -177,30 +185,15 @@ describe("Tree", () => {
     });
 
     it("should handle inserting after window parent", () => {
-      const monitor = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
+      const monitor = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR)[0];
 
       const node1 = tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
       const node2 = tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
 
       expect(monitor.childNodes).toContain(node1);
       expect(monitor.childNodes).toContain(node2);
-    });
-  });
-
-  describe("nodeWorkspaces", () => {
-    it("should return all workspace nodes", () => {
-      const workspaces = tree.nodeWorkpaces;
-
-      expect(Array.isArray(workspaces)).toBe(true);
-      workspaces.forEach((ws) => {
-        expect(ws.nodeType).toBe(NODE_TYPES.WORKSPACE);
-      });
-    });
-
-    it("should find workspaces initialized in constructor", () => {
-      const workspaces = tree.nodeWorkpaces;
-
-      expect(workspaces.length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -213,7 +206,9 @@ describe("Tree", () => {
     });
 
     it("should return all window nodes when windows exist", () => {
-      const monitor = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
+      const monitor = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR)[0];
       tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
 
       const windows = tree.nodeWindows;
@@ -228,20 +223,20 @@ describe("Tree", () => {
         index: () => i,
       }));
 
-      const initialCount = tree.nodeWorkpaces.length;
+      const initialCount = tree.getNodeByType(NODE_TYPES.WORKSPACE).length;
       const result = tree.addWorkspace(1);
 
       expect(result).toBe(true);
-      expect(tree.nodeWorkpaces.length).toBe(initialCount + 1);
+      expect(tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBe(initialCount + 1);
     });
 
     it("should not add duplicate workspace", () => {
-      const initialCount = tree.nodeWorkpaces.length;
+      const initialCount = tree.getNodeByType(NODE_TYPES.WORKSPACE).length;
 
       const result = tree.addWorkspace(0);
 
       expect(result).toBe(false);
-      expect(tree.nodeWorkpaces.length).toBe(initialCount);
+      expect(tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBe(initialCount);
     });
 
     it("should set workspace layout to HSPLIT", () => {
@@ -270,7 +265,7 @@ describe("Tree", () => {
       const result = tree.removeWorkspace(0);
 
       expect(result).toBe(true);
-      expect(tree.nodeWorkpaces.length).toBe(0);
+      expect(tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBe(0);
     });
 
     it("should return false for non-existent workspace", () => {
@@ -289,10 +284,12 @@ describe("Tree", () => {
 
   describe("Tree Structure Integrity", () => {
     it("should maintain parent-child relationships", () => {
-      const monitors = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR);
+      const monitors = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR);
 
       monitors.forEach((monitor) => {
-        expect(monitor.parentNode).toBe(tree.nodeWorkpaces[0]);
+        expect(monitor.parentNode).toBe(tree.getNodeByType(NODE_TYPES.WORKSPACE)[0]);
       });
     });
 
@@ -311,14 +308,16 @@ describe("Tree", () => {
     });
 
     it("should allow deep nesting", () => {
-      const monitor = tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
+      const monitor = tree
+        .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+        .getNodeByType(NODE_TYPES.MONITOR)[0];
 
       const bin1 = "con-1";
       const bin2 = "con-2";
       const bin3 = "con-3";
 
       const container1 = tree.createNode(monitor.nodeValue, NODE_TYPES.CON, bin1);
-      const container2 = tree.createNode(bin1, NODE_TYPES.CON, bin2);
+      tree.createNode(bin1, NODE_TYPES.CON, bin2);
       const container3 = tree.createNode(bin2, NODE_TYPES.CON, bin3);
 
       expect(container3!.level).toBe(container1!.level + 2);
@@ -340,7 +339,7 @@ describe("Tree", () => {
     });
 
     it("should find nodes case-sensitively for string values", () => {
-      const workspace = tree.nodeWorkpaces[0];
+      const workspace = tree.getNodeByType(NODE_TYPES.WORKSPACE)[0];
       expect(tree.findNode("ws0")).toBe(workspace);
       expect(tree.findNode("WS0")).toBeNull();
     });

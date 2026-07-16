@@ -129,6 +129,56 @@ describe("RulesEngine", () => {
       expect(m.source).toBe("type-heuristic");
     });
 
+    it("modal dialogs, transient windows, and non-resizable windows use type heuristics", () => {
+      const parent = createMockWindow({ id: 1 });
+      const windows = [
+        createMockWindow({
+          wm_class: "App",
+          title: "Modal",
+          window_type: Meta.WindowType.MODAL_DIALOG,
+        }),
+        createMockWindow({
+          wm_class: "App",
+          title: "Transient",
+          transient_for: parent,
+        }),
+        createMockWindow({
+          wm_class: "App",
+          title: "Fixed",
+          allows_resize: false,
+        }),
+      ];
+
+      for (const win of windows) {
+        expect(engine.match(win)).toEqual({ floatExempt: true, source: "type-heuristic" });
+      }
+    });
+
+    it.each([
+      { wm_class: null, title: "Late class" },
+      { wm_class: "App", title: null },
+      { wm_class: "App", title: "" },
+    ])("does not float a normal window solely for late identity fields: %o", (identity) => {
+      const win = createMockWindow({
+        ...identity,
+        window_type: Meta.WindowType.NORMAL,
+        allows_resize: true,
+      });
+
+      expect(engine.match(win)).toEqual({ floatExempt: false, source: "default-tile" });
+    });
+
+    it("classifies ephemeral helper windows before built-in and user float rules", () => {
+      engine.windowProps.overrides = [{ wmClass: "wl-clipboard", mode: "float" }];
+      const win = createMockWindow({
+        wm_class: "wl-clipboard",
+        title: "wl-clipboard",
+        rect: { x: 0, y: 0, width: 1, height: 1 },
+      });
+
+      expect(engine.match(win)).toEqual({ floatExempt: true, source: "ephemeral" });
+    });
+
     it("float JSON override matches with float-override source", () => {
       engine.windowProps.overrides = [{ wmClass: "Calculator", mode: "float" }];
       const win = createMockWindow({
@@ -150,6 +200,131 @@ describe("RulesEngine", () => {
       const m = engine.match(win);
       expect(m.floatExempt).toBe(false);
       expect(m.source).toBe("default-tile");
+    });
+
+    it.each([
+      { wm_class: "bLeNdEr-bin", source: "builtin-blender" },
+      { wm_class: "STEAM-overlay", source: "builtin-steam" },
+      { wm_class: "SteamWebHelper", source: "builtin-steam" },
+    ] as const)("matches built-in class variants: $wm_class", ({ wm_class, source }) => {
+      const win = createMockWindow({ wm_class, title: "Tool", allows_resize: true });
+
+      expect(engine.match(win)).toEqual({ floatExempt: true, source });
+    });
+  });
+
+  describe("override contracts", () => {
+    it("requires every supplied class, title, and id field to match", () => {
+      engine.windowProps.overrides = [
+        { wmClass: "Firefox", wmTitle: "Private", wmId: "123", mode: "float" },
+      ];
+      const matching = createMockWindow({
+        id: 123,
+        wm_class: "Firefox",
+        title: "Private Browsing",
+        allows_resize: true,
+      });
+      const wrongClass = createMockWindow({
+        id: 123,
+        wm_class: "Chrome",
+        title: "Private Browsing",
+        allows_resize: true,
+      });
+      const wrongTitle = createMockWindow({
+        id: 123,
+        wm_class: "Firefox",
+        title: "Normal Browsing",
+        allows_resize: true,
+      });
+      const wrongId = createMockWindow({
+        id: 456,
+        wm_class: "Firefox",
+        title: "Private Browsing",
+        allows_resize: true,
+      });
+
+      expect(engine.match(matching).source).toBe("float-override");
+      for (const win of [wrongClass, wrongTitle, wrongId]) {
+        expect(engine.match(win).source).toBe("default-tile");
+      }
+    });
+
+    it("lets a TILE rule beat a matching FLOAT rule and a type heuristic", () => {
+      engine.windowProps.overrides = [
+        { wmClass: "CustomApp", mode: "float" },
+        { wmClass: "CustomApp", mode: "tile" },
+      ];
+      const win = createMockWindow({
+        wm_class: "CustomApp",
+        title: "Fixed",
+        allows_resize: false,
+      });
+
+      expect(engine.match(win)).toEqual({ floatExempt: false, source: "tile-override" });
+    });
+
+    it("applies a TILE instance rule only to the matching built-in-float window", () => {
+      engine.windowProps.overrides = [{ wmClass: "Blender", wmId: "111", mode: "tile" }];
+      const selected = createMockWindow({ id: 111, wm_class: "Blender", title: "Main" });
+      const other = createMockWindow({ id: 222, wm_class: "Blender", title: "Secondary" });
+
+      expect(engine.match(selected).source).toBe("tile-override");
+      expect(engine.match(other).source).toBe("builtin-blender");
+    });
+
+    it("falls through to a type heuristic when a TILE title constraint does not match", () => {
+      engine.windowProps.overrides = [{ wmClass: "Terminal", wmTitle: "vim", mode: "tile" }];
+      const win = createMockWindow({
+        wm_class: "Terminal",
+        title: "bash",
+        allows_resize: false,
+      });
+
+      expect(engine.match(win)).toEqual({ floatExempt: true, source: "type-heuristic" });
+    });
+  });
+
+  describe("Inkscape default override contract", () => {
+    beforeEach(() => {
+      engine.windowProps.overrides = [
+        { wmClass: "inkscape", wmTitle: " - Inkscape", mode: "tile" },
+        { wmClass: "org.inkscape.Inkscape", wmTitle: " - Inkscape", mode: "tile" },
+        { wmClass: "inkscape", wmTitle: "=Open", mode: "float" },
+        { wmClass: "org.inkscape.Inkscape", wmTitle: "=Open", mode: "float" },
+      ];
+    });
+
+    it.each(["inkscape", "org.inkscape.Inkscape"])(
+      "tiles document windows for class %s",
+      (wmClass) => {
+        const win = createMockWindow({
+          wm_class: wmClass,
+          title: "Open plan.svg - Inkscape",
+          allows_resize: true,
+        });
+
+        expect(engine.match(win)).toEqual({ floatExempt: false, source: "tile-override" });
+      }
+    );
+
+    it("lets the document TILE rule beat the non-resizable heuristic", () => {
+      const win = createMockWindow({
+        wm_class: "org.inkscape.Inkscape",
+        title: "diagram.svg - Inkscape",
+        allows_resize: false,
+      });
+
+      expect(engine.match(win)).toEqual({ floatExempt: false, source: "tile-override" });
+    });
+
+    it("floats only the exact dialog title", () => {
+      const dialog = createMockWindow({
+        wm_class: "org.inkscape.Inkscape",
+        title: "Open",
+        allows_resize: true,
+      });
+
+      expect(engine.match(dialog)).toEqual({ floatExempt: true, source: "float-override" });
     });
   });
 
@@ -183,6 +358,14 @@ describe("RulesEngine", () => {
       const win = createMockWindow({ wm_class: "App", id: 99 });
       engine.addFloatOverride(win, true, configMgr as any);
       expect(configMgr.windowProps.overrides[0].wmId).toBe("99");
+    });
+
+    it("addFloatOverride permits separate instance rules for one class", () => {
+      const configMgr = { windowProps: { overrides: [] as any[] } };
+      engine.addFloatOverride(createMockWindow({ wm_class: "App", id: 1 }), true, configMgr as any);
+      engine.addFloatOverride(createMockWindow({ wm_class: "App", id: 2 }), true, configMgr as any);
+
+      expect(configMgr.windowProps.overrides.map((override) => override.wmId)).toEqual(["1", "2"]);
     });
 
     it("does not cache or persist an override before wm_class is available", () => {
@@ -221,6 +404,57 @@ describe("RulesEngine", () => {
       expect(configMgr.windowProps.overrides).toEqual([{ wmClass: "Other", mode: "float" }]);
     });
 
+    it("removeFloatOverride preserves titled user rules", () => {
+      const configMgr = {
+        windowProps: {
+          overrides: [
+            { wmClass: "App", wmTitle: "User Rule", mode: "float" },
+            { wmClass: "App", mode: "float" },
+          ],
+        },
+      };
+
+      engine.removeFloatOverride(
+        createMockWindow({ wm_class: "App", id: 1 }),
+        false,
+        configMgr as any
+      );
+
+      expect(configMgr.windowProps.overrides).toEqual([
+        { wmClass: "App", wmTitle: "User Rule", mode: "float" },
+      ]);
+    });
+
+    it("removeFloatOverride filters by id only when requested", () => {
+      const configMgr = {
+        windowProps: {
+          overrides: [
+            { wmClass: "App", mode: "float" },
+            { wmClass: "App", wmId: "1", mode: "float" },
+            { wmClass: "App", wmId: "2", mode: "float" },
+          ],
+        },
+      };
+
+      engine.removeFloatOverride(
+        createMockWindow({ wm_class: "App", id: 1 }),
+        true,
+        configMgr as any
+      );
+
+      expect(configMgr.windowProps.overrides).toEqual([
+        { wmClass: "App", mode: "float" },
+        { wmClass: "App", wmId: "2", mode: "float" },
+      ]);
+
+      engine.removeFloatOverride(
+        createMockWindow({ wm_class: "App", id: 2 }),
+        false,
+        configMgr as any
+      );
+      expect(configMgr.windowProps.overrides).toEqual([]);
+    });
+
     it("reloadFromConfig strips wmId rules and shares object", () => {
       const props = {
         overrides: [
@@ -233,6 +467,23 @@ describe("RulesEngine", () => {
       expect(engine.windowProps).toBe(props);
       expect(engine.windowProps.overrides).toHaveLength(1);
       expect(engine.windowProps.overrides[0].wmClass).toBe("A");
+    });
+
+    it("reloadFromConfig preserves titled and TILE rules", () => {
+      const props = {
+        overrides: [
+          { wmClass: "A", wmTitle: "Dialog", mode: "float" },
+          { wmClass: "B", mode: "tile" },
+          { wmClass: "C", wmId: "3", mode: "float" },
+        ],
+      };
+
+      engine.reloadFromConfig({ windowProps: props } as any);
+
+      expect(engine.windowProps.overrides).toEqual([
+        { wmClass: "A", wmTitle: "Dialog", mode: "float" },
+        { wmClass: "B", mode: "tile" },
+      ]);
     });
   });
 });

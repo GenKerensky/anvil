@@ -35,38 +35,6 @@ describe("Logger", () => {
     });
   });
 
-  describe("format", () => {
-    it("should replace a single placeholder with a value", () => {
-      expect(Logger.format("Hello {}", "world")).toBe("Hello world");
-    });
-
-    it("should replace multiple placeholders in order", () => {
-      expect(Logger.format("{} + {} = {}", 1 as any, 2 as any, 3 as any)).toBe("1 + 2 = 3");
-    });
-
-    it("should return the message unchanged when no params are provided", () => {
-      expect(Logger.format("No placeholders here")).toBe("No placeholders here");
-    });
-
-    it("should leave extra placeholders if not enough params", () => {
-      expect(Logger.format("{} and {}", "only one")).toBe("only one and {}");
-    });
-
-    it("should ignore extra params if not enough placeholders", () => {
-      expect(Logger.format("Just {}", "one", "two", "three")).toBe("Just one");
-    });
-
-    it("should handle empty string message", () => {
-      expect(Logger.format("")).toBe("");
-    });
-
-    it("should handle various value types", () => {
-      expect(
-        Logger.format("num: {}, bool: {}, null: {}", 42 as any, true as any, null as any)
-      ).toBe("num: 42, bool: true, null: null");
-    });
-  });
-
   describe("logging methods with settings", () => {
     let mockSettings: MockSettings;
 

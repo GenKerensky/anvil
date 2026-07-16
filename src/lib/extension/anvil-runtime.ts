@@ -47,15 +47,10 @@ import { SignalManager } from "./signal-manager.js";
 import { RenderScheduler } from "./render-scheduler.js";
 import type { BorderRefreshMode } from "./render-scheduler.js";
 import { DecorationLayout } from "./decoration-layout.js";
-import {
-  createCommandHandlers,
-  resize as commandResize,
-  toggleFloatingMode as commandToggleFloatingMode,
-  type CommandHandlerHost,
-} from "./command-handlers.js";
+import { createCommandHandlers, type CommandHandlerHost } from "./command-handlers.js";
 import { WorkspaceMutations, type WorkspaceMutationsHost } from "./workspace-mutations.js";
 import type { AnvilWindowActor, AnvilExtension } from "./window/types.js";
-import type { AnvilAction, FloatAction } from "./window/actions.js";
+import type { AnvilAction } from "./window/actions.js";
 import { createSessionFlags, type SessionFlagsState } from "./window/session-flags.js";
 import { EventScheduler } from "./event-scheduler.js";
 import { TilingShadow } from "./tiling-shadow.js";
@@ -569,25 +564,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     }
   }
 
-  private get pointerPolicy() {
-    return this._pointerPolicy;
-  }
-
-  private get tilingRender() {
-    return this._tilingRender!;
-  }
-
   private get layoutEngine() {
     return this._layout!;
-  }
-
-  private get shouldFocusOnHover() {
-    return this._pointerPolicy?.hoverFocusEnabled ?? false;
-  }
-
-  private set shouldFocusOnHover(enabled: boolean) {
-    this._ensurePointerPolicy();
-    this._pointerPolicy!.setHoverFocusEnabled(enabled);
   }
 
   private _pointerPolicyNeeded(): boolean {
@@ -647,11 +625,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private removeFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
     this._rules!.removeFloatOverride(metaWindow, withWmId, this.ext.configMgr);
     this.windowProps = this._rules!.windowProps;
-  }
-
-  /** @deprecated Use commandToggleFloatingMode() from command-handlers.js. Kept for test surface. */
-  private toggleFloatingMode(action: FloatAction, metaWindow: Meta.Window) {
-    commandToggleFloatingMode(this._commandHandlerHost!, action, metaWindow);
   }
 
   private cleanupAlwaysFloat() {
@@ -941,20 +914,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     });
   }
 
-  /** Injectable command bus for tests / keybinding service (B10-2). */
-  private get commandBus(): CommandBus {
-    return this._commandBus!;
-  }
-
-  /** @deprecated Use commandResize() from command-handlers.js. Kept for test surface. */
-  private resize(grabOp: Meta.GrabOp, amount: number) {
-    commandResize(this._commandHandlerHost!, grabOp, amount);
-  }
-
-  private _stopLiveResizeLoop() {
-    this._grab!.dispose();
-  }
-
   disable() {
     if (this._state === "disabled" || this._state === "disabling") return;
     this._state = "disabling";
@@ -1096,10 +1055,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       return w1.get_stable_sequence() - w2.get_stable_sequence();
     });
     return windowsAll;
-  }
-
-  private getWindowsOnWorkspace(workspaceIndex: number) {
-    return this._wsMutations!.getWindowsOnWorkspace(workspaceIndex);
   }
 
   private determineSplitLayout() {
@@ -1246,13 +1201,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     return this._wsMutations!.isActiveWindowWorkspaceTiled(metaWindow);
   }
 
-  /**
-   * Check the current active workspace's tiling mode
-   */
-  private isCurrentWorkspaceTiled() {
-    return this._wsMutations!.isCurrentWorkspaceTiled();
-  }
-
   private updateMetaWorkspaceMonitor(
     from: string,
     _monitor: number | null,
@@ -1292,21 +1240,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private minimizedWindow(node: Node | null) {
     if (!node) return false;
     return node._type === NODE_TYPES.WINDOW && node._data && (node._data as Meta.Window).minimized;
-  }
-
-  /**
-   * Handle previewing and applying where a drag-drop window is going to be tiled.
-   * @deprecated Use this._dragDrop!.moveWindowToPointer() directly.
-   */
-  private moveWindowToPointer(focusNodeWindow: Node, preview: boolean = false) {
-    this._dragDrop!.moveWindowToPointer(focusNodeWindow, preview);
-  }
-
-  /**
-   * @deprecated Use this._dragDrop!.findNodeWindowAtPointer() directly.
-   */
-  private findNodeWindowAtPointer(focusNodeWindow: Node) {
-    return this._dragDrop!.findNodeWindowAtPointer(focusNodeWindow);
   }
 
   private _handleGrabOpBegin(display: Meta.Display, metaWindow: Meta.Window, grabOp: Meta.GrabOp) {
@@ -1357,10 +1290,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._grab!.end(display, metaWindow, grabOp);
   }
 
-  private _grabCleanup(focusNodeWindow: Node | null) {
-    this._grab!.cleanup(focusNodeWindow);
-  }
-
   private allowDragDropTile() {
     return this.kbd.allowDragDropTile();
   }
@@ -1376,14 +1305,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     const monWs = this.currentMonWs;
     if (monWs) {
       return this.tree.findNode(monWs);
-    }
-    return null;
-  }
-
-  private get currentWsNode() {
-    const ws = this.currentWs;
-    if (ws) {
-      return this.tree.findNode(ws);
     }
     return null;
   }

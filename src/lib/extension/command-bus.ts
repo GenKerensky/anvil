@@ -81,12 +81,4 @@ export class CommandBus {
     const handler = this._handlers[name] as ((a: AnvilAction) => void) | undefined;
     handler?.(action);
   }
-
-  /** Register or replace a handler (tests / extensions). */
-  register<K extends AnvilActionName>(
-    name: K,
-    handler: (action: Extract<AnvilAction, { name: K }>) => void
-  ): void {
-    this._handlers[name] = handler as HandlerMap[K];
-  }
 }

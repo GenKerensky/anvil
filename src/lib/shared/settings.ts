@@ -91,11 +91,6 @@ export class ConfigManager extends GObject.Object {
     return null;
   }
 
-  get stylesheetFile() {
-    const stylesheet = this.userStylesheetFile;
-    return stylesheet.query_exists(null) ? stylesheet : null;
-  }
-
   /** Stable user stylesheet handle. Merely reading this property never creates files. */
   get userStylesheetFile() {
     return Gio.File.new_for_path(
@@ -224,7 +219,7 @@ export class ConfigManager extends GObject.Object {
 
     const parentPath = windowConfigFile.get_parent()?.get_path();
     if (parentPath && GLib.mkdir_with_parents(parentPath, PERMISSIONS_MODE) === 0) {
-      const [_, _tag] = windowConfigFile.replace_contents(
+      windowConfigFile.replace_contents(
         windowConfigContents as string,
         null,
         false,

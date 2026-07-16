@@ -172,11 +172,6 @@ export class SettingsBridge {
     this._id = 0;
   }
 
-  /** Exposed for unit tests. */
-  handleChanged(settingName: string): void {
-    this._onChanged(settingName);
-  }
-
   private _onChanged(settingName: string): void {
     const handler = SETTINGS_HANDLERS[settingName];
     if (settingName === "window-overrides-reload-trigger") {

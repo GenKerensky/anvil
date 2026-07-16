@@ -93,10 +93,6 @@ export class SignalManager {
     this._host = host;
   }
 
-  get isBound(): boolean {
-    return this._signalsBound;
-  }
-
   /** Bind all global non-window signals. Called from AnvilRuntime.enable(). */
   bindAll(): void {
     if (this._signalsBound) return;

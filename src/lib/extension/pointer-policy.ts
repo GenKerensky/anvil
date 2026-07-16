@@ -56,10 +56,6 @@ export class PointerPolicy extends GObject.Object {
       .get_active_workspace_index();
   }
 
-  get hoverFocusEnabled() {
-    return this._hoverFocusEnabled;
-  }
-
   setHoverFocusEnabled(enabled: boolean) {
     this._hoverFocusEnabled = enabled;
     if (enabled) {
@@ -71,28 +67,6 @@ export class PointerPolicy extends GObject.Object {
 
   disable() {
     this._stopHoverLoop();
-  }
-
-  /** @returns true to continue polling, false to stop */
-  runHoverFocusPoll(): boolean {
-    return this._focusWindowUnderPointer();
-  }
-
-  canWarpToNode(nodeWindow: Node | null) {
-    if (!nodeWindow) return false;
-    return this._canWarpToNode(nodeWindow);
-  }
-
-  storePointerLastPosition(nodeWindow: Node | null) {
-    this._storePointerLastPosition(nodeWindow);
-  }
-
-  getPointerPositionInside(nodeWindow: Node | null) {
-    return this._getPointerPositionInside(nodeWindow);
-  }
-
-  getPointer(): [number, number] {
-    return global.get_pointer() as unknown as [number, number];
   }
 
   /**

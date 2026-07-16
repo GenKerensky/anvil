@@ -8,15 +8,18 @@
  * after recreation).
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import GLib from "gi://GLib";
 import { SignalManager } from "../../../src/lib/extension/signal-manager.js";
 import { createAnvilRuntimeFixture } from "../mocks/helpers/index.js";
 
 describe("SignalManager - workspace transition lifecycle (S4)", () => {
-  let ctx: any;
-
   beforeEach(() => {
-    ctx = createAnvilRuntimeFixture();
+    createAnvilRuntimeFixture();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("resets workspaceChanging and clears the timer id when unbindAll cancels the transition timer", () => {
@@ -30,12 +33,15 @@ describe("SignalManager - workspace transition lifecycle (S4)", () => {
     (sm as any)._signalsBound = true;
     (sm as any)._workspaceChangingTimeoutId = 42;
     host.workspaceChanging = true;
+    const removeSource = vi.spyOn(GLib.Source, "remove");
+    const connect = vi.fn(() => 123);
 
     sm.unbindAll();
+    sm.bindWorkspaceSignals({ connect } as any);
 
     expect(host.workspaceChanging).toBe(false);
-    expect((sm as any)._workspaceChangingTimeoutId).toBe(0);
-    expect(sm.isBound).toBe(false);
+    expect(removeSource).toHaveBeenCalledWith(42);
+    expect(connect).not.toHaveBeenCalled();
   });
 
   it("resets workspaceChanging even when activation failed before fully bound", () => {
@@ -44,9 +50,11 @@ describe("SignalManager - workspace transition lifecycle (S4)", () => {
 
     // Partial bind failures still use unbindAll for atomic lifecycle rollback.
     sm.unbindAll();
+    const connect = vi.fn(() => 123);
+    sm.bindWorkspaceSignals({ connect } as any);
 
-    expect((sm as any)._signalsBound).toBe(false);
     expect(host.workspaceChanging).toBe(false);
+    expect(connect).not.toHaveBeenCalled();
   });
 
   it("bindWorkspaceSignals is a no-op until signals are bound (S2 lifecycle purity)", () => {

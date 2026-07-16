@@ -9,7 +9,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import { PREFERENCES_WINDOW_CLASS } from "../../../src/lib/extension/utils/window-filters.js";
-import { NODE_TYPES, LAYOUT_TYPES, ORIENTATION_TYPES } from "../../../src/lib/extension/tree.js";
+import { NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
   createAnvilRuntimeFixture,
@@ -416,6 +416,16 @@ describe("AnvilRuntime - Commands", () => {
 
       expect(ctx.settings.get_uint("window-gap-size-increment")).toBe(8);
     });
+
+    it("should not change the base gap size", () => {
+      ctx.settings.set_uint("window-gap-size", 5);
+      ctx.settings.set_uint("window-gap-size-increment", 2);
+
+      wm().command({ name: "GapSize", amount: 3 });
+
+      expect(ctx.settings.get_uint("window-gap-size")).toBe(5);
+      expect(ctx.settings.get_uint("window-gap-size-increment")).toBe(5);
+    });
   });
 
   describe("WorkspaceActiveTileToggle", () => {
@@ -437,6 +447,50 @@ describe("AnvilRuntime - Commands", () => {
 
       const skipList = ctx.settings.get_string("workspace-skip-tile");
       expect(skipList).not.toContain("1");
+    });
+
+    it("floats every node on the active workspace when tiling is disabled", () => {
+      ctx.settings.set_string("workspace-skip-tile", "");
+      ctx.workspaceManager.get_active_workspace_index.mockReturnValue(0);
+      const { monitor } = getWorkspaceAndMonitor(ctx, 0);
+      const first = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 1, workspace: ctx.workspaces[0] })
+      );
+      const second = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 2, workspace: ctx.workspaces[0] })
+      );
+
+      wm().command({ name: "WorkspaceActiveTileToggle" });
+
+      expect(first.mode).toBe(WINDOW_MODES.FLOAT);
+      expect(second.mode).toBe(WINDOW_MODES.FLOAT);
+    });
+
+    it("tiles every node on the active workspace when tiling is enabled", () => {
+      ctx.settings.set_string("workspace-skip-tile", "0");
+      ctx.workspaceManager.get_active_workspace_index.mockReturnValue(0);
+      const { monitor } = getWorkspaceAndMonitor(ctx, 0);
+      const first = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 1, workspace: ctx.workspaces[0] })
+      );
+      const second = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.WINDOW,
+        createMockWindow({ id: 2, workspace: ctx.workspaces[0] })
+      );
+      first.mode = WINDOW_MODES.FLOAT;
+      second.mode = WINDOW_MODES.FLOAT;
+
+      wm().command({ name: "WorkspaceActiveTileToggle" });
+
+      expect(first.mode).toBe(WINDOW_MODES.TILE);
+      expect(second.mode).toBe(WINDOW_MODES.TILE);
     });
   });
 

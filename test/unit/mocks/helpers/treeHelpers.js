@@ -48,14 +48,14 @@ export function createWindowNode(tree, overrides = {}) {
   return node;
 }
 
-export function createConNode(tree, layout = LAYOUT_TYPES.HSPLIT) {
+export function createConNode(_tree, layout = LAYOUT_TYPES.HSPLIT) {
   const node = new Node(NODE_TYPES.CON, {});
   node.layout = layout;
   node.percent = 1.0;
   return node;
 }
 
-export function createMonitorNode(tree, index = 0) {
+export function createMonitorNode(_tree, _index = 0) {
   const node = new Node(NODE_TYPES.MONITOR, {});
   node.layout = LAYOUT_TYPES.HSPLIT;
   return node;

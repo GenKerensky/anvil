@@ -249,29 +249,6 @@ export function positionFromGrabOp(grabOp: Meta.GrabOp) {
   return POSITION.UNKNOWN;
 }
 
-export function allowResizeGrabOp(grabOp: Meta.GrabOp) {
-  grabOp &= ~1024; // ignore META_GRAB_OP_WINDOW_FLAG_UNCONSTRAINED
-  return (
-    grabOp === Meta.GrabOp.RESIZING_N ||
-    grabOp === Meta.GrabOp.RESIZING_E ||
-    grabOp === Meta.GrabOp.RESIZING_W ||
-    grabOp === Meta.GrabOp.RESIZING_S ||
-    grabOp === Meta.GrabOp.RESIZING_NE ||
-    grabOp === Meta.GrabOp.RESIZING_NW ||
-    grabOp === Meta.GrabOp.RESIZING_SE ||
-    grabOp === Meta.GrabOp.RESIZING_SW ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_N ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_NE ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_NW ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_E ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_SE ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_S ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_SW ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_W ||
-    grabOp === Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN
-  );
-}
-
 export function grabMode(grabOp: Meta.GrabOp) {
   grabOp &= ~1024; // ignore META_GRAB_OP_WINDOW_FLAG_UNCONSTRAINED
   if (

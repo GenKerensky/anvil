@@ -161,7 +161,7 @@ describe("AnvilRuntime - Lifecycle", () => {
     it("should clean up border and remove node from tree", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const { monitor } = getWorkspaceAndMonitor(ctx);
-      const nodeWindow = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
       expect(ctx.tree.findNode(metaWindow)).not.toBeNull();
 
@@ -216,11 +216,31 @@ describe("AnvilRuntime - Lifecycle", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow2);
 
       ctx.display.get_focus_window.mockReturnValue(metaWindow1);
+      const raiseSpy = vi.spyOn(metaWindow2, "raise");
+      const focusSpy = vi.spyOn(metaWindow2, "focus");
 
       const actor = metaWindow1.get_compositor_private();
       wm()._tracker.windowDestroy(actor);
 
       expect(ctx.tree.findNode(metaWindow1)).toBeNull();
+      expect(raiseSpy).toHaveBeenCalled();
+      expect(focusSpy).toHaveBeenCalled();
+    });
+
+    it("falls back to a current-workspace window when the closed window has no sibling", () => {
+      const closed = createMockWindow({ id: 1, wm_class: "App1", title: "Closed" });
+      const fallback = createMockWindow({ id: 2, wm_class: "App2", title: "Fallback" });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, closed);
+      ctx.workspaces[0]._windows = [fallback];
+      ctx.display.get_focus_window.mockReturnValue(closed);
+      const raiseSpy = vi.spyOn(fallback, "raise");
+      const focusSpy = vi.spyOn(fallback, "focus");
+
+      wm()._tracker.windowDestroy(closed.get_compositor_private());
+
+      expect(raiseSpy).toHaveBeenCalled();
+      expect(focusSpy).toHaveBeenCalled();
     });
 
     it("should not renderTree when destroying an ephemeral helper window", () => {

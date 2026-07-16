@@ -72,30 +72,30 @@ All remediation work must preserve these constraints:
 
 ## Inventory summary
 
-| ID     | Status      | Priority | Area                  | Summary                                                         |
-| ------ | ----------- | -------- | --------------------- | --------------------------------------------------------------- |
-| TD-001 | Complete    | P0       | Window discovery      | Preferences-window lookup skips workspace zero                  |
-| TD-002 | Complete    | P0       | Configuration         | Parsed window overrides bypass their runtime validator          |
-| TD-003 | Complete    | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected        |
-| TD-004 | Complete    | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
-| TD-005 | Complete    | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
-| TD-006 | Complete    | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
-| TD-007 | Open        | P2       | Runtime API           | Thirteen private compatibility members exist only for tests     |
-| TD-008 | Complete    | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain          |
-| TD-009 | Open        | P2       | Shared helpers        | Several helpers and conversions have no production consumer     |
-| TD-010 | In progress | P2       | Policy ownership      | Tested helpers are disconnected from their production owners    |
-| TD-011 | Open        | P2       | GSettings             | Four schema keys have no source consumer                        |
-| TD-012 | Open        | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference      |
-| TD-013 | Open        | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts   |
-| TD-014 | Open        | P2       | Build tooling         | Metadata generation is duplicated                               |
-| TD-015 | In progress | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters         |
-| TD-016 | Complete    | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate     |
-| TD-017 | Open        | P3       | Module depth          | Six production modules exceed the soft 500-line budget          |
-| TD-018 | Open        | P3       | Tree ownership        | Legacy Tree still owns platform workspace/monitor orchestration |
-| TD-019 | Open        | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved         |
-| TD-020 | Open        | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions  |
-| TD-021 | Tracked     | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`              |
-| TD-022 | Tracked     | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open     |
+| ID     | Status   | Priority | Area                  | Summary                                                         |
+| ------ | -------- | -------- | --------------------- | --------------------------------------------------------------- |
+| TD-001 | Complete | P0       | Window discovery      | Preferences-window lookup skips workspace zero                  |
+| TD-002 | Complete | P0       | Configuration         | Parsed window overrides bypass their runtime validator          |
+| TD-003 | Complete | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected        |
+| TD-004 | Complete | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
+| TD-005 | Complete | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
+| TD-006 | Complete | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
+| TD-007 | Complete | P2       | Runtime API           | Thirteen private compatibility members exist only for tests     |
+| TD-008 | Complete | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain          |
+| TD-009 | Complete | P2       | Shared helpers        | Several helpers and conversions have no production consumer     |
+| TD-010 | Complete | P2       | Policy ownership      | Tested helpers are disconnected from their production owners    |
+| TD-011 | Open     | P2       | GSettings             | Four schema keys have no source consumer                        |
+| TD-012 | Open     | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference      |
+| TD-013 | Open     | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts   |
+| TD-014 | Open     | P2       | Build tooling         | Metadata generation is duplicated                               |
+| TD-015 | Complete | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters         |
+| TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate     |
+| TD-017 | Open     | P3       | Module depth          | Six production modules exceed the soft 500-line budget          |
+| TD-018 | Open     | P3       | Tree ownership        | Legacy Tree still owns platform workspace/monitor orchestration |
+| TD-019 | Open     | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved         |
+| TD-020 | Open     | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions  |
+| TD-021 | Tracked  | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`              |
+| TD-022 | Tracked  | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open     |
 
 ## Detailed inventory
 
@@ -453,7 +453,7 @@ change the default engine or retire the legacy writer.
 - [x] Stage 1: Close bounded correctness and lifecycle hazards
 - [x] Stage 2: Make stylesheet upgrades non-destructive
 - [x] Stage 3: Finish interaction edge behavior
-- [ ] Stage 4: Remove dead compatibility and enforce unused-code checks
+- [x] Stage 4: Remove dead compatibility and enforce unused-code checks
 - [ ] Stage 5: Remove stale schema, resources, and tool entry points
 - [ ] Stage 6: Deepen legacy production modules
 - [ ] Stage 7: Close the inventory and establish ongoing governance
@@ -588,22 +588,34 @@ constraints before Mutter reports the move. Both review axes passed after one re
 
 ### Stage 4: Remove dead compatibility and enforce unused-code checks
 
+**Status:** Complete — reviewed with no blocking or important findings.
+
 **Purpose:** Resolve TD-007 through TD-010 and make recurrence a build failure.
 
 **Work:**
 
-1. Inventory which tests call each private AnvilRuntime compatibility member.
-2. Move those assertions to the owning subsystem test suites.
-3. Keep only composition, lifecycle, and delegation coverage on AnvilRuntime.
-4. Delete the thirteen unused runtime members.
-5. Delete helpers with no production consumer and their tests.
-6. Connect any retained pure policy helper to its production owner.
-7. Enable `noUnusedLocals` and `noUnusedParameters` and promote unused-variable lint findings to
-   errors.
+1. [x] Inventory which tests call each private AnvilRuntime compatibility member.
+2. [x] Move those assertions to the owning subsystem test suites.
+3. [x] Keep only composition, lifecycle, and delegation coverage on AnvilRuntime.
+4. [x] Delete the thirteen unused runtime members.
+5. [x] Delete helpers with no production consumer and their tests.
+6. [x] Connect any retained pure policy helper to its production owner.
+7. [x] Enable `noUnusedLocals` and `noUnusedParameters` and promote unused-variable lint findings to
+       errors.
 
 **Exit gate:** The strict unused-declaration compiler pass reports zero findings; `npm test` passes;
 the public test probe remains narrow; and no production method exists solely because a unit test
 reaches it through an `any` fixture.
+
+**Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 976 unit tests,
+and 41 tooling tests (two host-only cases skipped by the deterministic gate). The debt audit
+reports zero unused declarations; TypeScript rejects unused production/portable declarations and
+ESLint rejects unused test declarations. Owner-focused suites now cover command handlers, rules,
+rendering, tracking, workspace mutation, pointer policy, and Grab-Resize lifecycle/percent
+behavior. The thirteen runtime compatibility members and test-only owner probes are gone, while
+the palette chain remains because preferences appearance code consumes it. `BorderController`
+uses the shared mask policy. Both review axes passed after remediation of test-only APIs,
+Grab-Resize coverage, and the unit-test lint override.
 
 **Suggested commits:**
 

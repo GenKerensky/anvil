@@ -8,12 +8,16 @@ import { SettingsBridge } from "../../../src/lib/extension/settings-bridge.js";
 describe("SettingsBridge", () => {
   let host: any;
   let bridge: SettingsBridge;
+  let changedCallback: ((settings: unknown, key: string) => void) | undefined;
 
   beforeEach(() => {
     host = {
       settings: {
         get_boolean: vi.fn(() => true),
-        connect: vi.fn(() => 99),
+        connect: vi.fn((_signal, callback) => {
+          changedCallback = callback;
+          return 99;
+        }),
         disconnect: vi.fn(),
       },
       tree: {
@@ -37,6 +41,11 @@ describe("SettingsBridge", () => {
     bridge = new SettingsBridge(host);
   });
 
+  function emitChanged(key: string): void {
+    bridge.enable();
+    changedCallback!(host.settings, key);
+  }
+
   it("enable connects settings changed; disable disconnects once", () => {
     bridge.enable();
     expect(host.settings.connect).toHaveBeenCalledWith("changed", expect.any(Function));
@@ -50,13 +59,13 @@ describe("SettingsBridge", () => {
   });
 
   it("monitor-constraints clears resized windows and re-renders", () => {
-    bridge.handleChanged("monitor-constraints");
+    emitChanged("monitor-constraints");
     expect(host.clearResizedWindows).toHaveBeenCalled();
     expect(host.renderTree).toHaveBeenCalledWith("monitor-constraints", true);
   });
 
   it("observes a complete portable policy before legacy settings effects", () => {
-    bridge.handleChanged("tiling-mode-enabled");
+    emitChanged("tiling-mode-enabled");
 
     expect(host.observePortablePolicy).toHaveBeenCalledOnce();
     expect(host.observePortablePolicy.mock.invocationCallOrder[0]).toBeLessThan(
@@ -67,7 +76,7 @@ describe("SettingsBridge", () => {
   it("suspends Anvil resize effects when tiling is disabled", () => {
     host.settings.get_boolean.mockReturnValue(false);
 
-    bridge.handleChanged("tiling-mode-enabled");
+    emitChanged("tiling-mode-enabled");
 
     expect(host.suspendGrabResizeTilingEffects).toHaveBeenCalledOnce();
     expect(host.renderTree).toHaveBeenCalledWith("tiling-mode-enabled");
@@ -76,13 +85,13 @@ describe("SettingsBridge", () => {
   it("does not suspend resize effects when tiling is enabled", () => {
     host.settings.get_boolean.mockReturnValue(true);
 
-    bridge.handleChanged("tiling-mode-enabled");
+    emitChanged("tiling-mode-enabled");
 
     expect(host.suspendGrabResizeTilingEffects).not.toHaveBeenCalled();
   });
 
   it("window-overrides-reload-trigger reloads overrides", () => {
-    bridge.handleChanged("window-overrides-reload-trigger");
+    emitChanged("window-overrides-reload-trigger");
     expect(host.reloadWindowOverrides).toHaveBeenCalled();
     expect(host.reloadWindowOverrides.mock.invocationCallOrder[0]).toBeLessThan(
       host.observePortablePolicy.mock.invocationCallOrder[0]
@@ -90,22 +99,22 @@ describe("SettingsBridge", () => {
   });
 
   it("unknown key is a no-op", () => {
-    expect(() => bridge.handleChanged("not-a-real-key")).not.toThrow();
+    expect(() => emitChanged("not-a-real-key")).not.toThrow();
     expect(host.renderTree).not.toHaveBeenCalled();
   });
 
   it("focus-border-toggle reconciles registered decorations when enabled", () => {
-    bridge.handleChanged("focus-border-toggle");
+    emitChanged("focus-border-toggle");
     expect(host.updateBorderLayout).toHaveBeenCalled();
   });
 
   it("focus-border-toggle reconciles without destroying lifecycle state when disabled", () => {
-    bridge.handleChanged("focus-border-toggle");
+    emitChanged("focus-border-toggle");
     expect(host.updateBorderLayout).toHaveBeenCalled();
   });
 
   it("refreshes border geometry after a stylesheet update", () => {
-    bridge.handleChanged("css-updated");
+    emitChanged("css-updated");
     expect(host.refreshStylesheet).toHaveBeenCalled();
     expect(host.updateBorderLayout).toHaveBeenCalled();
     expect(host.refreshStylesheet.mock.invocationCallOrder[0]).toBeLessThan(

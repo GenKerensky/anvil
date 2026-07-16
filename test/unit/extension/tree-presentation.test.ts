@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import St from "gi://St";
 
 import { Node, NODE_TYPES, LAYOUT_TYPES } from "../../../src/lib/extension/tree.js";
 import {
@@ -17,9 +18,19 @@ describe("TreePresentation", () => {
     const node = new Node(NODE_TYPES.WINDOW, focused);
     parent.appendChild(node);
 
+    presentation.ensure(parent);
     presentation.ensure(node);
+    presentation.layoutTabbedDecoration(parent, node, {
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 35,
+      visible: true,
+    });
 
-    expect(presentation.tabStyleClassForTest(node)).toContain("window-tabbed-tab-active");
+    const [decoration] = globals.windowGroup!._children as St.BoxLayout[];
+    const [tab] = decoration.get_children() as St.BoxLayout[];
+    expect(tab.get_style_class_name()).toContain("window-tabbed-tab-active");
     presentation.destroy();
     globals.cleanup();
   });
@@ -34,13 +45,19 @@ describe("TreePresentation", () => {
     parent.appendChild(first);
     parent.appendChild(second);
 
+    presentation.ensure(parent);
     presentation.ensure(first);
     presentation.ensure(second);
+    const geometry = { x: 0, y: 0, width: 200, height: 35, visible: true };
+    presentation.layoutTabbedDecoration(parent, first, geometry);
+    presentation.layoutTabbedDecoration(parent, second, geometry);
+    const [decoration] = globals.windowGroup!._children as St.BoxLayout[];
+    const [firstTab, secondTab] = decoration.get_children() as St.BoxLayout[];
     presentation.syncActiveTab(first);
-    expect(presentation.tabStyleClassForTest(first)).toContain("window-tabbed-tab-active");
+    expect(firstTab.get_style_class_name()).toContain("window-tabbed-tab-active");
     presentation.syncActiveTab(second);
-    expect(presentation.tabStyleClassForTest(first)).not.toContain("window-tabbed-tab-active");
-    expect(presentation.tabStyleClassForTest(second)).toContain("window-tabbed-tab-active");
+    expect(firstTab.get_style_class_name()).not.toContain("window-tabbed-tab-active");
+    expect(secondTab.get_style_class_name()).toContain("window-tabbed-tab-active");
     expect("tab" in first).toBe(false);
     expect("decoration" in parent).toBe(false);
 
@@ -55,9 +72,18 @@ describe("TreePresentation", () => {
     parent.layout = LAYOUT_TYPES.TABBED;
     const node = new Node(NODE_TYPES.WINDOW, createMockWindow());
     parent.appendChild(node);
+    presentation.ensure(parent);
     presentation.ensure(node);
+    presentation.layoutTabbedDecoration(parent, node, {
+      x: 0,
+      y: 0,
+      width: 200,
+      height: 35,
+      visible: true,
+    });
     presentation.syncActiveTab(node);
-    const activeTab = (presentation as any)._activeTab;
+    const [decoration] = globals.windowGroup!._children as St.BoxLayout[];
+    const [activeTab] = decoration.get_children() as St.BoxLayout[];
     vi.spyOn(activeTab, "remove_style_class_name").mockImplementation(() => {
       throw new Error("disposed actor");
     });

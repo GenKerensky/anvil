@@ -122,22 +122,6 @@ export class WorkspaceMutations {
     return !skipThisWs;
   }
 
-  isCurrentWorkspaceTiled() {
-    const skipWs = this.host.settings.get_string("workspace-skip-tile");
-    const skipArr = skipWs.split(",");
-    let skipThisWs = false;
-    const wsMgr = global.workspace_manager;
-    const wsIndex = wsMgr.get_active_workspace_index();
-
-    for (let i = 0; i < skipArr.length; i++) {
-      if (skipArr[i].trim() === `${wsIndex}`) {
-        skipThisWs = true;
-        break;
-      }
-    }
-    return !skipThisWs;
-  }
-
   updateMetaWorkspaceMonitor(from: string, _monitor: number | null, metaWindow: Meta.Window) {
     const host = this.host;
     if (host.validWindow(metaWindow)) {

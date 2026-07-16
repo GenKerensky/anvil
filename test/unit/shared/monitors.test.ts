@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import Gio from "gi://Gio";
 import Gdk from "gi://Gdk";
 import GLib from "gi://GLib";
@@ -228,7 +228,7 @@ describe("MonitorsPage", () => {
 
       let observedDuring = false;
       const orig = (page as any)._enableSwitch;
-      vi.spyOn(orig, "active", "set").mockImplementation(function (this: any, v: boolean) {
+      vi.spyOn(orig, "active", "set").mockImplementation(function (this: any, _v: boolean) {
         observedDuring = (page as any)._updating;
       });
 

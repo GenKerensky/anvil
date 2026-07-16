@@ -240,10 +240,6 @@ export class TreePresentation implements TreePresentationPort {
     closeButton.connect("button-release-event", middleClose);
     return tab;
   }
-
-  tabStyleClassForTest(node: Node): string | null {
-    return this._records.get(node)?.tab?.get_style_class_name() ?? null;
-  }
 }
 
 /** Sole owner of the legacy drag-preview actor. */

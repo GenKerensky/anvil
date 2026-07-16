@@ -472,18 +472,6 @@ export class Node extends GObject.Object {
     }
   }
 
-  // start walking from bottom to root
-  _traverseDepthFirst(callback: (node: Node) => void) {
-    const recurse = (currentNode: Node) => {
-      for (let i = 0, length = currentNode.childNodes.length; i < length; i++) {
-        recurse(currentNode.childNodes[i]);
-      }
-
-      callback(currentNode);
-    };
-    recurse(this);
-  }
-
   _walk(callback: (node: Node) => void, traversal: (cb: (node: Node) => void) => void) {
     traversal.call(this, callback);
   }
@@ -706,11 +694,6 @@ export class Tree extends Node {
     }
 
     return true;
-  }
-
-  get nodeWorkpaces() {
-    const nodeWorkspaces = this.getNodeByType(NODE_TYPES.WORKSPACE);
-    return nodeWorkspaces;
   }
 
   get nodeWindows() {

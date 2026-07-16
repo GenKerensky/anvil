@@ -5,7 +5,7 @@
  * and workspace management across multiple subsystems.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import Meta from "gi://Meta";
 import { NODE_TYPES } from "../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../src/lib/extension/window/constants.js";
@@ -103,7 +103,7 @@ describe("Integration - Window Operations", () => {
       setFocus(metaWindow);
       const initialWidth = metaWindow.get_frame_rect().width;
 
-      wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 30);
+      wm().command({ name: "WindowResize", direction: "Right", amount: 30 });
 
       const rect = metaWindow.get_frame_rect();
       expect(rect.width).toBe(initialWidth + 30);
@@ -129,13 +129,11 @@ describe("Integration - Window Operations", () => {
         wm_class: "App1",
         rect: { x: 0, y: 0, width: 500, height: 500 },
       });
-      const { metaWindow: win2, node: node2 } = createWindow({
+      const { metaWindow: win2 } = createWindow({
         wm_class: "App2",
         rect: { x: 500, y: 0, width: 500, height: 500 },
       });
       setFocus(win2);
-
-      const initialRect2 = node2.rect ? { ...node2.rect } : null;
 
       wm().command({
         name: "WindowSwapLastActive",
@@ -163,20 +161,9 @@ describe("Integration - Window Operations", () => {
     });
   });
 
-  describe("gap changes", () => {
-    it("should reflect gap changes in calculateGaps", () => {
-      const { node } = createWindow();
-
-      ctx.settings.set_uint("window-gap-size", 4);
-      ctx.settings.set_uint("window-gap-size-increment", 2);
-
-      expect(wm().tilingRender.calculateGaps(node)).toBe(8);
-    });
-  });
-
   describe("minimize cycle", () => {
     it("should minimize and unminimize a window", () => {
-      const { metaWindow, node } = createWindow();
+      const { metaWindow } = createWindow();
       setFocus(metaWindow);
 
       metaWindow.minimized = true;
@@ -222,26 +209,14 @@ describe("Integration - Window Operations", () => {
 
   describe("window close", () => {
     it("should delete window and remove from tree", () => {
-      const { metaWindow, node } = createWindow();
+      const { metaWindow } = createWindow();
       setFocus(metaWindow);
 
-      const parentBefore = node.parentNode;
       metaWindow.delete(global.display.get_current_time());
 
       // Window actor removal would trigger _validWindow check
       // The delete call should not throw
       expect(true).toBe(true);
-    });
-  });
-
-  describe("skip-tile workspace", () => {
-    it("should float windows on skip-tile workspace", () => {
-      const { metaWindow, node } = createWindow();
-      ctx.settings.set_string("workspace-skip-tile", "0");
-
-      wm().tilingRender.processFloats();
-
-      expect(node.mode).toBe(WINDOW_MODES.FLOAT);
     });
   });
 
@@ -270,20 +245,6 @@ describe("Integration - Window Operations", () => {
     });
   });
 
-  describe("grab state lifecycle", () => {
-    it("should begin and end a grab operation", () => {
-      const { metaWindow } = createWindow();
-      setFocus(metaWindow);
-      const display = ctx.display;
-
-      wm()._handleGrabOpBegin(display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
-      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.KEYBOARD_RESIZING_E);
-
-      wm()._handleGrabOpEnd(display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
-      expect(wm()._grab.grabOp).toBe(Meta.GrabOp.NONE);
-    });
-  });
-
   describe("tree structure", () => {
     it("should create proper tree hierarchy for tiled windows", () => {
       const wsNode = ctx.tree.findNode("ws0");
@@ -297,7 +258,7 @@ describe("Integration - Window Operations", () => {
 
   describe("layout changes", () => {
     it("should toggle layout between split, stacked, and tabbed", () => {
-      const { metaWindow, node } = createWindow();
+      const { metaWindow } = createWindow();
       setFocus(metaWindow);
 
       wm().command({ name: "LayoutStackedToggle" });

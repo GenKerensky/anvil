@@ -140,7 +140,7 @@ export class GrabResizeSession {
   private _host: GrabResizeHost;
   grabOp: Meta.GrabOp = Meta.GrabOp.NONE;
   cancelGrab = false;
-  resizedWindows: Map<number, number> = new Map();
+  private resizedWindows: Map<number, number> = new Map();
   private _lastResizePair: Node | null = null;
   private _grabbedMetaWindow: Meta.Window | null = null;
   private _liveResizeSrcId = 0;
@@ -182,24 +182,6 @@ export class GrabResizeSession {
     return this.resizedWindows.get(id) || 0;
   }
 
-  /** True when a resize count has been recorded for `id` (counts are always ≥1). */
-  hasResizeCount(id: number): boolean {
-    return this.resizedWindows.has(id);
-  }
-
-  /** Number of windows with a recorded resize count (test probe). */
-  get resizeCountEntries(): number {
-    return this.resizedWindows.size;
-  }
-
-  /**
-   * Seed a resize count for `id` (test-only). Lets tests simulate prior-resize
-   * state without reaching into the internal `resizedWindows` map.
-   */
-  seedResizeCount(id: number, count: number): void {
-    this.resizedWindows.set(id, count);
-  }
-
   clearResizedWindows(): void {
     this.resizedWindows.clear();
   }
@@ -222,47 +204,6 @@ export class GrabResizeSession {
     this._nodeGrab.clear();
     this.grabOp = Meta.GrabOp.NONE;
     this.cancelGrab = false;
-  }
-
-  resizeByAmount(grabOp: Meta.GrabOp, amount: number) {
-    const host = this._host;
-    const metaWindow = host.focusMetaWindow;
-    if (!metaWindow) return;
-    const display = global.display;
-
-    this.begin(display, metaWindow, grabOp);
-
-    const rect = metaWindow.get_frame_rect();
-    const direction = Utils.directionFromGrab(grabOp);
-
-    switch (direction) {
-      case Meta.MotionDirection.RIGHT:
-        rect.width = rect.width + amount;
-        break;
-      case Meta.MotionDirection.LEFT:
-        rect.width = rect.width + amount;
-        rect.x = rect.x - amount;
-        break;
-      case Meta.MotionDirection.UP:
-        rect.height = rect.height + amount;
-        break;
-      case Meta.MotionDirection.DOWN:
-        rect.height = rect.height + amount;
-        rect.y = rect.y - amount;
-        break;
-    }
-    host.move(metaWindow, rect);
-    host.scheduler.enqueue(
-      {
-        name: "manual-resize",
-        callback: () => {
-          if (host.scheduler.pendingCount === 0) {
-            this.end(display, metaWindow, grabOp);
-          }
-        },
-      },
-      50
-    );
   }
 
   begin(_display: Meta.Display, _metaWindow: Meta.Window, grabOp: Meta.GrabOp) {

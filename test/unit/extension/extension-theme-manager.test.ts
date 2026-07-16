@@ -36,7 +36,6 @@ function fixture() {
     configMgr: {
       defaultStylesheetFile: baseFile,
       userStylesheetFile: overrideFile,
-      stylesheetFile: overrideFile,
     },
     settings: {},
     migrationService,

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import { createTreeFixture } from "../mocks/helpers/index.js";
 
 describe("Tiling Tree lifecycle", () => {
@@ -15,6 +16,6 @@ describe("Tiling Tree lifecycle", () => {
     ctx.tree.initialize();
     ctx.tree._initWorkspaces();
     expect(ctx.windowGroup._children).toHaveLength(initialActorCount);
-    expect(ctx.tree.nodeWorkpaces.length).toBeGreaterThan(0);
+    expect(ctx.tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBeGreaterThan(0);
   });
 });

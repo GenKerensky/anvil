@@ -55,7 +55,7 @@ describe("AnvilRuntime - Batch Float", () => {
 
     it("should set prevFloat on already-floating windows", () => {
       const { node: floatNode } = createFloatingWindow();
-      const { node: tiledNode } = createTiledWindow();
+      createTiledWindow();
       floatNode.prevFloat = false;
 
       wm().floatAllWindows();
@@ -359,7 +359,7 @@ describe("AnvilRuntime - Batch Float", () => {
 
   describe("user float override interplay", () => {
     it("should keep user-float-override windows as float after processFloats", () => {
-      const { metaWindow, node } = createTiledWindow();
+      const { node } = createTiledWindow();
       // Add a float override for this window class
       ctx.configMgr.windowProps.overrides = [{ wmClass: "App1", mode: "float" }];
       node.mode = WINDOW_MODES.FLOAT;

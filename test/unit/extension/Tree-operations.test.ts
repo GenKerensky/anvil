@@ -26,7 +26,9 @@ describe("Tree Operations", () => {
 
   beforeEach(() => {
     ctx = createTreeFixture({ fullExtWm: true });
-    ctx.runtime.currentMonWsNode = ctx.tree.nodeWorkpaces[0].getNodeByType(NODE_TYPES.MONITOR)[0];
+    ctx.runtime.currentMonWsNode = ctx.tree
+      .getNodeByType(NODE_TYPES.WORKSPACE)[0]
+      .getNodeByType(NODE_TYPES.MONITOR)[0];
   });
 
   describe("next", () => {

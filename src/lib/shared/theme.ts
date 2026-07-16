@@ -55,7 +55,6 @@ export class ThemeManagerBase extends GObject.Object {
 
   private _migrationService: Pick<StylesheetMigrationService, "initialize">;
   private _defaultPalette: Palette | null = null;
-  private _cssAst: Stylesheet | null = null;
   private _defaultCssAst: Stylesheet | null = null;
   private _userCssAst: Stylesheet | null = null;
   private _userStylesheetEtag: string | null = null;
@@ -76,22 +75,11 @@ export class ThemeManagerBase extends GObject.Object {
       migrationService ?? new StylesheetMigrationService({ configMgr, settings });
   }
 
-  get isStylesheetEditable() {
-    return Boolean(this._userCssAst && this.lastMigrationResult?.overrideFile);
-  }
-
   get defaultPalette() {
     if (!this._defaultPalette) {
       throw new Error("Stylesheet palette accessed before successful initialization");
     }
     return this._defaultPalette;
-  }
-
-  get cssAst() {
-    if (!this._cssAst) {
-      throw new Error("Stylesheet AST accessed before successful initialization");
-    }
-    return this._cssAst;
   }
 
   /**
@@ -102,7 +90,6 @@ export class ThemeManagerBase extends GObject.Object {
     const result = this._migrationService.initialize();
     this.lastMigrationResult = result;
     this._defaultPalette = null;
-    this._cssAst = null;
     this._defaultCssAst = null;
     this._userCssAst = null;
     this._userStylesheetEtag = null;
@@ -118,8 +105,7 @@ export class ThemeManagerBase extends GObject.Object {
       this._userStylesheetEtag = loaded?.etag ?? null;
     }
 
-    this._cssAst = this._userCssAst ?? this._defaultCssAst;
-    if (this._cssAst) this._defaultPalette = this.getDefaultPalette();
+    if (this._userCssAst || this._defaultCssAst) this._defaultPalette = this.getDefaultPalette();
     return result;
   }
 
@@ -163,13 +149,6 @@ export class ThemeManagerBase extends GObject.Object {
     };
   }
 
-  getCssRule(selector: string): Rule | null {
-    return (
-      this._getCssRule(selector, this._userCssAst) ??
-      this._getCssRule(selector, this._defaultCssAst)
-    );
-  }
-
   getCssProperty(selector: string, propertyName: string): Declaration | null {
     return (
       this._getCssProperty(selector, propertyName, this._userCssAst) ??
@@ -198,7 +177,6 @@ export class ThemeManagerBase extends GObject.Object {
 
     try {
       this._userCssAst = parse(previousCss, undefined);
-      this._cssAst = this._userCssAst;
     } catch (error) {
       Logger.error(`Could not restore stylesheet editor state: ${error}`);
     }
@@ -277,62 +255,4 @@ export class ThemeManagerBase extends GObject.Object {
   reloadStylesheet(): boolean {
     throw new Error("Must implement reloadStylesheet");
   }
-}
-
-/**
- * Credits: Color Space conversion functions from CSS Tricks
- * https://css-tricks.com/converting-color-spaces-in-javascript/
- */
-export function RGBAToHexA(rgba: string) {
-  const sep = rgba.indexOf(",") > -1 ? "," : " ";
-  const vals: (string | number)[] = rgba.substr(5).split(")")[0].split(sep);
-
-  // Strip the slash if using space-separated syntax
-  if (vals.indexOf("/") > -1) vals.splice(3, 1);
-
-  for (let R = 0; R < vals.length; R++) {
-    const r = vals[R];
-    if (typeof r === "string" && r.indexOf("%") > -1) {
-      const p = Number(r.substring(0, r.length - 1)) / 100;
-
-      if (R < 3) {
-        vals[R] = Math.round(p * 255);
-      } else {
-        vals[R] = p;
-      }
-    }
-  }
-  let r = (+vals[0]).toString(16),
-    g = (+vals[1]).toString(16),
-    b = (+vals[2]).toString(16),
-    a = Math.round(+vals[3] * 255).toString(16);
-
-  if (r.length == 1) r = "0" + r;
-  if (g.length == 1) g = "0" + g;
-  if (b.length == 1) b = "0" + b;
-  if (a.length == 1) a = "0" + a;
-
-  return "#" + r + g + b + a;
-}
-
-export function hexAToRGBA(h: string) {
-  let r = 0,
-    g = 0,
-    b = 0,
-    a = 1;
-
-  if (h.length == 5) {
-    r = Number("0x" + h[1] + h[1]);
-    g = Number("0x" + h[2] + h[2]);
-    b = Number("0x" + h[3] + h[3]);
-    a = Number("0x" + h[4] + h[4]);
-  } else if (h.length == 9) {
-    r = Number("0x" + h[1] + h[2]);
-    g = Number("0x" + h[3] + h[4]);
-    b = Number("0x" + h[5] + h[6]);
-    a = Number("0x" + h[7] + h[8]);
-  }
-  a = +(a / 255).toFixed(3);
-
-  return "rgba(" + r + "," + g + "," + b + "," + a + ")";
 }

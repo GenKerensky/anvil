@@ -99,12 +99,6 @@ export function createMockConfigManager(options = {}) {
     windowProps: {
       overrides,
     },
-    stylesheetFile: {
-      get_path: () => "/mock/stylesheet.css",
-      load_contents: () => [true, new Uint8Array(), null],
-      copy: () => true,
-      get_parent: () => ({ get_path: () => "/mock" }),
-    },
     defaultStylesheetFile: {
       get_path: () => "/mock/default.css",
       load_contents: () => [true, new Uint8Array(), null],

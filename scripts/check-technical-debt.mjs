@@ -11,21 +11,7 @@ const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 
 // These baselines make existing debt visible without allowing it to grow. Remove an entry in the
 // same change that removes or connects the corresponding declaration, setting, or icon.
-const UNUSED_DECLARATION_BASELINE = [
-  "src/lib/extension/anvil-runtime.ts:6133:_grabCleanup",
-  "src/lib/extension/anvil-runtime.ts:6133:_stopLiveResizeLoop",
-  "src/lib/extension/anvil-runtime.ts:6133:commandBus",
-  "src/lib/extension/anvil-runtime.ts:6133:currentWsNode",
-  "src/lib/extension/anvil-runtime.ts:6133:findNodeWindowAtPointer",
-  "src/lib/extension/anvil-runtime.ts:6133:getWindowsOnWorkspace",
-  "src/lib/extension/anvil-runtime.ts:6133:isCurrentWorkspaceTiled",
-  "src/lib/extension/anvil-runtime.ts:6133:moveWindowToPointer",
-  "src/lib/extension/anvil-runtime.ts:6133:pointerPolicy",
-  "src/lib/extension/anvil-runtime.ts:6133:resize",
-  "src/lib/extension/anvil-runtime.ts:6133:shouldFocusOnHover",
-  "src/lib/extension/anvil-runtime.ts:6133:tilingRender",
-  "src/lib/extension/anvil-runtime.ts:6133:toggleFloatingMode",
-];
+const UNUSED_DECLARATION_BASELINE = [];
 
 const UNUSED_SCHEMA_KEY_BASELINE = [
   "focus-border-color",

@@ -128,29 +128,7 @@ describe("ConfigManager", () => {
     });
   });
 
-  describe("stylesheetFile", () => {
-    it("should attempt to load custom stylesheet", () => {
-      const file = configManager.stylesheetFile;
-      expect(file).toBeDefined();
-    });
-
-    it("does not create a missing stylesheet as a getter side effect", () => {
-      const defaultImpl = (Gio.File.new_for_path as any).getMockImplementation();
-      let userFile: any;
-      (Gio.File.new_for_path as any).mockImplementation((path: string) => {
-        const file = defaultImpl!(path) as any;
-        if (path.endsWith("/stylesheet/anvil/stylesheet.css")) {
-          file.query_exists = vi.fn(() => false);
-          userFile = file;
-        }
-        return file;
-      });
-
-      expect(configManager.stylesheetFile).toBeNull();
-      expect(userFile.create).not.toHaveBeenCalled();
-      expect(userFile.replace_contents).not.toHaveBeenCalled();
-    });
-
+  describe("stylesheet paths", () => {
     it("provides stable user and versioned backup paths without IO", () => {
       const user = configManager.userStylesheetFile;
       const backup = configManager.stylesheetBackupFile(38, "abcdef0123456789");

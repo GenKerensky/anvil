@@ -1,18 +1,16 @@
 /*
- * AnvilRuntime per-monitor window size constraint tests
+ * TilingRender per-monitor window size constraint tests
  *
- * Covers tilingRender getMonitorConnector, getMonitorConstraints, enforceUltrawideSize,
- * grab-op-end resize exemption tracking, and settings-changed handler.
+ * Covers getMonitorConnector, getMonitorConstraints, and enforceUltrawideSize.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Meta from "gi://Meta";
-import GLib from "gi://GLib";
-import { GRAB_TYPES } from "../../../src/lib/extension/window/constants.js";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
+import { TilingRender, type TilingRenderDeps } from "../../../src/lib/extension/tiling-render.js";
 import {
   createMockWindow,
-  createAnvilRuntimeFixture,
+  createTreeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
@@ -20,20 +18,46 @@ function getMonitorManager(): any {
   return (Meta.MonitorManager as any).get();
 }
 
-describe("AnvilRuntime - Per-Monitor Constraints", () => {
+describe("TilingRender - Per-Monitor Constraints", () => {
   let ctx: any;
+  let render: TilingRender;
+  let resizeCounts: Map<number, number>;
+
+  function setupFixture(globals: Record<string, unknown> = {}) {
+    ctx?.cleanup();
+    ctx = createTreeFixture({ globals, fullExtWm: true });
+    resizeCounts = new Map();
+    const deps: TilingRenderDeps = {
+      settings: ctx.settings,
+      getTree: () => ctx.tree,
+      moveWindow: vi.fn(),
+      getAllNodeWindows: () => ctx.tree.getNodeByType(NODE_TYPES.WINDOW),
+      isFloatingExempt: () => false,
+      isActiveWindowWorkspaceTiled: () => true,
+      getTiledChildren: (children) => ctx.tree.getTiledChildren(children),
+      getResizeCount: (id) => resizeCounts.get(id) ?? 0,
+      findParent: (node, type) => ctx.tree.findParent(node, type) ?? null,
+      computeSizes: (node, children) => ctx.layoutEngine.computeSizes(node, children),
+      presentation: ctx.runtime.presentation,
+    };
+    render = new TilingRender(deps);
+  }
 
   beforeEach(() => {
+    ctx = null;
     (globalThis as any).global.backend = {
       get_monitor_manager: () => getMonitorManager(),
     };
-    MonitorManagerReset();
-    ctx = createAnvilRuntimeFixture();
+    resetMonitorManager();
+    setupFixture();
   });
 
-  const wm = () => ctx.anvilRuntime;
+  afterEach(() => {
+    ctx?.cleanup();
+    ctx = null;
+  });
 
-  function MonitorManagerReset() {
+  function resetMonitorManager() {
     const mgr = getMonitorManager();
     mgr.set_logical_monitors([]);
     // Restore any prototype methods that may have been shadowed by tests
@@ -57,7 +81,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
     });
     metaWindow._workspace = ctx.workspaces[0];
     metaWindow._monitor = monitorIndex;
-    const { monitor } = getWorkspaceAndMonitor(ctx);
+    const { monitor } = getWorkspaceAndMonitor(ctx, 0, monitorIndex);
     ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
     return metaWindow;
   }
@@ -68,7 +92,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
   describe("getMonitorConnector", () => {
     it("returns connector for valid monitor index", () => {
       setupMonitor("DP-1");
-      expect(wm().tilingRender.getMonitorConnector(0)).toBe("DP-1");
+      expect(render.getMonitorConnector(0)).toBe("DP-1");
     });
 
     it("returns connector for second monitor", () => {
@@ -78,16 +102,16 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
         new Meta.LogicalMonitor({ monitors: [m1] }),
         new Meta.LogicalMonitor({ monitors: [m2] }),
       ]);
-      expect(wm().tilingRender.getMonitorConnector(1)).toBe("DP-1");
+      expect(render.getMonitorConnector(1)).toBe("DP-1");
     });
 
     it("returns null for out-of-range index", () => {
       setupMonitor("DP-1");
-      expect(wm().tilingRender.getMonitorConnector(5)).toBeNull();
+      expect(render.getMonitorConnector(5)).toBeNull();
     });
 
     it("returns null when MonitorManager has no monitors", () => {
-      expect(wm().tilingRender.getMonitorConnector(0)).toBeNull();
+      expect(render.getMonitorConnector(0)).toBeNull();
     });
 
     it("returns null when get_logical_monitors throws", () => {
@@ -98,7 +122,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
         throw new Error("fail");
       });
       try {
-        expect(wm().tilingRender.getMonitorConnector(0)).toBeNull();
+        expect(render.getMonitorConnector(0)).toBeNull();
       } finally {
         mgr.get_logical_monitors = orig;
       }
@@ -112,7 +136,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
     it("returns constraints when connector matches", () => {
       setupMonitor("DP-1");
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, false]];
-      expect(wm().tilingRender.getMonitorConstraints(0)).toEqual({
+      expect(render.getMonitorConstraints(0)).toEqual({
         maxWidth: 1920,
         maxHeight: 1000,
         enabled: true,
@@ -123,18 +147,18 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
     it("returns null when no matching connector in constraints", () => {
       setupMonitor("DP-1");
       ctx.settings._values["monitor-constraints"] = [["HDMI-1", 1920, 1080, true, false]];
-      expect(wm().tilingRender.getMonitorConstraints(0)).toBeNull();
+      expect(render.getMonitorConstraints(0)).toBeNull();
     });
 
     it("returns null when connector lookup fails", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1080, true, false]];
-      expect(wm().tilingRender.getMonitorConstraints(0)).toBeNull();
+      expect(render.getMonitorConstraints(0)).toBeNull();
     });
 
     it("returns null when constraints array is empty", () => {
       setupMonitor("DP-1");
       ctx.settings._values["monitor-constraints"] = [];
-      expect(wm().tilingRender.getMonitorConstraints(0)).toBeNull();
+      expect(render.getMonitorConstraints(0)).toBeNull();
     });
   });
 
@@ -146,7 +170,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
 
     it("returns rect unchanged for non-window node", () => {
       const wsNode = ctx.tree.findNode("ws0");
-      const result = wm().tilingRender.enforceUltrawideSize(wsNode, BIG_RECT);
+      const result = render.enforceUltrawideSize(wsNode, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -154,7 +178,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       setupMonitor("DP-1");
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -163,7 +187,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, false, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -172,7 +196,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1440, true, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 1920) / 2),
         y: 0,
@@ -186,7 +210,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 3440, 1000, true, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: 0,
         y: Math.floor((1440 - 1000) / 2),
@@ -200,7 +224,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, false]];
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 1920) / 2),
         y: Math.floor((1440 - 1000) / 2),
@@ -214,9 +238,9 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, true]];
       const metaWindow1 = setupWindowOnMonitor(0, 42);
       setupWindowOnMonitor(0, 43); // second window so it's not solo
-      wm()._grab.seedResizeCount(42, 2);
+      resizeCounts.set(42, 2);
       const node = ctx.tree.findNode(metaWindow1);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
@@ -232,10 +256,10 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       metaWindow._monitor = 0;
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      wm()._grab.seedResizeCount(42, 2);
+      resizeCounts.set(42, 2);
 
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 800) / 2),
         y: Math.floor((1440 - 600) / 2),
@@ -256,10 +280,10 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       metaWindow._monitor = 0;
       const { monitor } = getWorkspaceAndMonitor(ctx);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
-      wm()._grab.seedResizeCount(43, 2);
+      resizeCounts.set(43, 2);
 
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: 0,
         y: 0,
@@ -273,7 +297,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       ctx.settings._values["monitor-constraints"] = [["DP-1", 1920, 1000, true, true]];
       const metaWindow = setupWindowOnMonitor(0, 42);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toEqual({
         x: Math.floor((3440 - 1920) / 2),
         y: Math.floor((1440 - 1000) / 2),
@@ -288,7 +312,7 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
       const rect = { x: 0, y: 0, width: 1920, height: 1080 };
-      const result = wm().tilingRender.enforceUltrawideSize(node, rect);
+      const result = render.enforceUltrawideSize(node, rect);
       expect(result).toBe(rect);
     });
 
@@ -304,12 +328,12 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       // Window is on eDP-1 (index 0)
       const metaWindow = setupWindowOnMonitor(0);
       const node = ctx.tree.findNode(metaWindow);
-      const result = wm().tilingRender.enforceUltrawideSize(node, BIG_RECT);
+      const result = render.enforceUltrawideSize(node, BIG_RECT);
       expect(result).toBe(BIG_RECT);
     });
 
     it("uses target tree monitor constraints before Mutter reports the move", () => {
-      ctx = createAnvilRuntimeFixture({ globals: { display: { monitorCount: 2 } } });
+      setupFixture({ display: { monitorCount: 2 } });
       const sourceConnector = new Meta.Monitor({ connector: "eDP-1" });
       const targetConnector = new Meta.Monitor({ connector: "DP-1" });
       getMonitorManager().set_logical_monitors([
@@ -328,93 +352,12 @@ describe("AnvilRuntime - Per-Monitor Constraints", () => {
       targetMonitor.appendChild(node);
 
       expect(metaWindow.get_monitor()).toBe(0);
-      expect(wm().tilingRender.enforceUltrawideSize(node, BIG_RECT)).toEqual({
+      expect(render.enforceUltrawideSize(node, BIG_RECT)).toEqual({
         x: Math.floor((3440 - 1600) / 2),
         y: Math.floor((1440 - 900) / 2),
         width: 1600,
         height: 900,
       });
-    });
-  });
-
-  // ----------------------------------------------------------------
-  //  Grab-op-end resize exemption tracking
-  // ----------------------------------------------------------------
-  describe("_handleGrabOpEnd - resize tracking", () => {
-    it("tracks resized windows when resize exemption is enabled", () => {
-      const timeoutAddSpy = vi
-        .spyOn(GLib, "timeout_add")
-        .mockImplementation((priority, interval, callback: any) => {
-          callback();
-          return Math.random();
-        });
-
-      setupMonitor("DP-1");
-      ctx.settings._values["monitor-constraints"] = [["DP-1", 3440, 1440, true, true]];
-      const metaWindow = setupWindowOnMonitor(0, 99);
-      ctx.display.get_focus_window.mockReturnValue(metaWindow);
-
-      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
-
-      expect(wm()._grab.hasResizeCount(99)).toBe(true);
-
-      timeoutAddSpy.mockRestore();
-    });
-
-    it("does NOT track when resize exemption is off", () => {
-      setupMonitor("DP-1");
-      ctx.settings._values["monitor-constraints"] = [["DP-1", 3440, 1440, true, false]];
-      const metaWindow = setupWindowOnMonitor(0, 99);
-      ctx.display.get_focus_window.mockReturnValue(metaWindow);
-
-      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
-
-      expect(wm()._grab.hasResizeCount(99)).toBe(false);
-    });
-
-    it("does NOT track when grabOp is not RESIZING", () => {
-      setupMonitor("DP-1");
-      ctx.settings._values["monitor-constraints"] = [["DP-1", 3440, 1440, true, true]];
-      const metaWindow = setupWindowOnMonitor(0, 99);
-      ctx.display.get_focus_window.mockReturnValue(metaWindow);
-
-      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_MOVING);
-
-      expect(wm()._grab.hasResizeCount(99)).toBe(false);
-    });
-
-    it("does NOT track when constraints are null", () => {
-      const metaWindow = setupWindowOnMonitor(0, 99);
-      ctx.display.get_focus_window.mockReturnValue(metaWindow);
-
-      wm()._handleGrabOpEnd(ctx.display, metaWindow, Meta.GrabOp.KEYBOARD_RESIZING_E);
-
-      expect(wm()._grab.hasResizeCount(99)).toBe(false);
-    });
-
-    it("does NOT throw when focusMetaWindow is null", () => {
-      ctx.display.get_focus_window.mockReturnValue(null);
-
-      expect(() => {
-        wm()._handleGrabOpEnd(ctx.display, null, Meta.GrabOp.KEYBOARD_RESIZING_E);
-      }).not.toThrow();
-    });
-  });
-
-  // ----------------------------------------------------------------
-  //  Settings-changed monitor-constraints handler
-  // ----------------------------------------------------------------
-  describe("settings changed - monitor-constraints", () => {
-    it("clears _resizedWindows when monitor-constraints changes", () => {
-      wm()._grab.seedResizeCount(1, 1);
-      wm()._grab.seedResizeCount(2, 1);
-      expect(wm()._grab.resizeCountEntries).toBe(2);
-
-      // Simulate what the settings-changed handler does
-      wm()._grab.clearResizedWindows();
-      wm().renderTree("monitor-constraints", true);
-
-      expect(wm()._grab.resizeCountEntries).toBe(0);
     });
   });
 });

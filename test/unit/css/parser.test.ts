@@ -16,7 +16,6 @@ import type {
   Import,
   Supports,
   FontFace,
-  Page,
 } from "../../../src/lib/css/types.js";
 
 function asRule(node: Rule | Comment | AtRule): Rule {
@@ -49,10 +48,6 @@ function asSupports(node: Rule | Comment | AtRule): Supports {
 
 function asFontFace(node: Rule | Comment | AtRule): FontFace {
   return node as FontFace;
-}
-
-function asPage(node: Rule | Comment | AtRule): Page {
-  return node as Page;
 }
 
 describe("CSS Parser", () => {

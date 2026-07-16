@@ -4,7 +4,7 @@
  * Tests for lazy border actor creation, settings toggles, and split-border visibility.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import Clutter from "gi://Clutter";
 import St from "gi://St";
 import { Logger } from "../../../src/lib/shared/logger.js";

@@ -47,11 +47,6 @@ export class Logger {
     return Logger.LOG_LEVELS.OFF;
   }
 
-  // TODO: use console.* methods
-  static format(msg: string, ...params: string[]) {
-    return params.reduce((acc: string, val) => acc.replace("{}", val), msg);
-  }
-
   /** GJS `log` typings only allow string|object; cast for multi-arg shell logging. */
   static #emit(level: string, args: unknown[]) {
     const gjsLog = log as (message: string, ...rest: unknown[]) => void;

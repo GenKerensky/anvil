@@ -9,6 +9,8 @@
     "strict": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "skipLibCheck": true,
     "composite": true,
     "declaration": true,

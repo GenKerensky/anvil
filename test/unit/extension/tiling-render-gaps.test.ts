@@ -1,31 +1,49 @@
 /*
- * AnvilRuntime gap calculation tests
+ * TilingRender gap calculation tests
  *
  * Tests for calculateGaps and window-gap-size behavior.
  * Ported from jcrussell/forge
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
+import { TilingRender, type TilingRenderDeps } from "../../../src/lib/extension/tiling-render.js";
 import {
   createMockWindow,
-  createAnvilRuntimeFixture,
+  createTreeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("AnvilRuntime - Gaps", () => {
+describe("TilingRender - Gaps", () => {
   let ctx: any;
+  let render: TilingRender;
 
   beforeEach(() => {
-    ctx = createAnvilRuntimeFixture();
+    ctx = createTreeFixture({ fullExtWm: true });
+    const deps: TilingRenderDeps = {
+      settings: ctx.settings,
+      getTree: () => ctx.tree,
+      moveWindow: vi.fn(),
+      getAllNodeWindows: () => ctx.tree.getNodeByType(NODE_TYPES.WINDOW),
+      isFloatingExempt: () => false,
+      isActiveWindowWorkspaceTiled: () => true,
+      getTiledChildren: (children) => ctx.tree.getTiledChildren(children),
+      getResizeCount: () => 0,
+      findParent: (node, type) => ctx.tree.findParent(node, type) ?? null,
+      computeSizes: (node, children) => ctx.layoutEngine.computeSizes(node, children),
+      presentation: ctx.runtime.presentation,
+    };
+    render = new TilingRender(deps);
   });
 
-  const wm = () => ctx.anvilRuntime;
+  afterEach(() => {
+    ctx.cleanup();
+  });
 
   describe("calculateGaps", () => {
     it("should return 0 for null node", () => {
-      expect(wm().tilingRender.calculateGaps(null)).toBe(0);
+      expect(render.calculateGaps(null as any)).toBe(0);
     });
 
     it("should return 0 when gap size is 0", () => {
@@ -35,7 +53,7 @@ describe("AnvilRuntime - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
+      expect(render.calculateGaps(node)).toBe(0);
     });
 
     it("should calculate gap as size * increment", () => {
@@ -45,7 +63,7 @@ describe("AnvilRuntime - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().tilingRender.calculateGaps(node)).toBe(15);
+      expect(render.calculateGaps(node)).toBe(15);
     });
 
     it("should return 0 when gap-increment is 0", () => {
@@ -55,15 +73,15 @@ describe("AnvilRuntime - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
+      expect(render.calculateGaps(node)).toBe(0);
     });
 
-    it("should use gap size 5 with increment 1 as default gap 5", () => {
+    it("uses the default zero base gap", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
+      expect(render.calculateGaps(node)).toBe(0);
     });
   });
 
@@ -76,7 +94,7 @@ describe("AnvilRuntime - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().tilingRender.calculateGaps(node)).toBe(0);
+      expect(render.calculateGaps(node)).toBe(0);
     });
 
     it("should show gap when multiple tiled windows on monitor", () => {
@@ -89,7 +107,7 @@ describe("AnvilRuntime - Gaps", () => {
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win1);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win2);
 
-      expect(wm().tilingRender.calculateGaps(node1)).toBe(10);
+      expect(render.calculateGaps(node1)).toBe(10);
     });
 
     it("should show gap when setting is disabled even with single window", () => {
@@ -100,10 +118,10 @@ describe("AnvilRuntime - Gaps", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().tilingRender.calculateGaps(node)).toBe(10);
+      expect(render.calculateGaps(node)).toBe(10);
     });
 
-    it("should still show gap when single tiled but floated windows exist", () => {
+    it("should hide the gap when floated windows leave only one tiled window", () => {
       ctx.settings.set_uint("window-gap-size", 5);
       ctx.settings.set_uint("window-gap-size-increment", 2);
       ctx.settings.set_boolean("window-gap-hidden-on-single", true);
@@ -115,10 +133,10 @@ describe("AnvilRuntime - Gaps", () => {
       floatNode.mode = WINDOW_MODES.FLOAT;
       floatNode.tile = false;
 
-      expect(wm().tilingRender.calculateGaps(tiledNode)).toBe(0);
+      expect(render.calculateGaps(tiledNode)).toBe(0);
     });
 
-    it("should still show gap when single tiled but minimized windows exist", () => {
+    it("should hide the gap when minimized windows leave only one visible tiled window", () => {
       ctx.settings.set_uint("window-gap-size", 5);
       ctx.settings.set_uint("window-gap-size-increment", 2);
       ctx.settings.set_boolean("window-gap-hidden-on-single", true);
@@ -132,7 +150,7 @@ describe("AnvilRuntime - Gaps", () => {
       const tiledNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, tiledWin);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, minimizedWin);
 
-      expect(wm().tilingRender.calculateGaps(tiledNode)).toBe(0);
+      expect(render.calculateGaps(tiledNode)).toBe(0);
     });
 
     it("should apply to root node without monitor parent check", () => {
@@ -140,51 +158,7 @@ describe("AnvilRuntime - Gaps", () => {
       ctx.settings.set_uint("window-gap-size-increment", 3);
       ctx.settings.set_boolean("window-gap-hidden-on-single", true);
 
-      expect(wm().tilingRender.calculateGaps(ctx.tree)).toBe(15);
-    });
-  });
-
-  describe("calculateGaps - increment commands", () => {
-    it("should increase gap via GapSize command", () => {
-      ctx.settings.set_uint("window-gap-size-increment", 2);
-
-      wm().command({ name: "GapSize", amount: 1 });
-
-      expect(ctx.settings.get_uint("window-gap-size-increment")).toBe(3);
-    });
-
-    it("should decrease gap via GapSize command", () => {
-      ctx.settings.set_uint("window-gap-size-increment", 5);
-
-      wm().command({ name: "GapSize", amount: -2 });
-
-      expect(ctx.settings.get_uint("window-gap-size-increment")).toBe(3);
-    });
-
-    it("should clamp gap to minimum 0", () => {
-      ctx.settings.set_uint("window-gap-size-increment", 1);
-
-      wm().command({ name: "GapSize", amount: -5 });
-
-      expect(ctx.settings.get_uint("window-gap-size-increment")).toBe(0);
-    });
-
-    it("should clamp gap to maximum 8", () => {
-      ctx.settings.set_uint("window-gap-size-increment", 5);
-
-      wm().command({ name: "GapSize", amount: 10 });
-
-      expect(ctx.settings.get_uint("window-gap-size-increment")).toBe(8);
-    });
-
-    it("should not change base gap size when increment changes", () => {
-      ctx.settings.set_uint("window-gap-size", 5);
-      ctx.settings.set_uint("window-gap-size-increment", 2);
-
-      wm().command({ name: "GapSize", amount: 3 });
-
-      expect(ctx.settings.get_uint("window-gap-size")).toBe(5);
-      expect(ctx.settings.get_uint("window-gap-size-increment")).toBe(5);
+      expect(render.calculateGaps(ctx.tree)).toBe(15);
     });
   });
 });

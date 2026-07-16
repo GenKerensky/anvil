@@ -6,7 +6,6 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import Meta from "gi://Meta";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
@@ -191,7 +190,7 @@ describe("AnvilRuntime - Movement", () => {
 
       const grabSpy = vi.spyOn(wm(), "_handleGrabOpBegin");
 
-      wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 20);
+      wm().command({ name: "WindowResize", direction: "Right", amount: 20 });
 
       expect(grabSpy).toHaveBeenCalled();
     });
@@ -199,7 +198,9 @@ describe("AnvilRuntime - Movement", () => {
     it("should do nothing when no focus window", () => {
       ctx.display.get_focus_window.mockReturnValue(null);
 
-      expect(() => wm().resize(Meta.GrabOp.KEYBOARD_RESIZING_E, 10)).not.toThrow();
+      expect(() =>
+        wm().command({ name: "WindowResize", direction: "Right", amount: 10 })
+      ).not.toThrow();
     });
   });
 });

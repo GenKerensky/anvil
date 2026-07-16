@@ -240,7 +240,6 @@ describe("LayoutEngine", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win1);
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win2);
       // both windows share the monitor-level container; mark parent explicitly
-      const parent = ctx.tree.getNodeByType(NODE_TYPES.CON)[0] ?? monitor;
       // Use the shared parent of the two windows:
       const sharedParent = ctx.tree.findNode(win1)!.parentNode!;
       sharedParent.percent = 0.5;
@@ -258,7 +257,7 @@ describe("LayoutEngine", () => {
       const win1 = createMockWindow({ id: 1 });
       const win2 = createMockWindow({ id: 2 });
       const node1 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win1);
-      const node2 = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win2);
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, win2);
       const parent = node1.parentNode!;
       parent.layout = LAYOUT_TYPES.STACKED;
 

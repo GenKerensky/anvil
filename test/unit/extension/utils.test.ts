@@ -13,12 +13,10 @@ import {
   directionFrom,
   orientationFromGrab,
   positionFromGrabOp,
-  allowResizeGrabOp,
   grabMode,
   decomposeGrabOp,
   directionFromGrab,
   resolveDirection,
-  isGnome,
   isGnomeGTE,
 } from "../../../src/lib/extension/utils.js";
 import Meta from "gi://Meta";
@@ -449,77 +447,6 @@ describe("positionFromGrabOp", () => {
   });
 });
 
-describe("allowResizeGrabOp", () => {
-  it("returns true for RESIZING_N", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_N)).toBe(true);
-  });
-
-  it("returns true for RESIZING_E", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_E)).toBe(true);
-  });
-
-  it("returns true for RESIZING_S", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_S)).toBe(true);
-  });
-
-  it("returns true for RESIZING_W", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_W)).toBe(true);
-  });
-
-  it("returns true for RESIZING_NE", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_NE)).toBe(true);
-  });
-
-  it("returns true for RESIZING_NW", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_NW)).toBe(true);
-  });
-
-  it("returns true for RESIZING_SE", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_SE)).toBe(true);
-  });
-
-  it("returns true for RESIZING_SW", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_SW)).toBe(true);
-  });
-
-  it("returns true for KEYBOARD_RESIZING_N", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.KEYBOARD_RESIZING_N)).toBe(true);
-  });
-
-  it("returns true for KEYBOARD_RESIZING_E", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.KEYBOARD_RESIZING_E)).toBe(true);
-  });
-
-  it("returns true for KEYBOARD_RESIZING_S", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.KEYBOARD_RESIZING_S)).toBe(true);
-  });
-
-  it("returns true for KEYBOARD_RESIZING_W", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.KEYBOARD_RESIZING_W)).toBe(true);
-  });
-
-  it("returns true for KEYBOARD_RESIZING_UNKNOWN", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN)).toBe(true);
-  });
-
-  it("returns false for MOVING", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.MOVING)).toBe(false);
-  });
-
-  it("returns false for KEYBOARD_MOVING", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.KEYBOARD_MOVING)).toBe(false);
-  });
-
-  it("returns false for MOVING_UNCONSTRAINED", () => {
-    expect(allowResizeGrabOp(Meta.GrabOp.MOVING_UNCONSTRAINED)).toBe(false);
-  });
-
-  it("strips the unconstrained flag and still detects resize", () => {
-    // RESIZING_N (3) | 1024 = 1027
-    expect(allowResizeGrabOp(Meta.GrabOp.RESIZING_N | 1024)).toBe(true);
-  });
-});
-
 describe("grabMode", () => {
   it("returns RESIZING for RESIZING_N", () => {
     expect(grabMode(Meta.GrabOp.RESIZING_N)).toBe(GRAB_TYPES.RESIZING);
@@ -692,21 +619,6 @@ describe("resolveDirection", () => {
 
   it("returns null for unknown direction string", () => {
     expect(resolveDirection("diagonal")).toBeNull();
-  });
-});
-
-describe("isGnome", () => {
-  // PACKAGE_VERSION mock returns '47.0', so major = 47
-  it("returns true for matching major version", () => {
-    expect(isGnome(47)).toBe(true);
-  });
-
-  it("returns false for non-matching major version", () => {
-    expect(isGnome(46)).toBe(false);
-  });
-
-  it("returns false for higher version", () => {
-    expect(isGnome(48)).toBe(false);
   });
 });
 

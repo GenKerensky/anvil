@@ -659,6 +659,7 @@ export class WindowTracker {
 
     let needRelayout = false;
     if (nodeWindow?.isWindow()) {
+      const focusRestoreParent = nodeWindow.parentNode;
       // 2. Detach
       const skipRelayout =
         nodeWindow.isFloat() || (!!metaWindow && Utils.isEphemeralHelperWindow(metaWindow));
@@ -668,7 +669,7 @@ export class WindowTracker {
 
       // 3. Focus restore (#258)
       if (hadFocus && host.settings.get_boolean("tiling-mode-enabled")) {
-        this._restoreFocusAfterWindowClosed(nodeWindow);
+        this._restoreFocusAfterWindowClosed(focusRestoreParent, nodeWindow);
       }
     }
 
@@ -688,15 +689,9 @@ export class WindowTracker {
    * Restore focus to another window after one is closed (#258)
    * Ported from jcrussell/forge
    */
-  restoreFocusAfterWindowClosed(closedNodeWindow: Node) {
-    this._restoreFocusAfterWindowClosed(closedNodeWindow);
-  }
-
-  private _restoreFocusAfterWindowClosed(closedNodeWindow: Node) {
-    if (!closedNodeWindow || !closedNodeWindow.parentNode) return;
-
+  private _restoreFocusAfterWindowClosed(parent: Node | null, closedNodeWindow: Node) {
+    if (!parent) return;
     // Try to find a sibling window in the same container
-    const parent = closedNodeWindow.parentNode;
     const siblings = parent.childNodes.filter(
       (node: Node) => node.isWindow() && node !== closedNodeWindow && node.nodeValue
     );
