@@ -3,6 +3,13 @@ permissions:
   contents: read
 
 on:
+  workflow_call:
+    inputs:
+      ref:
+        description: "Git ref to test"
+        type: string
+        default: ""
+        required: false
   push:
     branches: ["main"]
     paths-ignore:
@@ -24,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: latest

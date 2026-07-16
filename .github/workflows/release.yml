@@ -25,6 +25,8 @@ concurrency:
 jobs:
   test:
     uses: ./.github/workflows/testing.yml
+    with:
+      ref: ${{ inputs.ref }}
 
   build:
     needs: test
