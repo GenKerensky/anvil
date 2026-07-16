@@ -41,6 +41,8 @@ distrobox enter fedora-devbox -- bash -lc \
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && make test-e2e-preferences'
 distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && make test-e2e-stylesheet'
+distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --tag resize'
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --virtual-monitors 2 --tag monitor-churn'
@@ -51,7 +53,9 @@ python3 test/e2e/run.py --no-build         # Skip make dist
 ```
 
 CI runs the deterministic `npm test` gate only. Host tooling smoke and E2E remain local gates.
-Prefer `--tag` for PR-local E2E; run the full E2E suite before release (D2-2).
+Prefer `--tag` for PR-local E2E; run the full E2E suite before release (D2-2). Each E2E session
+uses a temporary `XDG_CONFIG_HOME`, so stylesheet and preferences tests do not mutate the host
+Anvil configuration.
 
 The installed preferences, icon, Quick Settings, and stylesheet validation procedure is recorded
 in `docs/testing/installed-package-smoke.md`.

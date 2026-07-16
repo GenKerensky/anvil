@@ -12,6 +12,10 @@ testing, and ongoing maintainability.
 
 #### Changed
 
+- **Non-destructive stylesheet upgrades** — Anvil now keeps the packaged base stylesheet separate
+  from the durable user override, upgrades only byte-identical historical defaults, and preserves
+  customized CSS. Migration state uses verified SHA-256 identities, recovery backups, and
+  concurrent-write protection; preferences edits trigger a fresh Shell stylesheet selection.
 - **Consolidated real-shell tests into host E2E** — Removed Podman container
   integration tests (`test/integration/`, multi-Fedora CI matrix). Unique
   behavioral suites (focus, swap, move, floating, layouts, workspace, borders,

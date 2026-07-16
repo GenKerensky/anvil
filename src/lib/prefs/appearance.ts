@@ -45,6 +45,8 @@ export class AppearancePage extends PreferencesPage {
     this.settings = settings;
     const configMgr = new ConfigManager({ dir });
     this.themeMgr = new PrefsThemeManager({ configMgr: configMgr, settings: settings });
+    const stylesheet = this.themeMgr.initializeStylesheet();
+    if (stylesheet.contentsChanged) this.themeMgr.reloadStylesheet();
     this.add_group({
       title: _("Gaps"),
       description: _("Change the gap size between windows"),

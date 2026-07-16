@@ -92,10 +92,27 @@ export class ConfigManager extends GObject.Object {
   }
 
   get stylesheetFile() {
-    const profileSettingPath = `${this.confDir}/stylesheet/anvil`;
-    const settingFile = "stylesheet.css";
-    const defaultSettingFile = this.defaultStylesheetFile;
-    return this.loadFile(profileSettingPath, settingFile, defaultSettingFile);
+    const stylesheet = this.userStylesheetFile;
+    return stylesheet.query_exists(null) ? stylesheet : null;
+  }
+
+  /** Stable user stylesheet handle. Merely reading this property never creates files. */
+  get userStylesheetFile() {
+    return Gio.File.new_for_path(
+      GLib.build_filenamev([this.confDir, "stylesheet", "anvil", "stylesheet.css"])
+    );
+  }
+
+  /** Deterministic, non-overwriting recovery path for a migrated shipped default. */
+  stylesheetBackupFile(version: number, sourceDigest: string) {
+    const source = this.userStylesheetFile.get_path()!;
+    return Gio.File.new_for_path(`${source}.bak-v${version}-${sourceDigest.slice(0, 12)}`);
+  }
+
+  /** Unique staging path used before an exclusive first-install move. */
+  stylesheetTemporaryFile(token: string) {
+    const source = this.userStylesheetFile.get_path()!;
+    return Gio.File.new_for_path(`${source}.tmp-${token}`);
   }
 
   get defaultWindowConfigFile() {

@@ -5,7 +5,8 @@ MSGSRC = $(wildcard src/po/*.po)
 .PHONY: all build install uninstall clean dist debug \
         enable disable restart purge log journal \
         potfile compilemsgs metadata schemas format lint check \
-        test-unit test-e2e test-e2e-monitor-churn test-e2e-preferences test-debug-loop-lib
+        test-unit test-e2e test-e2e-monitor-churn test-e2e-preferences \
+        test-e2e-stylesheet test-debug-loop-lib
 
 all: build install
 
@@ -125,6 +126,9 @@ test-e2e-monitor-churn: dist
 
 test-e2e-preferences: dist
 	python3 test/e2e/run.py --no-build --tag preferences
+
+test-e2e-stylesheet: dist
+	python3 test/e2e/run.py --no-build --tag stylesheet
 
 # Backward-compatible alias for the deterministic Python tooling suite.
 test-debug-loop-lib:

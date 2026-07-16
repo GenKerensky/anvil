@@ -115,6 +115,12 @@
 
         <key type="u" name="css-last-update">
             <default>1</default>
+            <summary>Stylesheet migration version last evaluated successfully</summary>
+        </key>
+
+        <key type="s" name="css-default-digest">
+            <default>''</default>
+            <summary>SHA-256 identity of the shipped stylesheet underlying the user override</summary>
         </key>
 
         <key type="s" name="dnd-center-layout">

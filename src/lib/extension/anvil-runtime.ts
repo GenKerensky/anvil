@@ -431,8 +431,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       },
       renderTree: (from, force) => self.renderTree(from, force),
       determineSplitLayout: () => self.determineSplitLayout(),
-      reloadStylesheet: () => {
-        self.theme?.reloadStylesheet();
+      refreshStylesheet: () => {
+        self.theme?.refreshStylesheet();
       },
       cleanupAlwaysFloat: () => self.cleanupAlwaysFloat(),
       restoreAlwaysFloat: () => self.restoreAlwaysFloat(),

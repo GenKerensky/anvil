@@ -93,6 +93,12 @@ For any shortcut conflicts, the user has to manually configure those for now fro
 - Window Overrides: `$HOME/.config/anvil/config/windows.json`
 - Stylesheet Overrides: `$HOME/.config/anvil/stylesheet/anvil/stylesheet.css`
 
+The packaged stylesheet is loaded first and the user stylesheet is loaded as an override. Package
+updates preserve customized user bytes; exact old defaults may be upgraded only after a verified
+recovery backup is created. See
+[`docs/theme/stylesheet-versioning.md`](docs/theme/stylesheet-versioning.md) for the migration and
+recovery contract.
+
 ## GNOME Defaults
 
 GNOME Shell has built in support for workspace management and seems to work well - so Anvil will not touch those.

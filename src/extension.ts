@@ -193,8 +193,8 @@ export default class AnvilExtension extends Extension {
     this._keybindings = new Keybindings(this);
     this._runtime.wireKeybindings(this._keybindings);
 
-    this._theme.patchCss();
-    this._theme.reloadStylesheet();
+    const stylesheet = this._theme.initializeStylesheet();
+    if (stylesheet.usable) this._theme.reloadStylesheet();
     // Runtime must be fully active before session-mode handling enables keybindings.
     this._runtime.enable();
     {
@@ -250,6 +250,7 @@ export default class AnvilExtension extends Extension {
     this._removeIndicator();
     this._runtime?.disable();
     this._keybindings?.disable();
+    this._theme?.unloadStylesheets();
     // Honest nulls — no `null as unknown as T` (B1-2).
     this._keybindings = null;
     this._runtime = null;

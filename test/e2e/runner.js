@@ -236,11 +236,9 @@ export async function run() {
 
   await ensureExtensionReady();
 
-  // Global state reset: the headless session shares the user dconf db, so a
-  // prior run (or a `--tag constraints` diagnostic run) can leave
-  // monitor-constraints / tiling-mode / float overrides behind. Normalize the
-  // mutable GSettings-backed extension state here so the suite starts from a
-  // known baseline regardless of prior runs.
+  // Global state reset: each headless run has an isolated XDG config directory,
+  // but suites in this process still share one dconf backend. Normalize mutable
+  // GSettings-backed extension state before importing any suite.
   try {
     // Use the EXTENSION's settings instance (global.__anvil_settings), not a
     // fresh Gio.Settings — in the isolated D-Bus session these may resolve to
@@ -315,6 +313,7 @@ export async function run() {
     "./suites/session-mode.js",
     "./suites/constraints.js",
     "./suites/preferences.js",
+    "./suites/stylesheet.js",
     "./suites/extension.js",
   ];
 

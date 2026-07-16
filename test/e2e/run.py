@@ -63,6 +63,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -309,8 +310,18 @@ class DevkitSession:
         self.tag_filter: str = tag_filter
         self.engine: str = engine
         self.virtual_monitors: int = virtual_monitors
+        self._xdg_config: tempfile.TemporaryDirectory[str] | None = None
 
     def __enter__(self) -> "DevkitSession":
+        self._xdg_config = tempfile.TemporaryDirectory(prefix="anvil-e2e-config-")
+        try:
+            return self._start()
+        except Exception:
+            self.__exit__()
+            raise
+
+    def _start(self) -> "DevkitSession":
+
         # 1. Isolated D-Bus
         self.dbus_proc, self.dbus_addr = start_dbus_session()
 
@@ -322,7 +333,21 @@ class DevkitSession:
             **os.environ,
             "DBUS_SESSION_BUS_ADDRESS": self.dbus_addr,
             "GDK_BACKEND": "wayland",
+            "XDG_CONFIG_HOME": self._xdg_config.name,
         }
+        subprocess.run(
+            [
+                "gdbus", "call", "--session",
+                "--dest", "org.freedesktop.DBus",
+                "--object-path", "/org/freedesktop/DBus",
+                "--method", "org.freedesktop.DBus.UpdateActivationEnvironment",
+                f"{{'XDG_CONFIG_HOME': '{self._xdg_config.name}', "
+                "'GDK_BACKEND': 'wayland'}",
+            ],
+            env=env,
+            check=True,
+            capture_output=True,
+        )
         subprocess.run(
             ["gsettings", "set", "org.gnome.shell",
              "welcome-dialog-last-shown-version", "999"],
@@ -344,6 +369,7 @@ class DevkitSession:
                 "ANVIL_E2E_OUTPUT_DIR": str(OUTPUT_DIR),
                 "ANVIL_TILING_ENGINE": "core" if self.engine == "core" else "shadow",
                 "ANVIL_E2E_VIRTUAL_MONITORS": str(self.virtual_monitors),
+                "XDG_CONFIG_HOME": self._xdg_config.name,
             },
         )
 
@@ -366,7 +392,8 @@ class DevkitSession:
                 "--object-path", "/org/freedesktop/DBus",
                 "--method", "org.freedesktop.DBus.UpdateActivationEnvironment",
                 f"{{'WAYLAND_DISPLAY': '{self.display_name}', "
-                f"'DISPLAY': '{self.x11_display}', 'GDK_BACKEND': 'wayland'}}",
+                f"'DISPLAY': '{self.x11_display}', 'GDK_BACKEND': 'wayland', "
+                f"'XDG_CONFIG_HOME': '{self._xdg_config.name}'}}",
             ],
             env=env,
             capture_output=True,
@@ -392,6 +419,9 @@ class DevkitSession:
                 self.dbus_proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.dbus_proc.kill()
+        if self._xdg_config is not None:
+            self._xdg_config.cleanup()
+            self._xdg_config = None
         _info("Done")
 
 

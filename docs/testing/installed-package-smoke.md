@@ -4,6 +4,10 @@ Use this host-only checklist after changing preferences pages, icons, schemas, p
 stylesheet bridge. It tests the installed payload in the real user session; it is not part of
 `npm test`.
 
+Run `make test-e2e-stylesheet` first for an automated, isolated migration and live-reload check.
+That target uses a temporary `XDG_CONFIG_HOME`; this checklist remains the final installed-package
+validation against the real user session.
+
 The smoke changes Anvil settings and may initialize the user stylesheet. The preparation below
 captures both so the cleanup can restore them.
 
@@ -97,6 +101,35 @@ process does not leave a duplicate window or visibly stale page.
    must not be created.
 
 ## Stylesheet reload
+
+Before the visual check, prove that enabling a new package does not rewrite a customized user file.
+This sentinel is temporary because the cleanup section restores the original captured bytes:
+
+```bash
+install -Dm644 /dev/stdin "${CSS_FILE}" <<'EOF'
+/* anvil installed-smoke custom sentinel */
+.window-tiled-border { border-width: 4px; }
+EOF
+CUSTOM_CSS_SHA256="$(sha256sum "${CSS_FILE}" | cut -d' ' -f1)"
+gnome-extensions disable "${UUID}"
+gnome-extensions enable "${UUID}"
+test "$(sha256sum "${CSS_FILE}" | cut -d' ' -f1)" = "${CUSTOM_CSS_SHA256}"
+```
+
+Acceptance: enable succeeds and the checksum comparison is silent. The custom file is layered over
+the packaged base, so packaged selectors absent from the sentinel remain available.
+
+Restore the originally captured stylesheet before exercising the preferences editor:
+
+```bash
+if test -f "${STATE_DIR}/css-was-absent"; then
+  rm -f -- "${CSS_FILE}"
+else
+  install -Dm644 "${STATE_DIR}/stylesheet.css" "${CSS_FILE}"
+fi
+gnome-extensions disable "${UUID}"
+gnome-extensions enable "${UUID}"
+```
 
 1. Keep at least one tiled application window visible.
 2. On **Appearance**, enable **Border around focused window**.

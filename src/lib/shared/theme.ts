@@ -18,13 +18,17 @@
 
 // Gnome imports
 import Gio from "gi://Gio";
-import GLib from "gi://GLib";
 import GObject from "gi://GObject";
 
 // Application imports
 import { stringify, parse } from "../css/index.js";
 import type { Stylesheet, Rule, Declaration } from "../css/types.js";
-import { ConfigManager, production } from "./settings.js";
+import { Logger } from "./logger.js";
+import type { ConfigManager } from "./settings.js";
+import {
+  StylesheetMigrationService,
+  type StylesheetMigrationResult,
+} from "./stylesheet-migration.js";
 
 interface PaletteColor {
   color: string;
@@ -47,26 +51,76 @@ export class ThemeManagerBase extends GObject.Object {
 
   configMgr!: ConfigManager;
   settings!: Gio.Settings;
-  defaultPalette!: Palette;
-  cssTag!: number;
-  cssAst!: Stylesheet;
+  lastMigrationResult: StylesheetMigrationResult | null = null;
 
-  constructor({ configMgr, settings }: { configMgr: ConfigManager; settings: Gio.Settings }) {
+  private _migrationService: Pick<StylesheetMigrationService, "initialize">;
+  private _defaultPalette: Palette | null = null;
+  private _cssAst: Stylesheet | null = null;
+  private _defaultCssAst: Stylesheet | null = null;
+  private _userCssAst: Stylesheet | null = null;
+  private _userStylesheetEtag: string | null = null;
+
+  constructor({
+    configMgr,
+    settings,
+    migrationService,
+  }: {
+    configMgr: ConfigManager;
+    settings: Gio.Settings;
+    migrationService?: Pick<StylesheetMigrationService, "initialize">;
+  }) {
     super();
     this.configMgr = configMgr;
     this.settings = settings;
-    this._importCss();
-    this.defaultPalette = this.getDefaultPalette();
+    this._migrationService =
+      migrationService ?? new StylesheetMigrationService({ configMgr, settings });
+  }
 
-    // A random number to denote an update on the css, usually the possible next version
-    // in extensions.gnome.org
-    // TODO: need to research the most effective way to bring in CSS updates
-    //  since the schema css-last-update might be triggered when there is a
-    //  code change on the schema unrelated to css updates.
-    //  For now tagging works. See @this.patchCss() and @this._needUpdate().
-    this.cssTag = 38;
+  get isStylesheetEditable() {
+    return Boolean(this._userCssAst && this.lastMigrationResult?.overrideFile);
+  }
 
-    // TODO: should the patchCss() call be done here?
+  get defaultPalette() {
+    if (!this._defaultPalette) {
+      throw new Error("Stylesheet palette accessed before successful initialization");
+    }
+    return this._defaultPalette;
+  }
+
+  get cssAst() {
+    if (!this._cssAst) {
+      throw new Error("Stylesheet AST accessed before successful initialization");
+    }
+    return this._cssAst;
+  }
+
+  /**
+   * Selects/migrates stylesheet files and imports their editor state.
+   * Construction intentionally performs no file IO.
+   */
+  initializeStylesheet() {
+    const result = this._migrationService.initialize();
+    this.lastMigrationResult = result;
+    this._defaultPalette = null;
+    this._cssAst = null;
+    this._defaultCssAst = null;
+    this._userCssAst = null;
+    this._userStylesheetEtag = null;
+
+    if (result.baseFile) {
+      const loaded = this._loadCssAst(result.baseFile, "shipped stylesheet");
+      this._defaultCssAst = loaded?.ast ?? null;
+    }
+
+    if (result.overrideFile) {
+      const loaded = this._loadCssAst(result.overrideFile, "user stylesheet");
+      this._userCssAst = loaded?.ast ?? null;
+      this._userStylesheetEtag = loaded?.etag ?? null;
+    }
+
+    this._cssAst = this._userCssAst ?? this._defaultCssAst;
+    if (this._cssAst) this._defaultPalette = this.getDefaultPalette();
+    return result;
   }
 
   addPx(value: string) {
@@ -101,132 +155,127 @@ export class ThemeManagerBase extends GObject.Object {
 
   getDefaults(color: string): PaletteColor {
     return {
-      color: this.getCssProperty(`.${color}`, "color")?.value ?? "",
+      color: this._getCssProperty(`.${color}`, "color", this._defaultCssAst)?.value ?? "",
       "border-width": this.removePx(
-        this.getCssProperty(`.${color}`, "border-width")?.value ?? "0px"
+        this._getCssProperty(`.${color}`, "border-width", this._defaultCssAst)?.value ?? "0px"
       ),
-      opacity: this.getCssProperty(`.${color}`, "opacity")?.value ?? "1",
+      opacity: this._getCssProperty(`.${color}`, "opacity", this._defaultCssAst)?.value ?? "1",
     };
   }
 
   getCssRule(selector: string): Rule | null {
-    if (this.cssAst) {
-      const rules = this.cssAst.stylesheet.rules;
-      const matchRules = rules.filter(
-        (r) => r.type === "rule" && (r as Rule).selectors?.some((s: string) => s === selector)
-      );
-      return matchRules.length > 0 ? (matchRules[0] as Rule) : null;
-    }
-    return null;
+    return (
+      this._getCssRule(selector, this._userCssAst) ??
+      this._getCssRule(selector, this._defaultCssAst)
+    );
   }
 
   getCssProperty(selector: string, propertyName: string): Declaration | null {
-    const cssRule = this.getCssRule(selector);
-
-    if (cssRule) {
-      const decls = cssRule.declarations ?? [];
-      const matchDeclarations = decls.filter(
-        (d) => d.type === "declaration" && (d as Declaration).property === propertyName
-      );
-      return matchDeclarations.length > 0 ? (matchDeclarations[0] as Declaration) : null;
-    }
-
-    return null;
+    return (
+      this._getCssProperty(selector, propertyName, this._userCssAst) ??
+      this._getCssProperty(selector, propertyName, this._defaultCssAst)
+    );
   }
 
   setCssProperty(selector: string, propertyName: string, propertyValue: string) {
-    const cssProperty = this.getCssProperty(selector, propertyName);
-    if (cssProperty) {
+    if (!this._userCssAst || !this.lastMigrationResult?.overrideFile) return false;
+
+    const previousCss = stringify(this._userCssAst, undefined);
+    let cssRule = this._getCssRule(selector, this._userCssAst);
+    if (!cssRule) {
+      cssRule = { type: "rule", selectors: [selector], declarations: [] };
+      this._userCssAst.stylesheet.rules.push(cssRule);
+    }
+    let cssProperty = this._getDeclaration(cssRule, propertyName);
+    if (!cssProperty) {
+      cssProperty = { type: "declaration", property: propertyName, value: propertyValue };
+      (cssRule.declarations ??= []).push(cssProperty);
+    } else {
       cssProperty.value = propertyValue;
-      this._updateCss();
-      return true;
+    }
+
+    if (this._updateCss()) return true;
+
+    try {
+      this._userCssAst = parse(previousCss, undefined);
+      this._cssAst = this._userCssAst;
+    } catch (error) {
+      Logger.error(`Could not restore stylesheet editor state: ${error}`);
     }
     return false;
   }
 
   /**
-   * Returns the AST for stylesheet.css
-   */
-  _importCss() {
-    let cssFile = this.configMgr.stylesheetFile;
-    if (!cssFile || !production) {
-      cssFile = this.configMgr.defaultStylesheetFile;
-    }
-
-    if (!cssFile) return;
-
-    const [success, contents] = cssFile.load_contents(null);
-    if (success) {
-      const cssContents = new TextDecoder().decode(contents as Uint8Array);
-      this.cssAst = parse(cssContents, undefined);
-    }
-  }
-
-  /**
-   * Writes the AST back to stylesheet.css and reloads the theme
+   * Writes the user override with an etag precondition and reloads only after success.
    */
   _updateCss() {
-    if (!this.cssAst) {
-      return;
-    }
+    const cssFile = this.lastMigrationResult?.overrideFile;
+    if (!this._userCssAst || !cssFile) return false;
 
-    let cssFile = this.configMgr.stylesheetFile;
-    if (!cssFile || !production) {
-      cssFile = this.configMgr.defaultStylesheetFile;
-    }
-
-    if (!cssFile) return;
-
-    const cssContents = stringify(this.cssAst, undefined);
-    const PERMISSIONS_MODE = 0o744;
-
-    if (GLib.mkdir_with_parents(cssFile.get_parent()!.get_path()!, PERMISSIONS_MODE) === 0) {
-      const [success, _tag] = cssFile.replace_contents(
-        cssContents as string,
-        null,
+    try {
+      const cssContents = stringify(this._userCssAst, undefined);
+      const [success, tag] = cssFile.replace_contents(
+        cssContents,
+        this._userStylesheetEtag,
         false,
         Gio.FileCreateFlags.REPLACE_DESTINATION,
         null
       );
       if (success) {
-        this.reloadStylesheet();
-      }
-    }
-  }
-
-  /**
-   * BREAKING: Patches the CSS by overriding the $HOME/.config stylesheet
-   * at the moment.
-   *
-   * TODO: work needed to consolidate the existing config stylesheet and
-   * when the extension default stylesheet gets an update.
-   */
-  patchCss() {
-    if (this._needUpdate()) {
-      const originalCss = this.configMgr.defaultStylesheetFile;
-      const configCss = this.configMgr.stylesheetFile;
-      if (!configCss || !originalCss) return false;
-      const copyConfigCss = Gio.File.new_for_path(configCss.get_path()! + ".bak");
-      const backupFine = configCss.copy(copyConfigCss, Gio.FileCopyFlags.OVERWRITE, null, null);
-      const copyFine = originalCss.copy(configCss, Gio.FileCopyFlags.OVERWRITE, null, null);
-      if (backupFine && copyFine) {
-        this.settings.set_uint("css-last-update", this.cssTag);
+        this._userStylesheetEtag = tag;
+        if (!this.reloadStylesheet()) {
+          Logger.warn("User stylesheet was saved, but the Shell reload request failed");
+        }
         return true;
       }
+    } catch (error) {
+      Logger.warn(`Could not write user stylesheet: ${error}`);
     }
     return false;
   }
 
-  /**
-   * Credits: ExtensionSystem.js:_callExtensionEnable()
-   */
-  reloadStylesheet() {
-    throw new Error("Must implement reloadStylesheet");
+  private _loadCssAst(file: Gio.File, label: string) {
+    try {
+      const [success, contents, etag] = file.load_contents(null);
+      if (!success) return null;
+      const cssContents = new TextDecoder().decode(contents as Uint8Array);
+      return { ast: parse(cssContents, undefined), etag };
+    } catch (error) {
+      Logger.warn(`Could not parse ${label}; preserving it without editor writes: ${error}`);
+      return null;
+    }
   }
 
-  _needUpdate() {
-    const cssTag = this.cssTag;
-    return this.settings.get_uint("css-last-update") !== cssTag;
+  private _getCssRule(selector: string, ast: Stylesheet | null): Rule | null {
+    if (!ast) return null;
+    const rule = ast.stylesheet.rules.find(
+      (candidate) =>
+        candidate.type === "rule" &&
+        (candidate as Rule).selectors?.some((candidateSelector) => candidateSelector === selector)
+    );
+    return rule?.type === "rule" ? (rule as Rule) : null;
+  }
+
+  private _getDeclaration(rule: Rule, propertyName: string): Declaration | null {
+    const declaration = (rule.declarations ?? []).find(
+      (candidate) =>
+        candidate.type === "declaration" && (candidate as Declaration).property === propertyName
+    );
+    return declaration?.type === "declaration" ? (declaration as Declaration) : null;
+  }
+
+  private _getCssProperty(
+    selector: string,
+    propertyName: string,
+    ast: Stylesheet | null
+  ): Declaration | null {
+    const rule = this._getCssRule(selector, ast);
+    return rule ? this._getDeclaration(rule, propertyName) : null;
+  }
+
+  /** Credits: ExtensionSystem.js:_callExtensionEnable(). */
+  reloadStylesheet(): boolean {
+    throw new Error("Must implement reloadStylesheet");
   }
 }
 

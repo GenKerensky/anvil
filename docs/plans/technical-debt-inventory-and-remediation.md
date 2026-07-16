@@ -1,6 +1,6 @@
 # Technical debt inventory and remediation plan
 
-**Status:** In progress — Stages 0 and 1 complete
+**Status:** In progress — Stages 0 through 2 complete
 
 **Date:** 2026-07-15
 
@@ -77,7 +77,7 @@ All remediation work must preserve these constraints:
 | TD-001 | Complete    | P0       | Window discovery      | Preferences-window lookup skips workspace zero                  |
 | TD-002 | Complete    | P0       | Configuration         | Parsed window overrides bypass their runtime validator          |
 | TD-003 | Complete    | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected        |
-| TD-004 | Open        | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
+| TD-004 | Complete    | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
 | TD-005 | Open        | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
 | TD-006 | Open        | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
 | TD-007 | Open        | P2       | Runtime API           | Thirteen private compatibility members exist only for tests     |
@@ -451,7 +451,7 @@ change the default engine or retire the legacy writer.
 
 - [x] Stage 0: Establish reproducible debt gates
 - [x] Stage 1: Close bounded correctness and lifecycle hazards
-- [ ] Stage 2: Make stylesheet upgrades non-destructive
+- [x] Stage 2: Make stylesheet upgrades non-destructive
 - [ ] Stage 3: Finish interaction edge behavior
 - [ ] Stage 4: Remove dead compatibility and enforce unused-code checks
 - [ ] Stage 5: Remove stale schema, resources, and tool entry points
@@ -521,20 +521,30 @@ spec review axes passed after three remediation rounds.
 
 ### Stage 2: Make stylesheet upgrades non-destructive
 
+**Status:** Complete — reviewed with no blocking or important findings.
+
 **Purpose:** Resolve TD-004 before another release needs a stylesheet-version bump.
 
 **Work:**
 
-1. Define the shipped-default identity and user-customization detection contract.
-2. Add migration fixtures for an untouched old default, customized old file, missing file,
-   malformed file, and failed backup/copy.
-3. Implement an explicit initialization/migration service used by both shell and preferences.
-4. Remove the hard-coded constructor question and make reload happen only after successful file
-   selection or migration.
-5. Document backup recovery and what happens when new selectors are introduced.
+1. [x] Define the shipped-default identity and user-customization detection contract.
+2. [x] Add migration fixtures for an untouched old default, customized old file, missing file,
+       malformed file, and failed backup/copy.
+3. [x] Implement an explicit initialization/migration service used by both shell and preferences.
+4. [x] Remove the hard-coded constructor question and make reload happen only after successful file
+       selection or migration.
+5. [x] Document backup recovery and what happens when new selectors are introduced.
 
 **Exit gate:** Automated migration tests pass, custom CSS survives byte-for-byte, and a Devkit
 preferences-to-shell reload shows the selected stylesheet without journal errors.
+
+**Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 1,104 unit tests,
+and 40 tooling tests (two host-only cases skipped by the deterministic gate). The isolated Fedora
+Devbox stylesheet E2E preserves custom bytes across extension re-enable and verifies the live
+`St.ThemeNode` color changes after a preferences-style reload token; the real host stylesheet hash
+is unchanged before and after the run. The isolated preferences lifecycle E2E also passes. Both the
+standards and spec review axes passed after remediation of exclusive first-install creation,
+test-config isolation, fresh cross-process selection, and failed stylesheet-unload tracking.
 
 **Suggested commits:**
 

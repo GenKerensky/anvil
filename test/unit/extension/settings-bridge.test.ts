@@ -27,7 +27,7 @@ describe("SettingsBridge", () => {
       setHoverFocusEnabled: vi.fn(),
       renderTree: vi.fn(),
       determineSplitLayout: vi.fn(() => "HSPLIT"),
-      reloadStylesheet: vi.fn(),
+      refreshStylesheet: vi.fn(),
       cleanupAlwaysFloat: vi.fn(),
       restoreAlwaysFloat: vi.fn(),
       clearResizedWindows: vi.fn(),
@@ -106,7 +106,10 @@ describe("SettingsBridge", () => {
 
   it("refreshes border geometry after a stylesheet update", () => {
     bridge.handleChanged("css-updated");
-    expect(host.reloadStylesheet).toHaveBeenCalled();
+    expect(host.refreshStylesheet).toHaveBeenCalled();
     expect(host.updateBorderLayout).toHaveBeenCalled();
+    expect(host.refreshStylesheet.mock.invocationCallOrder[0]).toBeLessThan(
+      host.updateBorderLayout.mock.invocationCallOrder[0]
+    );
   });
 });

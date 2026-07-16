@@ -32,7 +32,7 @@ export interface SettingsBridgeHost {
   setHoverFocusEnabled(enabled: boolean): void;
   renderTree(from: string, force?: boolean): void;
   determineSplitLayout(): string;
-  reloadStylesheet(): void;
+  refreshStylesheet(): void;
   cleanupAlwaysFloat(): void;
   restoreAlwaysFloat(): void;
   clearResizedWindows(): void;
@@ -135,7 +135,7 @@ const SETTINGS_HANDLERS: Record<string, SettingHandler> = {
   "stacked-tiling-mode-enabled": handleStackedTilingMode,
   "tabbed-tiling-mode-enabled": handleTabbedTilingMode,
   "css-updated": (h) => {
-    h.reloadStylesheet();
+    h.refreshStylesheet();
     h.updateBorderLayout();
   },
   "float-always-on-top-enabled": (h, k) => {
