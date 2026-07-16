@@ -793,7 +793,7 @@ their size.
   proposed ADR disposition named explicitly.
 - Architecture context no longer claims a nonexistent CSS-parser type exemption, and the changelog
   includes every user-visible bounded fix and removed setting from this remediation series.
-- `npm test` passes with 55 portable tests, 1,050 unit tests, and 45 tooling tests (two expected
+- `npm test` passes with 55 portable tests, 1,051 unit tests, and 45 tooling tests (two expected
   host-smoke skips). The built extension ZIP passes integrity inspection.
 - Fresh Fedora Devbox validation passes preferences lifecycle (1/1), stylesheet migration/reload
   (1/1), installed icons (2/2), cross-surface swap (1/1), resize and constraints (78/78), workspace
