@@ -2,8 +2,73 @@
  * GrabResizeSession pure unit tests — percent delta math.
  */
 
-import { describe, it, expect } from "vitest";
-import { percentsFromSizeDelta } from "../../../src/lib/extension/grab-resize-session.js";
+import Meta from "gi://Meta";
+import { describe, it, expect, vi } from "vitest";
+import type { Node } from "../../../src/lib/extension/tree.js";
+import {
+  findEligibleResizePair,
+  percentsFromSizeDelta,
+} from "../../../src/lib/extension/grab-resize-session.js";
+
+function node(name: string): Node {
+  return { nodeValue: name } as unknown as Node;
+}
+
+describe("findEligibleResizePair", () => {
+  it.each([Meta.MotionDirection.RIGHT, Meta.MotionDirection.DOWN])(
+    "skips unavailable candidates along direction %s",
+    (direction) => {
+      const focus = node("focus");
+      const floating = node("floating");
+      const minimized = node("minimized");
+      const eligible = node("eligible");
+      const nextVisible = vi.fn((current: Node) => {
+        if (current === focus) return floating;
+        if (current === floating) return minimized;
+        if (current === minimized) return eligible;
+        return null;
+      });
+
+      expect(
+        findEligibleResizePair({
+          focusNode: focus,
+          direction,
+          nextVisible,
+          isEligible: (candidate) => candidate === eligible,
+        })
+      ).toBe(eligible);
+      expect(nextVisible).toHaveBeenCalledTimes(3);
+    }
+  );
+
+  it("returns null when no participating candidate exists", () => {
+    const focus = node("focus");
+    const unavailable = node("unavailable");
+
+    expect(
+      findEligibleResizePair({
+        focusNode: focus,
+        direction: Meta.MotionDirection.LEFT,
+        nextVisible: (current) => (current === focus ? unavailable : null),
+        isEligible: () => false,
+      })
+    ).toBeNull();
+  });
+
+  it("terminates when a malformed traversal cycles", () => {
+    const focus = node("focus");
+    const unavailable = node("unavailable");
+
+    expect(
+      findEligibleResizePair({
+        focusNode: focus,
+        direction: Meta.MotionDirection.UP,
+        nextVisible: () => unavailable,
+        isEligible: () => false,
+      })
+    ).toBeNull();
+  });
+});
 
 describe("percentsFromSizeDelta", () => {
   it("updates sibling percents from a positive width delta", () => {

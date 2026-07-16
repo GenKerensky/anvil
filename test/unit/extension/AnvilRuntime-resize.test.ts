@@ -465,6 +465,45 @@ describe("AnvilRuntime - Resize", () => {
       return { metaWin1, metaWin2, node1, node2, conNode };
     }
 
+    function setupThreeWindows(ctx: any, layout: string) {
+      const horizontal = layout === LAYOUT_TYPES.HSPLIT;
+      const rects = horizontal
+        ? [
+            { x: 0, y: 0, width: 640, height: 1080 },
+            { x: 640, y: 0, width: 640, height: 1080 },
+            { x: 1280, y: 0, width: 640, height: 1080 },
+          ]
+        : [
+            { x: 0, y: 0, width: 1920, height: 360 },
+            { x: 0, y: 360, width: 1920, height: 360 },
+            { x: 0, y: 720, width: 1920, height: 360 },
+          ];
+      const windows = rects.map((rect, index) => {
+        const metaWindow = createMockWindow({
+          id: index + 1,
+          title: `Win${index + 1}`,
+          rect,
+        });
+        metaWindow._workspace = ctx.workspaces[0];
+        metaWindow._monitor = 0;
+        return metaWindow;
+      });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      monitor._rect = { x: 0, y: 0, width: 1920, height: 1080 };
+      const conNode = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "con");
+      conNode.layout = layout;
+      conNode.percent = 1;
+      conNode._rect = monitor._rect;
+      const nodes = windows.map((metaWindow, index) => {
+        const candidate = ctx.tree.createNode(conNode.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+        candidate.percent = 1 / 3;
+        candidate.rect = rects[index];
+        return candidate;
+      });
+      ctx.display.get_focus_window.mockReturnValue(windows[0]);
+      return { windows, nodes, conNode };
+    }
+
     it("should update percents after horizontal resize", () => {
       const { metaWin1, node1, node2, conNode } = setupTwoWindows(ctx);
 
@@ -602,6 +641,32 @@ describe("AnvilRuntime - Resize", () => {
       expect(node2.percent).not.toBe(0.5);
       expect(node1.percent).toBeCloseTo(640 / 1080, 3);
       expect(node2.percent).toBeCloseTo(440 / 1080, 3);
+    });
+
+    it("skips a floating horizontal sibling and resizes the next tiled sibling", () => {
+      const { windows, nodes } = setupThreeWindows(ctx, LAYOUT_TYPES.HSPLIT);
+      nodes[1].mode = WINDOW_MODES.FLOAT;
+
+      wm()._handleGrabOpBegin(ctx.display, windows[0], Meta.GrabOp.RESIZING_E);
+      windows[0].move_resize_frame(true, 0, 0, 740, 1080);
+      wm()._grab.handleResizing(nodes[0]);
+
+      expect(nodes[0].percent).toBeCloseTo(740 / 1920, 3);
+      expect(nodes[1].percent).toBeCloseTo(1 / 3, 3);
+      expect(nodes[2].percent).toBeCloseTo(540 / 1920, 3);
+    });
+
+    it("skips a minimized vertical sibling and resizes the next tiled sibling", () => {
+      const { windows, nodes } = setupThreeWindows(ctx, LAYOUT_TYPES.VSPLIT);
+      windows[1].minimized = true;
+
+      wm()._handleGrabOpBegin(ctx.display, windows[0], Meta.GrabOp.RESIZING_S);
+      windows[0].move_resize_frame(true, 0, 0, 1920, 460);
+      wm()._grab.handleResizing(nodes[0]);
+
+      expect(nodes[0].percent).toBeCloseTo(460 / 1080, 3);
+      expect(nodes[1].percent).toBeCloseTo(1 / 3, 3);
+      expect(nodes[2].percent).toBeCloseTo(260 / 1080, 3);
     });
 
     it("should not change percent when initGrabOp is KEYBOARD_RESIZING_UNKNOWN", () => {

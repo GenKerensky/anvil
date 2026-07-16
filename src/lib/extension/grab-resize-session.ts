@@ -91,6 +91,30 @@ export function percentsFromSizeDelta(args: {
   };
 }
 
+/**
+ * Walk directional tree candidates until one can participate in Grab-Resize.
+ * The traversal callback preserves Tree's nested/opposite-edge semantics while
+ * this owner applies floating/minimized eligibility consistently for both axes.
+ */
+export function findEligibleResizePair(args: {
+  focusNode: Node;
+  direction: Meta.MotionDirection;
+  nextVisible: (node: Node, direction: Meta.MotionDirection) => Node | null;
+  isEligible: (node: Node) => boolean;
+}): Node | null {
+  const { focusNode, direction, nextVisible, isEligible } = args;
+  const visited = new Set<Node>([focusNode]);
+  let cursor = focusNode;
+
+  while (true) {
+    const candidate = nextVisible(cursor, direction);
+    if (!candidate || visited.has(candidate)) return null;
+    if (isEligible(candidate)) return candidate;
+    visited.add(candidate);
+    cursor = candidate;
+  }
+}
+
 type NodeGrabState = {
   initRect: RectLike | null;
   initGrabOp: Meta.GrabOp | null;
@@ -420,16 +444,23 @@ export class GrabResizeSession {
       if (initGrabOp === Meta.GrabOp.KEYBOARD_RESIZING_UNKNOWN) {
         Logger.debug(`_handleResizing: KEYBOARD_RESIZING_UNKNOWN — return early`);
         return;
-      } else {
-        resizePairForWindow = host.tree.nextVisible(focusNodeWindow, direction!);
+      } else if (direction !== undefined) {
+        const findPair = (searchDirection: Meta.MotionDirection) =>
+          findEligibleResizePair({
+            focusNode: focusNodeWindow,
+            direction: searchDirection,
+            nextVisible: (node, candidateDirection) =>
+              host.tree.nextVisible(node, candidateDirection),
+            isEligible: (candidate) =>
+              !host.floatingWindow(candidate) && !host.minimizedWindow(candidate),
+          });
+        resizePairForWindow = findPair(direction);
         if (!resizePairForWindow) {
           // Edge case: window at the edge has no sibling in the resize direction
           // (e.g. resizing the right edge of the rightmost window).
           // Try the opposite direction to find the resize pair.
-          if (direction !== undefined) {
-            const oppositeDir = Utils.oppositeDirectionOf(direction) as Meta.MotionDirection;
-            resizePairForWindow = host.tree.nextVisible(focusNodeWindow, oppositeDir);
-          }
+          const oppositeDir = Utils.oppositeDirectionOf(direction) as Meta.MotionDirection;
+          resizePairForWindow = findPair(oppositeDir);
         }
       }
 
@@ -461,16 +492,7 @@ export class GrabResizeSession {
           }
 
           firstRect = nodeGrab.initRect;
-          if (resizePairForWindow) {
-            if (
-              !host.floatingWindow(resizePairForWindow) &&
-              !host.minimizedWindow(resizePairForWindow)
-            ) {
-              secondRect = resizePairForWindow.rect;
-            } else {
-              // TODO try to get the next resize pair?
-            }
-          }
+          if (resizePairForWindow) secondRect = resizePairForWindow.rect;
 
           if (!firstRect || !secondRect) {
             return;
@@ -531,16 +553,7 @@ export class GrabResizeSession {
             return;
           }
           firstRect = nodeGrab.initRect;
-          if (resizePairForWindow) {
-            if (
-              !host.floatingWindow(resizePairForWindow) &&
-              !host.minimizedWindow(resizePairForWindow)
-            ) {
-              secondRect = resizePairForWindow.rect;
-            } else {
-              // TODO try to get the next resize pair?
-            }
-          }
+          if (resizePairForWindow) secondRect = resizePairForWindow.rect;
           if (!firstRect || !secondRect) {
             return;
           }
