@@ -1,6 +1,6 @@
 # Technical debt inventory and remediation plan
 
-**Status:** Proposed
+**Status:** In progress — Stages 0 and 1 complete
 
 **Date:** 2026-07-15
 
@@ -72,30 +72,30 @@ All remediation work must preserve these constraints:
 
 ## Inventory summary
 
-| ID     | Priority | Area                  | Summary                                                         |
-| ------ | -------- | --------------------- | --------------------------------------------------------------- |
-| TD-001 | P0       | Window discovery      | Preferences-window lookup skips workspace zero                  |
-| TD-002 | P0       | Configuration         | Parsed window overrides bypass their runtime validator          |
-| TD-003 | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected        |
-| TD-004 | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
-| TD-005 | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
-| TD-006 | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
-| TD-007 | P2       | Runtime API           | Thirteen private compatibility members exist only for tests     |
-| TD-008 | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain          |
-| TD-009 | P2       | Shared helpers        | Several helpers and conversions have no production consumer     |
-| TD-010 | P2       | Policy ownership      | Tested helpers are disconnected from their production owners    |
-| TD-011 | P2       | GSettings             | Four schema keys have no source consumer                        |
-| TD-012 | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference      |
-| TD-013 | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts   |
-| TD-014 | P2       | Build tooling         | Metadata generation is duplicated                               |
-| TD-015 | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters         |
-| TD-016 | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate     |
-| TD-017 | P3       | Module depth          | Six production modules exceed the soft 500-line budget          |
-| TD-018 | P3       | Tree ownership        | Legacy Tree still owns platform workspace/monitor orchestration |
-| TD-019 | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved         |
-| TD-020 | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions  |
-| TD-021 | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`              |
-| TD-022 | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open     |
+| ID     | Status      | Priority | Area                  | Summary                                                         |
+| ------ | ----------- | -------- | --------------------- | --------------------------------------------------------------- |
+| TD-001 | Complete    | P0       | Window discovery      | Preferences-window lookup skips workspace zero                  |
+| TD-002 | Complete    | P0       | Configuration         | Parsed window overrides bypass their runtime validator          |
+| TD-003 | Complete    | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected        |
+| TD-004 | Open        | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
+| TD-005 | Open        | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
+| TD-006 | Open        | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
+| TD-007 | Open        | P2       | Runtime API           | Thirteen private compatibility members exist only for tests     |
+| TD-008 | Complete    | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain          |
+| TD-009 | Open        | P2       | Shared helpers        | Several helpers and conversions have no production consumer     |
+| TD-010 | In progress | P2       | Policy ownership      | Tested helpers are disconnected from their production owners    |
+| TD-011 | Open        | P2       | GSettings             | Four schema keys have no source consumer                        |
+| TD-012 | Open        | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference      |
+| TD-013 | Open        | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts   |
+| TD-014 | Open        | P2       | Build tooling         | Metadata generation is duplicated                               |
+| TD-015 | In progress | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters         |
+| TD-016 | Complete    | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate     |
+| TD-017 | Open        | P3       | Module depth          | Six production modules exceed the soft 500-line budget          |
+| TD-018 | Open        | P3       | Tree ownership        | Legacy Tree still owns platform workspace/monitor orchestration |
+| TD-019 | Open        | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved         |
+| TD-020 | Open        | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions  |
+| TD-021 | Tracked     | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`              |
+| TD-022 | Tracked     | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open     |
 
 ## Detailed inventory
 
@@ -449,22 +449,37 @@ change the default engine or retire the legacy writer.
 
 ## Staged remediation roadmap
 
+- [x] Stage 0: Establish reproducible debt gates
+- [x] Stage 1: Close bounded correctness and lifecycle hazards
+- [ ] Stage 2: Make stylesheet upgrades non-destructive
+- [ ] Stage 3: Finish interaction edge behavior
+- [ ] Stage 4: Remove dead compatibility and enforce unused-code checks
+- [ ] Stage 5: Remove stale schema, resources, and tool entry points
+- [ ] Stage 6: Deepen legacy production modules
+- [ ] Stage 7: Close the inventory and establish ongoing governance
+
 ### Stage 0: Establish reproducible debt gates
+
+**Status:** Complete — reviewed with no blocking or important findings.
 
 **Purpose:** Turn the inventory into repeatable evidence before changing behavior.
 
 **Work:**
 
-1. Add targeted failing tests for TD-001, TD-002, and TD-003.
-2. Add a repository-local audit command for unused declarations, schema references, and packaged
-   icon references. It may initially report an allowlisted baseline rather than fail.
-3. Add `test:tooling` for pure Python tooling tests and separate host-dependent smoke tests.
-4. Record the exact installed-package smoke procedure for preferences pages, indicator icons, and
-   stylesheet reload.
-5. Keep the existing dirty worktree outside these commits; stage only the audit/test files.
+1. [x] Add targeted failing tests for TD-001, TD-002, and TD-003.
+2. [x] Add a repository-local audit command for unused declarations, schema references, and packaged
+       icon references. It may initially report an allowlisted baseline rather than fail.
+3. [x] Add `test:tooling` for pure Python tooling tests and separate host-dependent smoke tests.
+4. [x] Record the exact installed-package smoke procedure for preferences pages, indicator icons, and
+       stylesheet reload.
+5. [x] Preserve unrelated worktree state (the task began from a clean worktree).
 
 **Exit gate:** Every later stage has a named validation command, and the first three correctness
 findings have tests that fail for the intended reason.
+
+**Completion evidence (2026-07-16):** `npm run check:debt`, `npm run test:tooling`, and
+`npm run test:tooling:host` pass. The debt audit rejects unexpected and stale entries using tracked
+repository inputs, and the installed-package smoke procedure is documented under `docs/testing/`.
 
 **Suggested commits:**
 
@@ -474,20 +489,28 @@ findings have tests that fail for the intended reason.
 
 ### Stage 1: Close bounded correctness and lifecycle hazards
 
+**Status:** Complete — reviewed with no blocking or important findings.
+
 **Purpose:** Remove high-confidence defects without changing layout architecture.
 
 **Work order:**
 
-1. TD-001: correct preferences-window discovery.
-2. TD-002 and TD-010: validate window configuration at ingestion.
-3. TD-003: bind the monitor settings signal to page lifetime.
-4. TD-008: remove ignored parameters encountered in these paths.
+1. [x] TD-001: correct preferences-window discovery.
+2. [x] TD-002 and the configuration half of TD-010: validate window configuration at ingestion.
+3. [x] TD-003: bind the monitor settings signal to page lifetime.
+4. [x] TD-008: remove ignored parameters encountered in these paths.
 
 **Why this order:** These fixes are local, can be proven with unit tests, and remove ambiguity before
 the larger user-data migration.
 
 **Exit gate:** Targeted tests, `npm test`, and a preferences open/close/reopen smoke test pass with
 no stale callbacks or duplicate windows.
+
+**Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 1,064 unit tests,
+and 40 tooling tests (two host-only cases intentionally skipped by the deterministic gate). The
+Fedora Devbox `preferences` E2E passes the installed window open, reuse, close, and reopen lifecycle
+and confirms GNOME's `Anvil` / `org.gnome.Shell.Extensions` window identity. Both the standards and
+spec review axes passed after three remediation rounds.
 
 **Suggested commits:**
 
