@@ -1,0 +1,326 @@
+import console from "node:console";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, extname, join, relative, resolve } from "node:path";
+import process from "node:process";
+import { fileURLToPath, pathToFileURL, URL } from "node:url";
+
+import ts from "typescript";
+
+const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
+
+// These baselines make existing debt visible without allowing it to grow. Remove an entry in the
+// same change that removes or connects the corresponding declaration, setting, or icon.
+const UNUSED_DECLARATION_BASELINE = [
+  "src/lib/extension/anvil-runtime.ts:6133:_grabCleanup",
+  "src/lib/extension/anvil-runtime.ts:6133:_stopLiveResizeLoop",
+  "src/lib/extension/anvil-runtime.ts:6133:commandBus",
+  "src/lib/extension/anvil-runtime.ts:6133:currentWsNode",
+  "src/lib/extension/anvil-runtime.ts:6133:findNodeWindowAtPointer",
+  "src/lib/extension/anvil-runtime.ts:6133:getWindowsOnWorkspace",
+  "src/lib/extension/anvil-runtime.ts:6133:isCurrentWorkspaceTiled",
+  "src/lib/extension/anvil-runtime.ts:6133:moveWindowToPointer",
+  "src/lib/extension/anvil-runtime.ts:6133:pointerPolicy",
+  "src/lib/extension/anvil-runtime.ts:6133:resize",
+  "src/lib/extension/anvil-runtime.ts:6133:shouldFocusOnHover",
+  "src/lib/extension/anvil-runtime.ts:6133:tilingRender",
+  "src/lib/extension/anvil-runtime.ts:6133:toggleFloatingMode",
+];
+
+const UNUSED_SCHEMA_KEY_BASELINE = [
+  "focus-border-color",
+  "focus-border-size",
+  "primary-layout-mode",
+  "split-border-color",
+];
+
+const UNREFERENCED_ICON_BASELINE = [
+  "applications-science-symbolic.svg",
+  "appointment-soon-symbolic.svg",
+  "code-context-symbolic.svg",
+  "color-picker-symbolic.svg",
+  "color-select-symbolic.svg",
+  "colorfx-symbolic.svg",
+  "focus-windows-symbolic.svg",
+  "go-home-symbolic.svg",
+  "go-next-symbolic.svg",
+  "larger-brush-symbolic.svg",
+  "preferences-desktop-apps-symbolic.svg",
+  "preferences-desktop-keyboard-symbolic.svg",
+  "preferences-desktop-wallpaper-symbolic.svg",
+  "settings-symbolic.svg",
+  "shell-overview-symbolic.svg",
+  "tab-new-symbolic.svg",
+  "tool-brush-symbolic.svg",
+  "tool-rectangle-symbolic.svg",
+  "utilities-tweak-tool-symbolic.svg",
+  "view-dual-symbolic.svg",
+  "window-duplicate-symbolic.svg",
+];
+
+// The original Forge logo is retained as attribution/compatibility artwork rather than as an
+// Anvil UI icon. Keeping the exception explicit prevents it from hiding a newly orphaned icon.
+const RETAINED_UNREFERENCED_ICONS = ["forge-logo-symbolic.svg"];
+
+const unusedDiagnosticCodes = new Set([6133, 6192, 6196]);
+const textExtensions = new Set([
+  ".cjs",
+  ".css",
+  ".js",
+  ".json",
+  ".jsx",
+  ".md",
+  ".mjs",
+  ".po",
+  ".pot",
+  ".py",
+  ".scss",
+  ".sh",
+  ".toml",
+  ".ts",
+  ".tsx",
+  ".txt",
+  ".ui",
+  ".xml",
+  ".yaml",
+  ".yml",
+]);
+
+export function trackedRepositoryFiles(root = repositoryRoot) {
+  const output = execFileSync("git", ["ls-files", "-z"], {
+    cwd: root,
+    encoding: "utf8",
+  });
+
+  return output
+    .split("\0")
+    .filter(Boolean)
+    .map((path) => resolve(root, path))
+    .filter(existsSync);
+}
+
+function relativePath(path, root = repositoryRoot) {
+  return relative(root, path).replaceAll("\\", "/");
+}
+
+function diagnosticName(diagnostic) {
+  const message = ts.flattenDiagnosticMessageText(diagnostic.messageText, " ");
+  return /^'([^']+)'/.exec(message)?.[1] ?? message;
+}
+
+function collectUnusedDeclarations(root = repositoryRoot) {
+  const configPath = join(root, "tsconfig.src.json");
+  const configFile = ts.readConfigFile(configPath, ts.sys.readFile);
+  if (configFile.error) {
+    throw new Error(ts.formatDiagnostic(configFile.error, formatHost(root)));
+  }
+
+  const config = ts.parseJsonConfigFileContent(
+    configFile.config,
+    ts.sys,
+    root,
+    {
+      composite: false,
+      incremental: false,
+      noEmit: true,
+      noUnusedLocals: true,
+      noUnusedParameters: true,
+    },
+    configPath
+  );
+  if (config.errors.length > 0) {
+    throw new Error(ts.formatDiagnostics(config.errors, formatHost(root)));
+  }
+
+  const program = ts.createProgram({
+    options: config.options,
+    projectReferences: config.projectReferences,
+    rootNames: config.fileNames,
+  });
+
+  return ts
+    .getPreEmitDiagnostics(program)
+    .filter((diagnostic) => unusedDiagnosticCodes.has(diagnostic.code) && diagnostic.file)
+    .map(
+      (diagnostic) =>
+        `${relativePath(diagnostic.file.fileName, root)}:${diagnostic.code}:${diagnosticName(
+          diagnostic
+        )}`
+    )
+    .sort();
+}
+
+export function collectUnusedSchemaKeys(
+  root = repositoryRoot,
+  trackedPaths = trackedRepositoryFiles(root)
+) {
+  const schemaKeys = new Set();
+  for (const file of trackedPaths.filter((path) => {
+    const repositoryPath = relativePath(path, root);
+    return repositoryPath.startsWith("src/schemas/") && path.endsWith(".gschema.xml");
+  })) {
+    const source = readFileSync(file, "utf8");
+    for (const match of source.matchAll(/<key\b[^>]*\bname="([^"]+)"/g)) {
+      schemaKeys.add(match[1]);
+    }
+  }
+
+  const referenceSources = trackedPaths
+    .filter((path) => {
+      const relativeSourcePath = relativePath(path, root);
+      return (
+        relativeSourcePath.startsWith("src/") &&
+        !relativeSourcePath.startsWith("src/schemas/") &&
+        !relativeSourcePath.startsWith("src/resources/icons/") &&
+        isTextFile(path)
+      );
+    })
+    .map((path) => readFileSync(path, "utf8"));
+
+  return [...schemaKeys]
+    .filter((key) => !referenceSources.some((source) => source.includes(key)))
+    .sort();
+}
+
+function isTextFile(path) {
+  return textExtensions.has(extname(path).toLowerCase()) || path.endsWith("/Makefile");
+}
+
+export function repositoryReferenceSources(
+  root = repositoryRoot,
+  trackedPaths = trackedRepositoryFiles(root)
+) {
+  const auditFile = resolve(root, "scripts/check-technical-debt.mjs");
+  const inventoryPlan = resolve(root, "docs/plans/technical-debt-inventory-and-remediation.md");
+  const iconRoot = resolve(root, "src/resources/icons/hicolor/scalable");
+
+  return trackedPaths
+    .filter((path) => {
+      const absolutePath = resolve(path);
+      return (
+        isTextFile(path) &&
+        absolutePath !== auditFile &&
+        absolutePath !== inventoryPlan &&
+        !absolutePath.startsWith(`${iconRoot}/`)
+      );
+    })
+    .map((path) => readFileSync(path, "utf8"));
+}
+
+export function collectUnreferencedIcons(
+  referenceSources,
+  root = repositoryRoot,
+  trackedPaths = trackedRepositoryFiles(root)
+) {
+  const iconRoot = resolve(root, "src/resources/icons/hicolor/scalable");
+  return trackedPaths
+    .filter(
+      (path) =>
+        path.endsWith(".svg") &&
+        (resolve(path) === iconRoot || resolve(path).startsWith(`${iconRoot}/`))
+    )
+    .map((path) => basename(path))
+    .filter((file) => {
+      const iconName = file.slice(0, -extname(file).length);
+      return !referenceSources.some((source) => source.includes(file) || source.includes(iconName));
+    })
+    .sort();
+}
+
+function difference(left, right) {
+  const remaining = [...right];
+  return left.filter((item) => {
+    const index = remaining.indexOf(item);
+    if (index < 0) return true;
+    remaining.splice(index, 1);
+    return false;
+  });
+}
+
+export function auditBaseline(label, actual, baseline, failures, logger = console) {
+  const unexpected = difference(actual, baseline);
+  const stale = difference(baseline, actual);
+  logger.log(`${label}: ${actual.length} acknowledged`);
+  for (const finding of actual) logger.log(`  - ${finding}`);
+
+  if (unexpected.length > 0) {
+    failures.push(
+      `${label} has unexpected findings:\n${unexpected.map((x) => `  + ${x}`).join("\n")}`
+    );
+  }
+  if (stale.length > 0) {
+    failures.push(
+      `${label} has stale allowlist entries:\n${stale.map((x) => `  - ${x}`).join("\n")}`
+    );
+  }
+}
+
+function formatHost(root) {
+  return {
+    getCanonicalFileName: (file) => file,
+    getCurrentDirectory: () => root,
+    getNewLine: () => "\n",
+  };
+}
+
+export function runTechnicalDebtAudit(root = repositoryRoot, logger = console) {
+  // Take one tracked-file snapshot so every scanner evaluates the same repository inputs. Current
+  // contents of modified tracked files remain visible; ignored and untracked scratch files cannot
+  // add references that conceal a finding.
+  const trackedPaths = trackedRepositoryFiles(root);
+  const failures = [];
+  const unusedDeclarations = collectUnusedDeclarations(root);
+  const unusedSchemaKeys = collectUnusedSchemaKeys(root, trackedPaths);
+  const referenceSources = repositoryReferenceSources(root, trackedPaths);
+  const allUnreferencedIcons = collectUnreferencedIcons(referenceSources, root, trackedPaths);
+  const retainedIcons = allUnreferencedIcons.filter((icon) =>
+    RETAINED_UNREFERENCED_ICONS.includes(icon)
+  );
+  const debtIcons = allUnreferencedIcons.filter(
+    (icon) => !RETAINED_UNREFERENCED_ICONS.includes(icon)
+  );
+
+  logger.log("Technical debt baseline audit\n");
+  auditBaseline(
+    "Unused TypeScript declarations",
+    unusedDeclarations,
+    UNUSED_DECLARATION_BASELINE,
+    failures,
+    logger
+  );
+  auditBaseline(
+    "Unused GSettings schema keys",
+    unusedSchemaKeys,
+    UNUSED_SCHEMA_KEY_BASELINE,
+    failures,
+    logger
+  );
+  auditBaseline(
+    "Unreferenced packaged icons",
+    debtIcons,
+    UNREFERENCED_ICON_BASELINE,
+    failures,
+    logger
+  );
+  auditBaseline(
+    "Retained unreferenced packaged icons",
+    retainedIcons,
+    RETAINED_UNREFERENCED_ICONS,
+    failures,
+    logger
+  );
+
+  if (failures.length > 0) {
+    logger.error(`\nTechnical debt audit failed:\n\n${failures.join("\n\n")}`);
+  } else {
+    logger.log("\nTechnical debt audit passed; current findings match the acknowledged baseline.");
+  }
+
+  return failures;
+}
+
+const entrypoint = process.argv[1];
+if (entrypoint && import.meta.url === pathToFileURL(resolve(entrypoint)).href) {
+  const failures = runTechnicalDebtAudit();
+  if (failures.length > 0) process.exitCode = 1;
+}

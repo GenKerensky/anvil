@@ -25,8 +25,10 @@ npm run typecheck    # tsc project references (src, unit, e2e)
 npm run lint         # eslint . && prettier --check
 npm run test:unit    # vitest run (~832 tests, no GNOME runtime)
 npm run test:unit:watch
+npm run test:tooling      # deterministic stdlib Python tests; host smoke forced off
+npm run test:tooling:host # build + opt-in live HeadlessShellSession smoke
 
-npm test             # typecheck → lint → unit
+npm test             # portable boundary → typecheck → lint → portable → unit → tooling
 ```
 
 ### Host E2E tests
@@ -37,6 +39,8 @@ distrobox enter fedora-devbox -- bash -lc \
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && make test-e2e-monitor-churn'
 distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && make test-e2e-preferences'
+distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --tag resize'
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --virtual-monitors 2 --tag monitor-churn'
@@ -46,7 +50,11 @@ python3 test/e2e/run.py --tag focus        # Direct host smoke when dependencies
 python3 test/e2e/run.py --no-build         # Skip make dist
 ```
 
-CI runs unit only. Prefer `--tag` for PR-local E2E; full suite before release (D2-2).
+CI runs the deterministic `npm test` gate only. Host tooling smoke and E2E remain local gates.
+Prefer `--tag` for PR-local E2E; run the full E2E suite before release (D2-2).
+
+The installed preferences, icon, Quick Settings, and stylesheet validation procedure is recorded
+in `docs/testing/installed-package-smoke.md`.
 
 `test/e2e/runner.js` is loaded by `--automation-script`. Exports `async function run()`
 (called by gnome-shell). Sets `test-mode=true`, waits for ACTIVE extension with

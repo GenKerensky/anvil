@@ -141,7 +141,8 @@ bus and [python-dbusmock](https://github.com/martinpitt/python-dbusmock) stubs. 
 
 Suites cover: extension lifecycle, tiling geometry, keyboard shortcuts, window operations,
 resize clamping (data-driven matrix), focus/swap/move, floating and snap layouts, advanced
-layouts, workspace skip-tile, borders/gaps, minimize, and monitor constraints.
+layouts, workspace skip-tile, borders/gaps, minimize, monitor constraints, and preferences
+open/reuse/close/reopen lifecycle.
 
 Shared helpers live in `test/lib/shared-commands.js` (`launchApp`, `waitForWindowCount`,
 `getFocusedWindowId`, `sendAnvilCommand`, etc.).
@@ -203,11 +204,17 @@ Human visual debugging (flicker, Looking Glass) uses the devkit launcher instead
 .agents/skills/gnome-shell-debug/scripts/run-devkit-session.sh
 ```
 
-**Library tests** (guardrails, log analysis, session smoke — no full loop required):
+**Tooling tests** (deterministic guardrails and log/session utilities; also run by `npm test`):
 
 ```bash
-make test-debug-loop-lib
+npm run test:tooling
+
+# Opt-in live GNOME Shell smoke; builds dist/ first
+npm run test:tooling:host
 ```
+
+Installed preferences, icon, Quick Settings, and stylesheet validation uses the
+[installed-package smoke checklist](docs/testing/installed-package-smoke.md).
 
 Full documentation: `.agents/skills/gnome-shell-debug/SKILL.md` (v3.0).
 

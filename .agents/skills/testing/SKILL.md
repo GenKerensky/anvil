@@ -140,7 +140,7 @@ python3 test/e2e/run.py --no-build --tag focus
 
 | Gate                  | Command                                             | When                                    |
 | --------------------- | --------------------------------------------------- | --------------------------------------- |
-| **PR / CI**           | `npm test` (typecheck + lint + unit)                | Every commit / PR                       |
+| **PR / CI**           | `npm test` (static, TS, unit, pure Python tooling)  | Every commit / PR                       |
 | **Local PR smoke**    | `python3 test/e2e/run.py --tag focus` (or `resize`) | Before merge when touching focus/layout |
 | **Nightly / release** | `make test-e2e` (full suite)                        | Pre-release, local                      |
 
@@ -210,7 +210,9 @@ In GNOME 50, `Main.extensionManager.lookup(UUID)` returns a proxy. Use:
 npm run test:unit
 npm run typecheck
 npm run lint
-npm test                 # typecheck + lint + unit
+npm run test:tooling      # pure Python tooling tests; live host smoke is forced off
+npm run test:tooling:host # opt-in live HeadlessShellSession smoke; builds dist/ first
+npm test                 # static + TypeScript + unit + pure Python tooling
 
 # E2E
 make test-e2e

@@ -5,7 +5,7 @@ MSGSRC = $(wildcard src/po/*.po)
 .PHONY: all build install uninstall clean dist debug \
         enable disable restart purge log journal \
         potfile compilemsgs metadata schemas format lint check \
-        test-unit test-e2e test-e2e-monitor-churn test-debug-loop-lib
+        test-unit test-e2e test-e2e-monitor-churn test-e2e-preferences test-debug-loop-lib
 
 all: build install
 
@@ -82,8 +82,7 @@ disable:
 	gnome-extensions disable "$(UUID)" 2>/dev/null || true
 
 install: build
-	mkdir -p "$(INSTALL_PATH)"
-	cp -r dist/* "$(INSTALL_PATH)"
+	bash scripts/install-extension.sh dist "$(INSTALL_PATH)"
 
 uninstall:
 	rm -rf "$(INSTALL_PATH)"
@@ -124,9 +123,12 @@ test-e2e-monitor-churn: dist
 	python3 test/e2e/run.py --no-build --tag monitor-churn --virtual-monitors 2
 	python3 test/e2e/run.py --no-build --engine core --tag monitor-churn --virtual-monitors 2
 
-# Agent debug loop shared library (stdlib unittest; smoke tests skip without gnome-shell)
+test-e2e-preferences: dist
+	python3 test/e2e/run.py --no-build --tag preferences
+
+# Backward-compatible alias for the deterministic Python tooling suite.
 test-debug-loop-lib:
-	python3 -m unittest discover -s test/lib -p 'test_*.py' -v
+	npm run test:tooling
 
 format:
 	npm run format

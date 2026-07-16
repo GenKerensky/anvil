@@ -19,6 +19,7 @@ from shell_session import (
 
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 DIST_DIR = PROJECT_ROOT / "dist"
+HOST_SMOKE_ENABLED = os.environ.get("ANVIL_RUN_HOST_SMOKE") == "1"
 
 
 def _dist_built() -> bool:
@@ -85,6 +86,10 @@ class HeadlessShellSessionEnvironmentTests(unittest.TestCase):
         self.assertNotIn("WAYLAND_DISPLAY", serialized_env)
 
 
+@unittest.skipUnless(
+    HOST_SMOKE_ENABLED,
+    "host smoke is opt-in; run npm run test:tooling:host",
+)
 @unittest.skipUnless(gnome_shell_available(), "gnome-shell not available")
 @unittest.skipUnless(shutil.which("gdbus"), "gdbus not available")
 @unittest.skipUnless(shutil.which("gsettings"), "gsettings not available")

@@ -87,7 +87,8 @@ briefly focuses `wl-clipboard` at the compositor level; the extension cannot sup
   layouts, workspace, borders, minimize, constraints; richer lifecycle + tiling).
 - **Dropped** shallow GSettings smoke (`settings.js`) and broken AT-SPI prefs suite.
 - **Canonical real-shell gate:** `make test-e2e` (Jasmine + `--headless --virtual-monitor`).
-- CI runs unit only (`typecheck` + `lint` + `test:unit`); E2E is local/pre-release.
+- CI runs the deterministic `npm test` gate (portable boundary, typecheck, lint, portable/unit,
+  and pure Python tooling tests); host tooling smoke and E2E remain local/pre-release.
 
 ## Architecture direction (2026-07-10)
 
@@ -378,7 +379,8 @@ This improves depth, leverage (one load for the default path), and removes dupli
   `Node<any>`; the surviving `any` in `decoration-layout.ts`/`drag-drop-tile.ts` are inline callback
   params in non-exported closures, not public API), §12 (no WM imports in new modules) all green.
 - **E2E**: `make test-e2e` was **not** run in this environment (requires host `gnome-shell` +
-  `jasmine-gjs`; `build.md` notes CI runs unit only and E2E is a host-run pre-release gate). Unit
+  `jasmine-gjs`; `build.md` notes CI runs deterministic non-host tests and E2E is a host-run
+  pre-release gate). Unit
   typecheck/lint/891 tests pass. Lifecycle/grab/render E2E should be run on a host before release.
 
 ### E2E harness + pre-existing failures fixed in fedora-devbox (2026-07-11)
