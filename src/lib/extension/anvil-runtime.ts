@@ -24,12 +24,11 @@ import Meta from "gi://Meta";
 
 // Shared state
 import { Logger } from "../shared/logger.js";
-import type { WindowConfig } from "../shared/settings.js";
 
 // App imports
 import * as Utils from "./utils.js";
 import { Keybindings } from "./keybindings.js";
-import { Tree, Node, NODE_TYPES, RectLike } from "./tree.js";
+import { Tree, Node, NODE_TYPES } from "./tree.js";
 import { PointerPolicy, type PointerFocusSource } from "./pointer-policy.js";
 import { TilingRender } from "./tiling-render.js";
 import { RulesEngine } from "./rules-engine.js";
@@ -49,7 +48,7 @@ import type { BorderRefreshMode } from "./render-scheduler.js";
 import { DecorationLayout } from "./decoration-layout.js";
 import { createCommandHandlers, type CommandHandlerHost } from "./command-handlers.js";
 import { WorkspaceMutations, type WorkspaceMutationsHost } from "./workspace-mutations.js";
-import type { AnvilWindowActor, AnvilExtension } from "./window/types.js";
+import type { AnvilExtension } from "./window/types.js";
 import type { AnvilAction } from "./window/actions.js";
 import { createSessionFlags, type SessionFlagsState } from "./window/session-flags.js";
 import { EventScheduler } from "./event-scheduler.js";
@@ -60,8 +59,10 @@ import { selectTilingEngineMode, type TilingEngineMode } from "./tiling-engine-m
 import { safeRaise } from "./mutter-safe.js";
 import { GnomeContainerPresenter } from "./gnome-container-presenter.js";
 import { GnomePreviewPresenter } from "./gnome-preview-presenter.js";
-import { computeSnapLayout } from "./snap-layout.js";
 import { DragPreviewPresenter, TreePresentation } from "./tree-presentation.js";
+import { LegacyWorkspaceTopology } from "./legacy-workspace-topology.js";
+import { GnomeWindowOperations } from "./gnome-window-operations.js";
+import { CorePlatformCommands } from "./core-platform-commands.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -80,8 +81,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   private ext: AnvilExtension;
-  /** Synced with RulesEngine / ConfigManager (same object after reload). */
-  private windowProps: WindowConfig | null = null;
   private _rules: RulesEngine | null = null;
 
   // --- State ---
@@ -114,6 +113,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   // --- Object references ---
   private _kbd: import("./keybindings.js").Keybindings | null = null;
   private _tree: Tree | null = null;
+  private _workspaceTopology: LegacyWorkspaceTopology | null = null;
+  private _windowOperations: GnomeWindowOperations | null = null;
+  private _corePlatformCommands: CorePlatformCommands | null = null;
   private _eventScheduler: EventScheduler | null = null;
   private theme: import("./extension-theme-manager.js").ExtensionThemeManager | null = null;
   private _pointerPolicy: PointerPolicy | null = null;
@@ -160,6 +162,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       GLib.environ_getenv(GLib.get_environ(), "ANVIL_TILING_ENGINE")
     );
     this._eventScheduler = new EventScheduler();
+    this._windowOperations = new GnomeWindowOperations();
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     this._rules = new RulesEngine();
@@ -219,8 +222,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         return self.currentMonWsNode;
       },
       notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
-      moveWindow: (w, rect) => self.move(w, rect),
-      rectForMonitor: (n, i) => self.rectForMonitor(n, i),
+      moveWindow: (w, rect) => self._windowOperations!.move(w, rect),
+      rectForMonitor: (n, i) => self._windowOperations!.rectForMonitor(n, i),
       floatingWindow: (n) => self.floatingWindow(n),
     });
     // SignalManager owns workspace signal binding; host getters resolve after the graph is complete.
@@ -233,6 +236,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       },
       get tree() {
         return self.tree;
+      },
+      get workspaceTopology() {
+        return self._workspaceTopology!;
       },
       get layout() {
         return self._layout!;
@@ -272,7 +278,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         self._withTilingShadow("window", (shadow) => shadow.observeWindow(window)),
       observePortableWindows: () =>
         self._withTilingShadow("windows", (shadow) =>
-          shadow.observeWindows(self.windowsAllWorkspaces)
+          shadow.observeWindows(self._workspaceTopology!.windowsAcrossWorkspaces())
         ),
     });
     this._tree = new Tree({
@@ -284,10 +290,36 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       },
       determineSplitLayout: () => self.determineSplitLayout(),
       floatingWindow: (n) => self.floatingWindow(n),
-      bindWorkspaceSignals: (ws) => self.bindWorkspaceSignals(ws),
+      adjacentMonitor: (node, direction) =>
+        self._workspaceTopology!.adjacentMonitorNode(node, direction),
       get presentation() {
         return self._treePresentation!;
       },
+    });
+    this._workspaceTopology = new LegacyWorkspaceTopology({
+      get tree() {
+        return self.tree;
+      },
+      determineSplitLayout: () => self.determineSplitLayout(),
+      bindWorkspaceSignals: (workspace) => self._signalManager!.bindWorkspaceSignals(workspace),
+    });
+    this._corePlatformCommands = new CorePlatformCommands({
+      get settings() {
+        return self.ext.settings;
+      },
+      get prefsTitle() {
+        return self.prefsTitle;
+      },
+      get focusMetaWindow() {
+        return self.focusMetaWindow;
+      },
+      openPreferences: () => self.ext.openPreferences(),
+      move: (window, rect) => self._windowOperations!.move(window, rect),
+      moveCenter: (window) => self._windowOperations!.moveCenter(window),
+      observe: (name, callback) => self._withTilingShadow(name, callback),
+      isFloatingExempt: (window) => self.isFloatingExempt(window),
+      addFloatOverride: (window) => self.addFloatOverride(window, false),
+      removeFloatOverride: (window) => self.removeFloatOverride(window, false),
     });
     this.theme = this.ext.theme;
     // Always construct PointerPolicy; enable/disable behavior via settings (B9-2).
@@ -295,7 +327,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._tilingRender = new TilingRender({
       settings: this.ext.settings,
       getTree: () => this.tree,
-      moveWindow: (metaWindow, rect) => this.move(metaWindow, rect),
+      moveWindow: (metaWindow, rect) => this._windowOperations!.move(metaWindow, rect),
       getAllNodeWindows: () => this.allNodeWindows,
       isFloatingExempt: (w) => this.isFloatingExempt(w),
       isActiveWindowWorkspaceTiled: (w) => this.isActiveWindowWorkspaceTiled(w),
@@ -330,7 +362,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       freezeRender: () => self.freezeRender(),
       unfreezeRender: () => self.unfreezeRender(),
       renderTree: (from, force) => self.renderTree(from, force),
-      move: (w, rect) => self.move(w, rect),
+      move: (w, rect) => self._windowOperations!.move(w, rect),
       calculateGaps: (n) => self._tilingRender!.calculateGaps(n),
       processNode: (n) => self._tilingRender!.processNode(n),
       getMonitorConstraints: (i) => self._tilingRender!.getMonitorConstraints(i),
@@ -364,7 +396,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         return self.prefsTitle;
       },
       get windowsAllWorkspaces() {
-        return self.windowsAllWorkspaces;
+        return self._workspaceTopology!.windowsAcrossWorkspaces();
       },
       get settings() {
         return self.ext.settings;
@@ -396,7 +428,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       updateStackedFocus: (n) => self.updateStackedFocus(n),
       updateTabbedFocus: (n) => self.updateTabbedFocus(n),
       notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
-      moveCenter: (w) => self.moveCenter(w),
+      moveCenter: (w) => self._windowOperations!.moveCenter(w),
       removeFloatOverride: (w, withWmId) => self.removeFloatOverride(w, withWmId),
       trackCurrentMonWs: () => self.trackCurrentMonWs(),
       autoSplitFromFocus: () => self.layoutEngine.autoSplitFromFocus(),
@@ -428,8 +460,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       refreshStylesheet: () => {
         self.theme?.refreshStylesheet();
       },
-      cleanupAlwaysFloat: () => self.cleanupAlwaysFloat(),
-      restoreAlwaysFloat: () => self.restoreAlwaysFloat(),
+      cleanupAlwaysFloat: () => self._wsMutations!.cleanupAlwaysFloat(),
+      restoreAlwaysFloat: () => self._wsMutations!.restoreAlwaysFloat(),
       clearResizedWindows: () => self._grab!.clearResizedWindows(),
       suspendGrabResizeTilingEffects: () => self._grab!.suspendTilingEffects(),
       observePortablePolicy: () =>
@@ -528,8 +560,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       tilingRenderRender: (from) => self2._tilingRender!.render(from),
       recordSettledTilingComparison: () => self2._recordSettledTilingComparison(),
       trackCurrentWindows: () => self2._tracker!.trackCurrentWindows(),
-      treeReinitializeWorkspaces: () => self2.tree._initWorkspaces(),
-      treeResetRoot: () => self2.tree.reset(),
+      rebuildWorkspaceTopology: () => self2._workspaceTopology!.rebuild(),
       disableDecorations: () => Utils._disableDecorations(),
       get tilingModeEnabled() {
         return self2.ext.settings.get_boolean("tiling-mode-enabled");
@@ -619,41 +650,15 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   private addFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
     this._rules!.addFloatOverride(metaWindow, withWmId, this.ext.configMgr);
-    this.windowProps = this._rules!.windowProps;
   }
 
   private removeFloatOverride(metaWindow: Meta.Window, withWmId: boolean) {
     this._rules!.removeFloatOverride(metaWindow, withWmId, this.ext.configMgr);
-    this.windowProps = this._rules!.windowProps;
-  }
-
-  private cleanupAlwaysFloat() {
-    // remove the setting for each node window
-    this.allNodeWindows.forEach((w) => {
-      if (w.mode === WINDOW_MODES.FLOAT) {
-        const mw = w.nodeValue as Meta.Window;
-        if (mw.is_above()) mw.unmake_above();
-      }
-    });
-  }
-
-  private restoreAlwaysFloat() {
-    this.allNodeWindows.forEach((w) => {
-      if (w.mode === WINDOW_MODES.FLOAT) {
-        const mw = w.nodeValue as Meta.Window;
-        if (!mw.is_above()) mw.make_above();
-      }
-    });
   }
 
   private trackCurrentMonWs() {
     if (this._tilingEngineMode === "core") return;
     this._wsMutations!.trackCurrentMonWs();
-  }
-
-  // SignalManager owns signal connect/disconnect; this private adapter satisfies TreeHost.
-  private bindWorkspaceSignals(metaWorkspace: Meta.Workspace) {
-    this._signalManager!.bindWorkspaceSignals(metaWorkspace);
   }
 
   /**
@@ -695,8 +700,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
         return self.prefsTitle;
       },
       findNodeWindow: (w) => self.findNodeWindow(w),
-      move: (w, rect) => self.move(w, rect),
-      moveCenter: (w) => self.moveCenter(w),
+      move: (w, rect) => self._windowOperations!.move(w, rect),
+      moveCenter: (w) => self._windowOperations!.moveCenter(w),
       renderTree: (from, force) => self.renderTree(from, force),
       notifyFocusChanged: (n, s) => self.notifyFocusChanged(n, s),
       updateStackedFocus: (n) => self.updateStackedFocus(n),
@@ -725,7 +730,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   command(action: AnvilAction) {
     this._assertEnabled("command");
     if (this._tilingEngineMode === "core") {
-      if (this._handleCorePlatformCommand(action)) return;
+      if (this._corePlatformCommands!.handle(action)) return;
       let handledByCore = false;
       this._withTilingShadow("command", (shadow) => {
         handledByCore = shadow.observeCommand(action, this.focusMetaWindow);
@@ -737,152 +742,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       shadow.observeCommand(action, this.focusMetaWindow);
     });
     this._commandBus!.dispatch(action);
-  }
-
-  private _handleCorePlatformCommand(action: AnvilAction): boolean {
-    if (action.name === "FocusBorderToggle") {
-      const enabled = this.ext.settings.get_boolean("focus-border-toggle");
-      this.ext.settings.set_boolean("focus-border-toggle", !enabled);
-      return true;
-    }
-    if (action.name === "GapSize") {
-      const current = this.ext.settings.get_uint("window-gap-size-increment");
-      this.ext.settings.set_uint(
-        "window-gap-size-increment",
-        Math.max(0, Math.min(8, current + action.amount))
-      );
-      this._withTilingShadow("gap-policy", (shadow) => shadow.observePolicy());
-      return true;
-    }
-    if (action.name === "TilingModeToggle") {
-      const enabled = this.ext.settings.get_boolean("tiling-mode-enabled");
-      this.ext.settings.set_boolean("tiling-mode-enabled", !enabled);
-      this._withTilingShadow("tiling-policy", (shadow) => shadow.observePolicy());
-      return true;
-    }
-    if (action.name === "WorkspaceActiveTileToggle") {
-      const active = `${global.workspace_manager.get_active_workspace_index()}`;
-      const skipped = this.ext.settings
-        .get_string("workspace-skip-tile")
-        .split(",")
-        .filter(Boolean);
-      const next = skipped.includes(active)
-        ? skipped.filter((workspace) => workspace !== active)
-        : [...skipped, active];
-      this.ext.settings.set_string("workspace-skip-tile", next.join(","));
-      this._withTilingShadow("workspace-policy", (shadow) => shadow.observePolicy());
-      return true;
-    }
-    if (action.name === "CancelOperation") {
-      this._withTilingShadow("cancel-operation", (shadow) => shadow.cancelOperation());
-      return true;
-    }
-    if (action.name === "PrefsOpen") {
-      const existing = Utils.findWindowWith(this.prefsTitle, Utils.PREFERENCES_WINDOW_CLASS);
-      if (existing?.get_workspace()) {
-        existing.get_workspace()!.activate_with_focus(existing, global.display.get_current_time());
-        this.moveCenter(existing);
-      } else {
-        this.ext.openPreferences();
-      }
-      return true;
-    }
-    if (action.name === "WindowClose") {
-      this.focusMetaWindow?.delete(global.display.get_current_time());
-      return true;
-    }
-    if (action.name === "WindowSwapLastActive") {
-      const focused = this.focusMetaWindow;
-      if (!focused) return true;
-      const target = global.display.get_tab_next(
-        Meta.TabList.NORMAL,
-        global.display.get_workspace_manager().get_active_workspace(),
-        focused,
-        false
-      );
-      if (target) {
-        this._withTilingShadow("swap-last-active", (shadow) =>
-          shadow.observeWindowSwap(focused, target)
-        );
-      }
-      return true;
-    }
-    if (action.name === "WindowResize") {
-      const metaWindow = this.focusMetaWindow;
-      if (!metaWindow) return true;
-      const grabOp = {
-        Right: Meta.GrabOp.KEYBOARD_RESIZING_E,
-        Left: Meta.GrabOp.KEYBOARD_RESIZING_W,
-        Top: Meta.GrabOp.KEYBOARD_RESIZING_N,
-        Bottom: Meta.GrabOp.KEYBOARD_RESIZING_S,
-      }[action.direction];
-      this._withTilingShadow("keyboard-resize", (shadow) =>
-        shadow.observeKeyboardResize(metaWindow, grabOp, action.amount)
-      );
-      return true;
-    }
-    if (action.name === "SnapLayoutMove") {
-      this._handleCoreSnapLayoutMove(action);
-      return true;
-    }
-    if (action.name === "ShowTabDecorationToggle") {
-      if (!this.ext.settings.get_boolean("tabbed-tiling-mode-enabled")) return true;
-      const showTabs = this.ext.settings.get_boolean("showtab-decoration-enabled");
-      this.ext.settings.set_boolean("showtab-decoration-enabled", !showTabs);
-      this._withTilingShadow("tab-decoration-policy", (shadow) => shadow.observePolicy());
-      return true;
-    }
-    if (action.name !== "FloatClassToggle") return false;
-    const metaWindow = this.focusMetaWindow;
-    if (!metaWindow) return true;
-    if (this.isFloatingExempt(metaWindow)) {
-      this.removeFloatOverride(metaWindow, false);
-    } else {
-      this.addFloatOverride(metaWindow, false);
-    }
-    this._withTilingShadow("float-class-policy", (shadow) => shadow.observePolicy());
-    return true;
-  }
-
-  private _handleCoreSnapLayoutMove(action: Extract<AnvilAction, { name: "SnapLayoutMove" }>) {
-    const metaWindow = this.focusMetaWindow;
-    if (!metaWindow) return;
-    const snap = computeSnapLayout(
-      action.direction,
-      metaWindow.get_work_area_current_monitor(),
-      action.amount,
-      metaWindow.get_frame_rect()
-    );
-    if (!snap) return;
-    const requested = snap.rect;
-    const rectRequest = {
-      x: requested.x,
-      y: requested.y,
-      width: requested.width,
-      height: requested.height,
-    };
-    let rect = {
-      x: Utils.resolveX(rectRequest, metaWindow),
-      y: Utils.resolveY(rectRequest, metaWindow),
-      width: requested.width,
-      height: requested.height,
-    };
-    if (snap.processGap) {
-      const gap =
-        this.ext.settings.get_uint("window-gap-size") *
-        this.ext.settings.get_uint("window-gap-size-increment");
-      if (rect.width > gap * 2 && rect.height > gap * 2) {
-        rect = {
-          x: rect.x + gap,
-          y: rect.y + gap,
-          width: rect.width - gap * 2,
-          height: rect.height - gap * 2,
-        };
-      }
-    }
-    if (!this.isFloatingExempt(metaWindow)) this.addFloatOverride(metaWindow, false);
-    this._withTilingShadow("snap-policy", (shadow) => shadow.observePolicy());
-    this.move(metaWindow, rect);
   }
 
   private _withTilingShadow(name: string, callback: (shadow: TilingShadow) => void): void {
@@ -955,6 +814,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._renderScheduler = null;
     this._decorationLayout = null;
     this._tree = null;
+    this._workspaceTopology = null;
+    this._windowOperations = null;
+    this._corePlatformCommands = null;
     this._eventScheduler = null;
     this._tilingRender = null;
     this._coreEffectDriver = null;
@@ -972,7 +834,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._treePresentation = null;
     this._dragPreviewPresenter = null;
     this._commandBus = null;
-    this.windowProps = null;
   }
 
   enable() {
@@ -988,7 +849,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       this._signalManager!.bindAll();
       rollback.push(() => this._signalManager?.unbindAll());
       this._withTilingShadow("bootstrap", (shadow) =>
-        shadow.bootstrap(this.windowsAllWorkspaces, (window) => this._tracker!.validWindow(window))
+        shadow.bootstrap(this._workspaceTopology!.windowsAcrossWorkspaces(), (window) =>
+          this._tracker!.validWindow(window)
+        )
       );
       if (this._tilingEngineMode === "shadow") this.reloadTree("enable");
       rollback.push(() => this._renderScheduler?.dispose());
@@ -1041,22 +904,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     return this._kbd;
   }
 
-  private get windowsAllWorkspaces() {
-    const wsManager = global.workspace_manager;
-    const windowsAll: Meta.Window[] = [];
-
-    for (let i = 0; i < wsManager.get_n_workspaces(); i++) {
-      Array.prototype.push.apply(
-        windowsAll,
-        global.display.get_tab_list(Meta.TabList.NORMAL_ALL, wsManager.get_workspace_by_index(i))
-      );
-    }
-    windowsAll.sort((w1, w2) => {
-      return w1.get_stable_sequence() - w2.get_stable_sequence();
-    });
-    return windowsAll;
-  }
-
   private determineSplitLayout() {
     return this._layout!.determineSplitLayout();
   }
@@ -1072,89 +919,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private setActiveWindowDecoration(nextWindow: Meta.Window | null) {
     this._borders!.setActiveWindow(nextWindow);
     this._treePresentation!.syncActiveTab(nextWindow ? this.tree.findNode(nextWindow) : null);
-  }
-
-  // Window movement API
-  private move(
-    metaWindow: Meta.Window,
-    rect: { x: number; y: number; width: number; height: number }
-  ) {
-    if (!metaWindow) return;
-    if ((metaWindow as any).grabbed) return;
-    try {
-      // GNOME 49+
-      metaWindow.set_unmaximize_flags(Meta.MaximizeFlags.BOTH);
-      metaWindow.unmaximize();
-    } catch {
-      // pre-49 fallback
-      (metaWindow as any).unmaximize(Meta.MaximizeFlags.HORIZONTAL);
-      (metaWindow as any).unmaximize(Meta.MaximizeFlags.VERTICAL);
-      (metaWindow as any).unmaximize(Meta.MaximizeFlags.BOTH);
-    }
-
-    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
-    if (!windowActor) return;
-    windowActor.remove_all_transitions();
-
-    metaWindow.move_frame(true, rect.x, rect.y);
-    metaWindow.move_resize_frame(true, rect.x, rect.y, rect.width, rect.height);
-  }
-
-  private moveCenter(metaWindow: Meta.Window) {
-    if (!metaWindow) return;
-    const frameRect = metaWindow.get_frame_rect();
-    const rectRequest = {
-      x: "center",
-      y: "center",
-      width: frameRect.width,
-      height: frameRect.height,
-    };
-
-    const moveRect = {
-      x: Utils.resolveX(rectRequest, metaWindow),
-      y: Utils.resolveY(rectRequest, metaWindow),
-      width: Utils.resolveWidth(rectRequest, metaWindow),
-      height: Utils.resolveHeight(rectRequest, metaWindow),
-    };
-    this.move(metaWindow, moveRect);
-  }
-
-  private rectForMonitor(node: Node, targetMonitor: number) {
-    if (!node || (node && node.nodeType !== NODE_TYPES.WINDOW)) return null;
-    if (targetMonitor < 0) return null;
-    const metaWindow = node.nodeValue as Meta.Window;
-    const currentWorkArea = metaWindow.get_work_area_current_monitor();
-    const nextWorkArea = metaWindow.get_work_area_for_monitor(targetMonitor);
-
-    if (currentWorkArea && nextWorkArea) {
-      let rect: RectLike | null = node.rect;
-      if (!rect && node.mode === WINDOW_MODES.FLOAT) {
-        rect = metaWindow.get_frame_rect();
-      }
-      if (!rect) return null;
-      const hRatio = nextWorkArea.height / currentWorkArea.height;
-      const wRatio = nextWorkArea.width / currentWorkArea.width;
-      rect.height *= hRatio;
-      rect.width *= wRatio;
-
-      if (nextWorkArea.y < currentWorkArea.y) {
-        rect.y =
-          ((nextWorkArea.y + rect.y - currentWorkArea.y) / currentWorkArea.height) *
-          nextWorkArea.height;
-      } else if (nextWorkArea.y > currentWorkArea.y) {
-        rect.y = (rect.y / currentWorkArea.height) * nextWorkArea.height + nextWorkArea.y;
-      }
-
-      if (nextWorkArea.x < currentWorkArea.x) {
-        rect.x =
-          ((nextWorkArea.x + rect.x - currentWorkArea.x) / currentWorkArea.width) *
-          nextWorkArea.width;
-      } else if (nextWorkArea.x > currentWorkArea.x) {
-        rect.x = (rect.x / currentWorkArea.width) * nextWorkArea.width + nextWorkArea.x;
-      }
-      return rect;
-    }
-    return null;
   }
 
   private renderTree(
@@ -1173,9 +937,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   /**
    * Reloads the tree. This is an expensive operation.
    * Useful when using dynamic workspaces in GNOME-shell.
-   *
-   * TODO: add support to reload the tree from a JSON dump file.
-   * TODO: move this to tree.js
    */
   private reloadTree(from: string) {
     if (this._tilingEngineMode === "core") return;
@@ -1296,33 +1057,11 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
 
   /** Float/tile classification — delegated to RulesEngine (sole owner). */
   isFloatingExempt(metaWindow: Meta.Window | null) {
-    // Keep the RulesEngine cache aligned with the runtime configuration snapshot.
-    this._rules!.windowProps = this.windowProps!;
     return this._rules!.isFloatingExempt(metaWindow);
   }
 
   private get currentMonWsNode() {
-    const monWs = this.currentMonWs;
-    if (monWs) {
-      return this.tree.findNode(monWs);
-    }
-    return null;
-  }
-
-  private get currentMonWs() {
-    const monWs = `${this.currentMon}${this.currentWs}`;
-    return monWs;
-  }
-
-  private get currentWs() {
-    const display = global.display;
-    const wsMgr = display.get_workspace_manager();
-    return `ws${wsMgr.get_active_workspace_index()}`;
-  }
-
-  private get currentMon() {
-    const display = global.display;
-    return `mo${display.get_current_monitor()}`;
+    return this._workspaceTopology!.activeMonitorWorkspaceNode();
   }
 
   /**
@@ -1331,7 +1070,6 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
    */
   private reloadWindowOverrides() {
     this._rules!.reloadFromConfig(this.ext.configMgr);
-    this.windowProps = this._rules!.windowProps;
   }
 
   /**
@@ -1380,18 +1118,9 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   }
 
   clearRuntimeFloatOverridesForClass(wmClass: string): void {
-    const props = this._rules!.windowProps;
-    const filtered = props.overrides.filter(
-      (override) =>
-        !(override.wmClass === wmClass && !override.wmTitle && override.mode === "float")
-    );
-    if (filtered.length === props.overrides.length) return;
-    props.overrides = filtered;
-    this.ext.configMgr.windowProps = props;
-    this._rules!.windowProps = props;
-    this._rules!.invalidateClassificationCache();
-    this.windowProps = props;
-    this._withTilingShadow("float-override-cleanup", (shadow) => shadow.observePolicy());
+    if (this._rules!.clearRuntimeFloatOverridesForClass(wmClass, this.ext.configMgr)) {
+      this._withTilingShadow("float-override-cleanup", (shadow) => shadow.observePolicy());
+    }
   }
 
   private floatAllWindows() {

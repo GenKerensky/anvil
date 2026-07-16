@@ -144,7 +144,9 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 - Deleted WM thin wrappers: `calculateGaps`, `processFloats`, `enforceUltrawideSize`,
   `_getMonitorConnector`, `_getMonitorConstraints`.
 - Callers use **`wm.tilingRender`** (or `this._tilingRender` inside WM).
-- `renderTree` stays on WM (idle/freeze/tiling-mode + borders); geometry apply stays on `TilingRender`.
+- `renderTree` stays on WM (idle/freeze/tiling-mode + borders); tiled geometry derivation and
+  application stayed on `TilingRender` at this stage. The imperative Meta effect moved to
+  `GnomeWindowOperations` in the 2026-07-16 ownership decision below.
 
 ### F5 Stage 4 — WindowTracker (2026-07-10)
 
@@ -197,8 +199,9 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 
 ### Residual Stage 20 — CommandBus + schema (2026-07-11)
 
-- **CommandBus** owns AnvilAction handler table; WM.command delegates; injectable
-  `commandBus` for keybindings/tests (B3-1 full, B10-2).
+- **CommandBus** owns the legacy/shadow AnvilAction handler table; WM.command delegates on those
+  engine routes; injectable `commandBus` for keybindings/tests (B3-1 full, B10-2). Core routing was
+  added later and is governed by the 2026-07-16 ownership decision below.
 - **WindowConfig** shared types + `isWindowConfig` guard for prefs/shell (C4-1).
 - **QuickSettingsExternalIndicator** adapter type (C1-1); architecture rule 7 reaffirmed (D3-1).
 
@@ -278,7 +281,7 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 - **wireKeybindings()** after Keybindings construct; `kbd` getter no longer lazy-creates (B4-9, B2-2 partial).
 - **enable()** sets `disabled = false` (B4-8).
 - Empty **show-tile-preview** handler documented (suppress Mutter default preview) (B4-6).
-- Freeze protocol + constraints clamp-applied-rect docs on TilingRender (B7-3, B8-3).
+- Freeze protocol + constraints-clamp-requested-rect docs on TilingRender (B7-3, B8-3).
 - **Logger.isDebugEnabled()** gates debugTree on render hot path (B7-4).
 - Prefs→shell GSettings contract documented on SettingsBridge (C3-1).
 
@@ -614,3 +617,59 @@ A second audit of the refactor found remaining work; all resolved.
   cleanup, and applies a successful pure plan to the selected pair.
 - **Invalid geometry is a no-op**: a nonpositive parent span or an ineligible boundary returns no
   plan, preserving the current shares instead of manufacturing zero percentages.
+
+### Legacy topology and shell-operation ownership (2026-07-16)
+
+- **`LegacyWorkspaceTopology` owns the GNOME-to-Tree projection**: it enumerates workspaces,
+  monitors, and windows; builds and reindexes legacy identities; and resolves active and adjacent
+  monitor/workspace nodes. It requests binding when it projects a workspace, but `SignalManager`
+  remains the owner of signal connection, disconnection, and timeout lifetime. `Tree` exposes only
+  structural mutation, lookup, traversal, identity changes, and invariants.
+- **`GnomeWindowOperations` owns explicit shell-requested frame moves**: move, center, and
+  cross-monitor rectangle projection no longer live in `AnvilRuntime`. `TilingRender` alone derives
+  tiled rectangles and applies tiled-layout gap/constraint policy, then delegates its imperative
+  `Meta.Window` effect through the injected move dependency. Portable intention application,
+  active Grab-Resize positioning, and admission-time unmaximize remain lifecycle-specific effects
+  in their existing owners.
+- **`CorePlatformCommands` owns core-mode shell command semantics**: Runtime selects the engine and
+  routes typed actions. Platform-owned core actions bypass generic `observeCommand` and the legacy
+  `CommandBus`; when an action also changes portable policy or operation state, the handler uses a
+  named typed observation hook. Unhandled core actions use the portable `observeCommand` route and
+  fail closed instead of falling through to legacy handlers.
+- **Rules and workspace owners retain their state**: `RulesEngine` owns override persistence and
+  cache invalidation; `WorkspaceMutations` owns always-on-top cleanup for legacy floating windows.
+
+### Production module budget exceptions (2026-07-16)
+
+- **`anvil-runtime.ts` remains a composition exception**: its remaining size is graph wiring,
+  lifecycle rollback/teardown, engine routing, narrow host adapters, and the official shell probe.
+  Deleting it would spread construction order, rollback, teardown, and adapter wiring across the
+  extension entry point and every owner module.
+- **`tree.ts` remains a structural compatibility exception**: `Node` relationships and the
+  extending `Tree` aggregate share one public import surface. A file-only split with re-exports
+  would not hide complexity or reduce caller interfaces; deleting the module would recreate node
+  identity, relationship, traversal, and structural invariants in layout, tracking, and rendering.
+- **`tiling-shadow.ts` remains the experimental migration adapter tracked by TD-022**: it
+  concentrates normalized ingress, state comparison, portable command observation, and operation
+  bridging. Deleting it without ending the migration would spread those responsibilities across
+  Runtime and the GNOME adapters.
+- **`window-tracker.ts` remains the window-lifecycle owner**: it concentrates readiness admission,
+  window/actor signals, reconcile backoff, destroy processing, and teardown. Deleting it would
+  recreate that state machine in Runtime, SignalManager, and layout callers.
+- **`layout-engine.ts` remains the structural-layout and percent-algebra owner**: it concentrates
+  split, move, swap, focus, and percent invariants behind one host interface. Deleting it would
+  create competing tree/percent writers in commands, tracking, drag/drop, and Grab-Resize.
+- **`grab-resize-session.ts` remains the stateful Grab-Resize coordinator**: pure pair selection and
+  percent planning have moved to `grab-resize-policy.ts`, while recognition, polling, snapshots,
+  exemptions, percent application, and cleanup remain one lifecycle. Deleting it would distribute
+  a timing-sensitive state machine across signal and command paths.
+- **`command-handlers.ts` remains the legacy/shadow handler-table factory**: it maps the typed action
+  interface to owner modules while hiding command-family shell semantics. Deleting it would move
+  those semantics and its broad host knowledge into `CommandBus` or Runtime without reducing the
+  caller interface.
+- **`tiling-render.ts` remains the tiled geometry-policy owner**: it concentrates gap policy,
+  constraints, container/split derivation, render rectangles, and tree cleanup, while delegating
+  imperative Meta effects. Deleting it would spread geometry policy across Tree, Runtime, command
+  handlers, and window operations.
+- **A further split needs a deeper interface**: line-count-only file moves and re-export facades
+  fail the deletion test because they leave the same knowledge at the same caller interfaces.

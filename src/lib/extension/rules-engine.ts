@@ -326,4 +326,19 @@ export class RulesEngine {
     }
     this.invalidateClassificationCache();
   }
+
+  /** Remove session-created class-wide float rules for the official test probe. */
+  clearRuntimeFloatOverridesForClass(wmClass: string, configMgr: ConfigManager): boolean {
+    const props = this.windowProps;
+    const filtered = props.overrides.filter(
+      (override) =>
+        !(override.wmClass === wmClass && !override.wmTitle && override.mode === "float")
+    );
+    if (filtered.length === props.overrides.length) return false;
+    props.overrides = filtered;
+    configMgr.windowProps = props;
+    this.windowProps = props;
+    this.invalidateClassificationCache();
+    return true;
+  }
 }

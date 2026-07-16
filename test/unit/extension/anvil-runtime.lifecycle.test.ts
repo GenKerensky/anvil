@@ -11,6 +11,7 @@ function installActivationStubs(runtime: any) {
   const subject = runtime;
   subject._tree = { initialize: vi.fn(), dispose: vi.fn() };
   subject._signalManager = { bindAll: vi.fn(), unbindAll: vi.fn() };
+  subject._workspaceTopology = { windowsAcrossWorkspaces: vi.fn(() => []) };
   subject._tilingShadow = { bootstrap: vi.fn() };
   vi.spyOn(runtime, "reloadTree").mockImplementation(() => {});
 }

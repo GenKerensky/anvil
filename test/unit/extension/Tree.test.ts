@@ -55,13 +55,16 @@ describe("Tree", () => {
       focusMetaWindow: null,
       determineSplitLayout: vi.fn(() => LAYOUT_TYPES.HSPLIT),
       floatingWindow: vi.fn(() => false),
-      bindWorkspaceSignals: vi.fn(),
+      adjacentMonitor: vi.fn(() => null),
       presentation: createTreePresentationStub(),
     };
 
     tree = new Tree(mockAnvilRuntime as any);
     tree.initialize();
-    tree._initWorkspaces();
+    const workspace = tree.createNode(tree.nodeValue, NODE_TYPES.WORKSPACE, "ws0")!;
+    workspace.layout = LAYOUT_TYPES.HSPLIT;
+    const monitor = tree.createNode(workspace.nodeValue, NODE_TYPES.MONITOR, "mo0ws0")!;
+    monitor.layout = LAYOUT_TYPES.HSPLIT;
   });
 
   describe("Constructor", () => {
@@ -82,7 +85,7 @@ describe("Tree", () => {
       expect(tree.host.determineSplitLayout).toBeDefined();
     });
 
-    it("should initialize workspaces during explicit activation", () => {
+    it("should accept workspace structure during explicit activation", () => {
       const workspaces = tree.getNodeByType(NODE_TYPES.WORKSPACE);
       expect(workspaces.length).toBeGreaterThan(0);
     });
@@ -213,72 +216,6 @@ describe("Tree", () => {
 
       const windows = tree.nodeWindows;
       expect(Array.isArray(windows)).toBe(true);
-    });
-  });
-
-  describe("addWorkspace", () => {
-    it("should add new workspace", () => {
-      mockWorkspaceManager.get_n_workspaces.mockReturnValue(2);
-      mockWorkspaceManager.get_workspace_by_index.mockImplementation((i: number) => ({
-        index: () => i,
-      }));
-
-      const initialCount = tree.getNodeByType(NODE_TYPES.WORKSPACE).length;
-      const result = tree.addWorkspace(1);
-
-      expect(result).toBe(true);
-      expect(tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBe(initialCount + 1);
-    });
-
-    it("should not add duplicate workspace", () => {
-      const initialCount = tree.getNodeByType(NODE_TYPES.WORKSPACE).length;
-
-      const result = tree.addWorkspace(0);
-
-      expect(result).toBe(false);
-      expect(tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBe(initialCount);
-    });
-
-    it("should set workspace layout to HSPLIT", () => {
-      mockWorkspaceManager.get_n_workspaces.mockReturnValue(2);
-
-      tree.addWorkspace(1);
-      const workspace = tree.findNode("ws1");
-
-      expect(workspace!.layout).toBe(LAYOUT_TYPES.HSPLIT);
-    });
-
-    it("should create monitors for workspace", () => {
-      mockWorkspaceManager.get_n_workspaces.mockReturnValue(2);
-      (global as any).display.get_n_monitors.mockReturnValue(2);
-
-      tree.addWorkspace(1);
-      const workspace = tree.findNode("ws1");
-      const monitors = workspace!.getNodeByType(NODE_TYPES.MONITOR);
-
-      expect(monitors.length).toBe(2);
-    });
-  });
-
-  describe("removeWorkspace", () => {
-    it("should remove existing workspace", () => {
-      const result = tree.removeWorkspace(0);
-
-      expect(result).toBe(true);
-      expect(tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBe(0);
-    });
-
-    it("should return false for non-existent workspace", () => {
-      const result = tree.removeWorkspace(999);
-
-      expect(result).toBe(false);
-    });
-
-    it("should remove workspace from tree", () => {
-      tree.removeWorkspace(0);
-
-      const found = tree.findNode("ws0");
-      expect(found).toBeNull();
     });
   });
 

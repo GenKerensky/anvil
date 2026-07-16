@@ -17,8 +17,7 @@ function fixture() {
     tilingRenderRender: vi.fn(),
     recordSettledTilingComparison: vi.fn(),
     trackCurrentWindows: vi.fn(),
-    treeReinitializeWorkspaces: vi.fn(),
-    treeResetRoot: vi.fn(),
+    rebuildWorkspaceTopology: vi.fn(),
     disableDecorations: vi.fn(),
     tilingModeEnabled: true,
   };

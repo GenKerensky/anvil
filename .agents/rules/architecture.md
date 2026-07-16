@@ -18,8 +18,11 @@
 
 ```text
 Meta event  → WindowTracker  → LayoutEngine (mutate tree)
-                             → TilingRender  (apply frames)
-Keybinding  → CommandBus     → Layout / Rules / Settings / Focus
+                             → TilingRender (derive tiled frames)
+                             → GnomeWindowOperations (general Meta frame apply)
+Keybinding  → AnvilRuntime.command
+            → legacy/shadow: CommandBus → Layout / Rules / Settings / Focus
+            → core: CorePlatformCommands or typed portable observation
 GSettings   → SettingsBridge → affected modules only
 Prefs write → GSettings / windows.json reload trigger → shell reacts
 ```
@@ -27,13 +30,16 @@ Prefs write → GSettings / windows.json reload trigger → shell reacts
 | Role                        | Module(s)                                                                |
 | --------------------------- | ------------------------------------------------------------------------ |
 | Shell facade / public API   | `anvil-runtime.ts` (`AnvilRuntime`) — may be refactored or split freely  |
-| Typed user actions          | `window/actions.ts` + `command-bus.ts`                                   |
+| Typed user actions          | `window/actions.ts`; `AnvilRuntime.command` selects the engine route     |
+| Core platform actions       | `core-platform-commands.ts`                                              |
 | Float/tile rules            | `rules-engine.ts`                                                        |
 | Window admit/destroy        | `window-tracker.ts` (`admitWindow`)                                      |
 | Tree structure              | `tree.ts` + **TreeHost** (no `AnvilRuntime` import)                      |
+| Legacy GNOME topology       | `legacy-workspace-topology.ts`                                           |
 | Layout algebra + percents   | `layout-engine.ts`                                                       |
 | Focus entry                 | `focus-controller.ts` (+ `LayoutEngine.focus`)                           |
-| Frame geometry              | `tiling-render.ts`                                                       |
+| Tiled geometry policy       | `tiling-render.ts`                                                       |
+| Explicit shell frame moves  | `gnome-window-operations.ts`                                             |
 | Borders                     | `border-controller.ts`                                                   |
 | Tree presentation           | `tree-presentation.ts` (tabs, decorations, structural actors, previews)  |
 | Grab / live resize          | `grab-resize-session.ts`                                                 |
@@ -64,23 +70,37 @@ Prefs write → GSettings / windows.json reload trigger → shell reacts
 
 Do **not** invent a second write path.
 
-| Concern                            | Sole owner                                         | Forbidden                                                   |
-| ---------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
-| Tree structure                     | `Tree` + TreeHost                                  | Tracker/commands mutating tree without LayoutEngine for ops |
-| Sibling percents                   | `LayoutEngine`                                     | Ad-hoc `percent` outside layout/grab session math           |
-| Frame geometry (move/resize apply) | `TilingRender`                                     | `move()` from random command paths for tiling layout        |
-| Float/tile classification          | `RulesEngine`                                      | Parallel `isFloatingExempt` logic on WM                     |
-| Window admit / destroy             | `WindowTracker` (`admitWindow` / destroy pipeline) | New Meta track entry that bypasses `admitWindow`            |
-| Grab session + resize exemption    | `GrabResizeSession`                                | New 16ms grab loops or exemption maps on WM                 |
-| Focus borders / split hints        | `BorderController`                                 | New border actors created outside controller                |
-| Legacy Tree presentation           | `TreePresentation` / `DragPreviewPresenter`        | St/Clutter actor fields or construction inside `tree.ts`    |
-| Directional focus helpers          | `FocusController`                                  | Duplicating stacked/tabbed raise logic in command handlers  |
-| GSettings reactions                | `SettingsBridge`                                   | Mega-`switch (key)` on WM                                   |
-| User command dispatch              | `CommandBus` via `AnvilRuntime.command()`          | New open-coded `switch (action.name)`                       |
+| Concern                                   | Sole owner                                         | Forbidden                                                   |
+| ----------------------------------------- | -------------------------------------------------- | ----------------------------------------------------------- |
+| Tree structure                            | `Tree` + TreeHost                                  | Tracker/commands mutating tree without LayoutEngine for ops |
+| Sibling percents                          | `LayoutEngine`                                     | Ad-hoc `percent` outside layout/grab session math           |
+| Tiled frame derivation and policy         | `TilingRender`                                     | Ad-hoc tiled rectangle policy in commands or runtime        |
+| Explicit frame moves + monitor projection | `GnomeWindowOperations`                            | Raw frame moves in command/runtime owners                   |
+| Legacy workspace/monitor projection       | `LegacyWorkspaceTopology`                          | GNOME topology discovery or reindexing in `Tree`            |
+| Float/tile classification                 | `RulesEngine`                                      | Parallel `isFloatingExempt` logic on WM                     |
+| Window admit / destroy                    | `WindowTracker` (`admitWindow` / destroy pipeline) | New Meta track entry that bypasses `admitWindow`            |
+| Grab session + resize exemption           | `GrabResizeSession`                                | New 16ms grab loops or exemption maps on WM                 |
+| Focus borders / split hints               | `BorderController`                                 | New border actors created outside controller                |
+| Legacy Tree presentation                  | `TreePresentation` / `DragPreviewPresenter`        | St/Clutter actor fields or construction inside `tree.ts`    |
+| Directional focus helpers                 | `FocusController`                                  | Duplicating stacked/tabbed raise logic in command handlers  |
+| GSettings reactions                       | `SettingsBridge`                                   | Mega-`switch (key)` on WM                                   |
+| User command routing                      | `AnvilRuntime` by selected engine                  | Falling through from core mode to the legacy CommandBus     |
+| Legacy/shadow command semantics           | `CommandBus`                                       | Open-coded legacy action switches in Runtime                |
+| Core platform command semantics           | `CorePlatformCommands`                             | Generic `observeCommand` for platform-owned core actions    |
+
+Lifecycle-specific frame effects remain with the owner whose ordering they implement:
+`GnomeIntentionApplier` applies portable intentions, `GrabResizeSession` positions an active grab,
+and `WindowTracker` performs admission-time unmaximize. They are not general shell move paths.
 
 **Render scheduling:** idle coalesce, freeze, and tiling-mode gate may live on the shell entry
-that calls `TilingRender` (today: `AnvilRuntime.renderTree`). Geometry **apply** stays on
-`TilingRender`.
+that calls `TilingRender` (today: `AnvilRuntime.renderTree`). Tiled rectangle derivation, gaps, and
+constraints stay on `TilingRender`; it requests application through its injected `moveWindow`
+dependency. `GnomeWindowOperations` owns general, explicit shell-requested `Meta.Window`
+unmaximize, move, and resize calls, subject to the lifecycle-specific exceptions above.
+
+**Topology signal lifetime:** `LegacyWorkspaceTopology` may request workspace-signal binding while
+projecting a newly discovered workspace. `SignalManager` remains the owner of signal connection,
+disconnection, and timeout lifetime.
 
 **Portable migration exception:** the accepted migration plan permits a `shadow` session in which
 legacy remains the sole topology, percentage, and platform-effect writer while the portable state
@@ -96,10 +116,18 @@ removal. See `docs/plans/portable-tiling-state-machine.md` under “Migration ru
 ## 3. Commands are data
 
 - All user actions are **`AnvilAction`** values (`src/lib/extension/window/actions.ts`).
-- Dispatch: `wm.command(action)` → **`CommandBus.dispatch`** (or successor registry).
+- `AnvilRuntime.command(action)` selects exactly one engine route:
+  - In legacy and shadow modes, an optional portable observation is followed by
+    **`CommandBus.dispatch`**.
+  - In core mode, platform-owned actions go to **`CorePlatformCommands`**. That module bypasses
+    generic `observeCommand` and the legacy `CommandBus`, but may update portable state through a
+    named, typed observation hook. Remaining portable actions go to the core `observeCommand`
+    route; unsupported actions fail closed and never fall through to `CommandBus`.
 - Adding a command:
   1. Extend the `AnvilAction` union.
-  2. Register a handler on `CommandBus` / `CommandBusHost`.
+  2. Put its semantics on the selected engine route: `CommandBus` for legacy/shadow,
+     `CorePlatformCommands` for a core-only platform effect, or the portable command translator for
+     portable state.
   3. Add a row to `KEYBINDING_TABLE` if user-facing.
   4. Add unit coverage for the action.
 - Keybindings and tests **build action objects**; they do not call layout internals directly.
@@ -216,6 +244,8 @@ Use project terms in code and APIs:
 ```text
 tree (structure, TreeHost)  ←  layout-engine
                             ←  window-tracker / command-bus / tiling-render
+legacy-workspace-topology   →  tree structural operations
+tiling-render               →  injected GnomeWindowOperations frame apply
 anvil-runtime.ts (or successor)    →  wires all of the above
 ```
 
@@ -231,9 +261,11 @@ anvil-runtime.ts (or successor)    →  wires all of the above
 2. After `redistributeSiblingPercent`, tiled sibling percents sum to ~1.  
    Unset percent is **`undefined`** (equal share in `computeSizes`) — do not overload `0` for unset.
 3. **FLOAT** windows may live in the tree but skip size compute.
-4. **TilingRender** is the only path that assigns tiled frame geometry; constraints clamp
-   **applied rects**, not tree percents.
-5. User actions are **AnvilAction** values handled by **CommandBus**.
+4. **TilingRender** is the only module that derives tiled frame geometry and applies tiled-layout
+   constraints; it delegates the imperative Meta frame effect to **GnomeWindowOperations**.
+   Constraints clamp the requested rect, not tree percents.
+5. User actions are **AnvilAction** values routed by engine: **CommandBus** in legacy/shadow mode,
+   and **CorePlatformCommands** or typed portable observation in core mode.
 
 ---
 
@@ -243,7 +275,8 @@ Before marking a tiling-core task done:
 
 1. [ ] Correct **owner** from the table in §2; no second writer (refactor may move code out of
        or restructure `anvil-runtime.ts`).
-2. [ ] User-facing behavior is an **AnvilAction** + CommandBus/keybinding table entry if applicable.
+2. [ ] User-facing behavior is an **AnvilAction** plus the engine-appropriate handler and
+       keybinding-table entry if applicable.
 3. [ ] Rules/float changes only in **RulesEngine** (+ shared schema if JSON shape changes).
 4. [ ] Lifecycle: enable/disable paired; no getter side effects; no leaky GLib sources.
 5. [ ] Names match **CONTEXT.md** language.
@@ -258,7 +291,7 @@ Before marking a tiling-core task done:
 | Anti-pattern                                         | Do this instead                                                |
 | ---------------------------------------------------- | -------------------------------------------------------------- |
 | New feature logic only on a god-class `AnvilRuntime` | Owner module + host wire (`anvil-runtime.ts` refactor is fine) |
-| Mega-switch on `action.name` or settings key         | CommandBus / SettingsBridge registry                           |
+| Action/settings switch on the wrong engine route     | CommandBus, CorePlatformCommands, or SettingsBridge owner      |
 | `isFloatingExempt` copy-paste / dual classification  | RulesEngine only                                               |
 | Tree importing WM; presentation fields inside Node   | TreeHost; `tree-presentation.ts`                               |
 | `command({ name: "Split" })` from track              | `LayoutEngine.autoSplitFromFocus`                              |

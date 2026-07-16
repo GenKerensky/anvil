@@ -537,7 +537,7 @@ describe("AnvilRuntime - Lifecycle", () => {
       // S2: bindWorkspaceSignals is lifecycle-gated (no connects outside enable).
       // Simulate the bound state that enable()/bindAll() would establish.
       (wm() as any)._signalManager._signalsBound = true;
-      wm().bindWorkspaceSignals(workspace);
+      (wm() as any)._signalManager.bindWorkspaceSignals(workspace);
       workspace.emit("window-added", workspace, window);
 
       expect(ctx.tree.findNode(window)).not.toBeNull();

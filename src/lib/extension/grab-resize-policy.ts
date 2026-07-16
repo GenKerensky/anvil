@@ -4,6 +4,9 @@ import Meta from "gi://Meta";
 
 import { ORIENTATION_TYPES, POSITION, type Node, type RectLike } from "./tree.js";
 
+export type GrabResizeOrientation = typeof ORIENTATION_TYPES[keyof typeof ORIENTATION_TYPES];
+export type GrabResizePosition = typeof POSITION[keyof typeof POSITION];
+
 export function percentsFromSizeDelta(args: {
   firstSize: number;
   secondSize: number;
@@ -51,13 +54,14 @@ export function planPercentResize(args: {
   resizePair: Node | null;
   initRect: RectLike | null;
   currentRect: RectLike;
-  orientation: string | undefined;
-  position: string | undefined;
+  orientation: GrabResizeOrientation;
+  position: GrabResizePosition;
   tiledChildCount: (node: Node) => number;
 }): PercentResizePlan | null {
   const { focusNode, resizePair, initRect, currentRect, orientation, position, tiledChildCount } =
     args;
   if (!resizePair || !initRect) return null;
+  if (position !== POSITION.BEFORE && position !== POSITION.AFTER) return null;
 
   let firstNode = focusNode;
   const sameParent = resizePair.parentNode === focusNode.parentNode;
@@ -68,6 +72,7 @@ export function planPercentResize(args: {
     if (!pairParent || tiledChildCount(pairParent) <= 1) return null;
     const offset = position === POSITION.BEFORE ? 1 : -1;
     if (resizePair.index === null) return null;
+    if (resizePair.index < 0 || resizePair.index >= pairParent.childNodes.length) return null;
     const index = resizePair.index + offset;
     if (index < 0 || index >= pairParent.childNodes.length) return null;
     firstNode = pairParent.childNodes[index];

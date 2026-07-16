@@ -40,7 +40,7 @@ export interface TreeHost {
   readonly presentation: TreePresentationPort;
   determineSplitLayout(): string;
   floatingWindow(node: Node): boolean;
-  bindWorkspaceSignals(workspace: Meta.Workspace): void;
+  adjacentMonitor(nodeWindow: Node, direction: Meta.MotionDirection): Node | null;
 }
 
 /**
@@ -181,7 +181,6 @@ export class Node extends GObject.Object {
 
   constructor(type: NodeType, data: Meta.Window | string | null) {
     super();
-    // TODO - move to GObject property definitions?
     this._type = type; // see NODE_TYPES
     // _data: Meta.Window, unique id strings (Monitor,
     // Workspace or Container identity strings)
@@ -611,89 +610,24 @@ export class Tree extends Node {
     this._host.presentation.remove(node);
   }
 
-  /**
-   * Handles new and existing workspaces in the tree
-   */
-  _initWorkspaces() {
-    const wsManager = global.display.get_workspace_manager();
-    const workspaces = wsManager.get_n_workspaces();
-    for (let i = 0; i < workspaces; i++) {
-      this.addWorkspace(i);
-    }
-  }
-
-  // TODO move to monitor.js
-  addMonitor(wsIndex: number) {
-    const monitors = global.display.get_n_monitors();
-    for (let mi = 0; mi < monitors; mi++) {
-      const monitorWsNode = this.createNode(
-        `ws${wsIndex}`,
-        NODE_TYPES.MONITOR,
-        `mo${mi}ws${wsIndex}`
-      );
-      if (!monitorWsNode) continue;
-      monitorWsNode.layout = this._host.determineSplitLayout();
-      this._host.presentation.ensure(monitorWsNode);
-    }
-  }
-
-  // TODO move to workspace.js
-  addWorkspace(wsIndex: number) {
-    const wsManager = global.display.get_workspace_manager();
-    const workspaceNodeValue = `ws${wsIndex}`;
-
-    const existingWsNode = this.findNode(workspaceNodeValue);
-    if (existingWsNode) {
-      return false;
-    }
-
-    const newWsNode = this.createNode(this.nodeValue, NODE_TYPES.WORKSPACE, workspaceNodeValue);
-    if (!newWsNode) return false;
-
-    const workspace = wsManager.get_workspace_by_index(wsIndex);
-    newWsNode.layout = LAYOUT_TYPES.HSPLIT;
-    this._host.presentation.ensure(newWsNode);
-
-    this._host.bindWorkspaceSignals(workspace!);
-    this.addMonitor(wsIndex);
-
+  /** Remove a complete structural branch and its presentation records. */
+  removeSubtree(node: Node): boolean {
+    if (!this.ownsNode(node) || !node.parentNode) return false;
+    this._releasePresentationSubtree(node);
+    node.parentNode.removeChild(node);
     return true;
   }
 
-  // TODO move to workspace.js
-  removeWorkspace(wsIndex: number) {
-    const workspaceNodeData = `ws${wsIndex}`;
-    const existingWsNode = this.findNode(workspaceNodeData);
-    if (!existingWsNode) {
-      return false;
-    }
+  /** Replace the structural identity used by workspace/monitor lookup. */
+  renameNodeIdentity(node: Node, identity: string): void {
+    if (!this.ownsNode(node)) throw new Error("cannot rename a node outside this tree");
+    node._data = identity;
+  }
 
-    this._releasePresentationSubtree(existingWsNode);
-    this.removeChild(existingWsNode);
-
-    // Phase E fix: Re-index remaining workspace nodes after deletion
-    // Credit: enklht/forge PR #516
-    const allWorkspaces = this.getNodeByType(NODE_TYPES.WORKSPACE);
-    for (const wsNode of allWorkspaces) {
-      const wsMatch = (wsNode.nodeValue as string).match(/^ws(\d+)$/);
-      if (!wsMatch) continue;
-      const currentIdx = parseInt(wsMatch[1], 10);
-      if (currentIdx <= wsIndex) continue;
-
-      // Re-index workspace node itself
-      (wsNode as unknown as { _data: unknown })._data = `ws${currentIdx - 1}`;
-
-      // Re-index its monitor children
-      const monitorNodes = wsNode.getNodeByType(NODE_TYPES.MONITOR);
-      for (const monNode of monitorNodes) {
-        const monMatch = (monNode.nodeValue as string).match(/^(mo\d+)ws\d+$/);
-        if (monMatch) {
-          (monNode as unknown as { _data: unknown })._data = `${monMatch[1]}ws${currentIdx - 1}`;
-        }
-      }
-    }
-
-    return true;
+  private ownsNode(node: Node): boolean {
+    let ancestor: Node | null = node;
+    while (ancestor && ancestor !== this) ancestor = ancestor.parentNode;
+    return ancestor === this;
   }
 
   get nodeWindows() {
@@ -816,7 +750,7 @@ export class Tree extends Node {
         // Find the next monitor
         const nodeWindow = this.findFirstNodeWindowFrom(node);
         if (!nodeWindow) return null;
-        return this.nextMonitor(nodeWindow, position, orientation);
+        return this._host.adjacentMonitor(nodeWindow, direction);
       }
     }
 
@@ -839,21 +773,6 @@ export class Tree extends Node {
     }
 
     return null;
-  }
-
-  nextMonitor(nodeWindow: Node, position: string, orientation: string) {
-    if (!nodeWindow) return null;
-    const nodeValue = nodeWindow.nodeValue as Meta.Window;
-    // Use the built in logic to determine adjacent monitors
-    const monitorDirection = Utils.directionFrom(position, orientation)!;
-    const targetMonitor = global.display.get_monitor_neighbor_index(
-      nodeValue.get_monitor(),
-      monitorDirection
-    );
-    if (targetMonitor < 0) return null;
-    const monWs = `mo${targetMonitor}ws${nodeValue.get_workspace().index()}`;
-    const monitorNode = this.findNode(monWs);
-    return monitorNode;
   }
 
   findAncestorMonitor(node: Node) {

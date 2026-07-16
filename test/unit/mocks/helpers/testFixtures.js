@@ -12,6 +12,7 @@ import { AnvilRuntime } from "../../../../src/lib/extension/anvil-runtime.js";
 import { Tree, LAYOUT_TYPES } from "../../../../src/lib/extension/tree.js";
 import { LayoutEngine } from "../../../../src/lib/extension/layout-engine.js";
 import { TreePresentation } from "../../../../src/lib/extension/tree-presentation.js";
+import { LegacyWorkspaceTopology } from "../../../../src/lib/extension/legacy-workspace-topology.js";
 
 export const DEFAULT_SETTINGS = {
   "tiling-mode-enabled": true,
@@ -138,11 +139,12 @@ export function createAnvilRuntimeFixture(options = {}) {
   // Owner-focused unit tests need the graph without binding real Shell signals.
   // Runtime lifecycle behavior is covered separately through enable()/disable().
   anvilRuntime._initializeGraph();
-  anvilRuntime._tilingShadow.bootstrap(anvilRuntime.windowsAllWorkspaces, (window) =>
-    anvilRuntime._tracker.validWindow(window)
+  anvilRuntime._tilingShadow.bootstrap(
+    anvilRuntime._workspaceTopology.windowsAcrossWorkspaces(),
+    (window) => anvilRuntime._tracker.validWindow(window)
   );
   anvilRuntime.tree.initialize();
-  anvilRuntime.tree._initWorkspaces();
+  anvilRuntime._workspaceTopology.initialize();
   anvilRuntime.disabled = false;
   anvilRuntime._state = "enabled";
 
@@ -169,6 +171,7 @@ export function createTreeFixture(options = {}) {
   const globalCtx = installGnomeGlobals(globals);
   const mockSettings = createMockSettings(settings);
 
+  let topology;
   const mockAnvilRuntime = {
     ext: {
       settings: mockSettings,
@@ -180,6 +183,7 @@ export function createTreeFixture(options = {}) {
     determineSplitLayout: vi.fn(() => LAYOUT_TYPES[defaultLayout] || LAYOUT_TYPES.HSPLIT),
     floatingWindow: vi.fn(() => false),
     bindWorkspaceSignals: vi.fn(),
+    adjacentMonitor: (...args) => topology?.adjacentMonitorNode(...args) ?? null,
     presentation: new TreePresentation(),
   };
 
@@ -204,8 +208,13 @@ export function createTreeFixture(options = {}) {
   }
 
   const tree = new Tree(mockAnvilRuntime);
+  topology = new LegacyWorkspaceTopology({
+    tree,
+    determineSplitLayout: (...args) => mockAnvilRuntime.determineSplitLayout(...args),
+    bindWorkspaceSignals: (...args) => mockAnvilRuntime.bindWorkspaceSignals(...args),
+  });
   tree.initialize();
-  tree._initWorkspaces();
+  topology.initialize();
 
   // Stage 5: tree layout ops (move/split/swap/focus/percent) delegate to LayoutEngine
   mockAnvilRuntime.layoutEngine = new LayoutEngine({
@@ -232,6 +241,7 @@ export function createTreeFixture(options = {}) {
 
   return {
     tree,
+    topology,
     settings: mockSettings,
     runtime: mockAnvilRuntime,
     layoutEngine: mockAnvilRuntime.layoutEngine,

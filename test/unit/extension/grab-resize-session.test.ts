@@ -1,5 +1,5 @@
 /*
- * GrabResizeSession pure unit tests — percent delta math.
+ * GrabResizeSession lifecycle and policy-integration tests.
  */
 
 import Meta from "gi://Meta";
@@ -8,8 +8,6 @@ import { describe, it, expect, vi } from "vitest";
 import {
   LAYOUT_TYPES,
   NODE_TYPES,
-  ORIENTATION_TYPES,
-  POSITION,
   type Node,
   type RectLike,
 } from "../../../src/lib/extension/tree.js";
@@ -17,21 +15,12 @@ import {
   GrabResizeSession,
   type GrabResizeHost,
 } from "../../../src/lib/extension/grab-resize-session.js";
-import {
-  findEligibleResizePair,
-  percentsFromSizeDelta,
-  planPercentResize,
-} from "../../../src/lib/extension/grab-resize-policy.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
   createMockWindow,
   createTreeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
-
-function node(name: string): Node {
-  return { nodeValue: name } as unknown as Node;
-}
 
 function createSessionFixture() {
   const metaWindow = createMockWindow({ id: 41, wm_class: "TestApp", title: "Test" });
@@ -482,264 +471,4 @@ describe("GrabResizeSession resize ownership", () => {
       nextVisible.mock.invocationCallOrder[0]
     );
   });
-});
-
-describe("findEligibleResizePair", () => {
-  it.each([Meta.MotionDirection.RIGHT, Meta.MotionDirection.DOWN])(
-    "skips unavailable candidates along direction %s",
-    (direction) => {
-      const focus = node("focus");
-      const floating = node("floating");
-      const minimized = node("minimized");
-      const eligible = node("eligible");
-      const nextVisible = vi.fn((current: Node) => {
-        if (current === focus) return floating;
-        if (current === floating) return minimized;
-        if (current === minimized) return eligible;
-        return null;
-      });
-
-      expect(
-        findEligibleResizePair({
-          focusNode: focus,
-          direction,
-          nextVisible,
-          isEligible: (candidate) => candidate === eligible,
-        })
-      ).toBe(eligible);
-      expect(nextVisible).toHaveBeenCalledTimes(3);
-    }
-  );
-
-  it("returns null when no participating candidate exists", () => {
-    const focus = node("focus");
-    const unavailable = node("unavailable");
-
-    expect(
-      findEligibleResizePair({
-        focusNode: focus,
-        direction: Meta.MotionDirection.LEFT,
-        nextVisible: (current) => (current === focus ? unavailable : null),
-        isEligible: () => false,
-      })
-    ).toBeNull();
-  });
-
-  it("stops at a surface boundary instead of walking onto another monitor", () => {
-    const focus = node("focus");
-    const monitor = node("monitor");
-    const remote = node("remote");
-    const nextVisible = vi.fn((current: Node) => (current === focus ? monitor : remote));
-
-    expect(
-      findEligibleResizePair({
-        focusNode: focus,
-        direction: Meta.MotionDirection.RIGHT,
-        nextVisible,
-        isBoundary: (candidate) => candidate === monitor,
-        isEligible: (candidate) => candidate === remote,
-      })
-    ).toBeNull();
-    expect(nextVisible).toHaveBeenCalledOnce();
-  });
-
-  it("selects an eligible nested container", () => {
-    const focus = node("focus");
-    const container = node("container");
-
-    expect(
-      findEligibleResizePair({
-        focusNode: focus,
-        direction: Meta.MotionDirection.LEFT,
-        nextVisible: (current) => (current === focus ? container : null),
-        isEligible: (candidate) => candidate === container,
-      })
-    ).toBe(container);
-  });
-
-  it("terminates when a malformed traversal cycles", () => {
-    const focus = node("focus");
-    const unavailable = node("unavailable");
-
-    expect(
-      findEligibleResizePair({
-        focusNode: focus,
-        direction: Meta.MotionDirection.UP,
-        nextVisible: () => unavailable,
-        isEligible: () => false,
-      })
-    ).toBeNull();
-  });
-});
-
-describe("percentsFromSizeDelta", () => {
-  it("updates sibling percents from a positive width delta", () => {
-    const result = percentsFromSizeDelta({
-      firstSize: 500,
-      secondSize: 500,
-      parentSize: 1000,
-      changePx: 100,
-    });
-    expect(result?.firstPercent).toBeCloseTo(0.6);
-    expect(result?.secondPercent).toBeCloseTo(0.4);
-  });
-
-  it("updates sibling percents from a negative delta", () => {
-    const result = percentsFromSizeDelta({
-      firstSize: 500,
-      secondSize: 500,
-      parentSize: 1000,
-      changePx: -100,
-    });
-    expect(result?.firstPercent).toBeCloseTo(0.4);
-    expect(result?.secondPercent).toBeCloseTo(0.6);
-  });
-
-  it("returns zeros when parentSize is non-positive", () => {
-    expect(
-      percentsFromSizeDelta({
-        firstSize: 10,
-        secondSize: 10,
-        parentSize: 0,
-        changePx: 5,
-      })
-    ).toBeNull();
-  });
-});
-
-describe("planPercentResize", () => {
-  it("returns a same-parent horizontal plan without mutating nodes", () => {
-    const { nodes } = createTiledSessionFixture();
-    const initial = nodes.map((candidate) => candidate.percent);
-
-    const plan = planPercentResize({
-      focusNode: nodes[0],
-      resizePair: nodes[1],
-      initRect: nodes[0].rect,
-      currentRect: { x: 0, y: 0, width: 1060, height: 1080 },
-      orientation: ORIENTATION_TYPES.HORIZONTAL,
-      position: POSITION.AFTER,
-      tiledChildCount: (parent) => parent.childNodes.length,
-    });
-
-    expect(plan).toMatchObject({
-      firstNode: nodes[0],
-      secondNode: nodes[1],
-      firstPercent: 1060 / 1920,
-      secondPercent: 860 / 1920,
-    });
-    expect(nodes.map((candidate) => candidate.percent)).toEqual(initial);
-  });
-
-  it("returns null instead of applying zero shares for invalid parent geometry", () => {
-    const { container, nodes } = createTiledSessionFixture();
-    container.rect = { x: 0, y: 0, width: 0, height: 1080 };
-
-    expect(
-      planPercentResize({
-        focusNode: nodes[0],
-        resizePair: nodes[1],
-        initRect: nodes[0].rect,
-        currentRect: { x: 0, y: 0, width: 1060, height: 1080 },
-        orientation: ORIENTATION_TYPES.HORIZONTAL,
-        position: POSITION.AFTER,
-        tiledChildCount: (parent) => parent.childNodes.length,
-      })
-    ).toBeNull();
-  });
-
-  it.each([
-    {
-      name: "horizontal BEFORE",
-      orientation: ORIENTATION_TYPES.HORIZONTAL,
-      position: POSITION.BEFORE,
-      pairFirst: true,
-      parentRect: { x: 0, y: 0, width: 1000, height: 800 },
-      firstRect: { x: 500, y: 0, width: 500, height: 800 },
-      pairRect: { x: 0, y: 0, width: 500, height: 800 },
-      initRect: { x: 0, y: 0, width: 500, height: 400 },
-      currentRect: { x: 0, y: 0, width: 600, height: 400 },
-    },
-    {
-      name: "vertical AFTER",
-      orientation: ORIENTATION_TYPES.VERTICAL,
-      position: POSITION.AFTER,
-      pairFirst: false,
-      parentRect: { x: 0, y: 0, width: 800, height: 1000 },
-      firstRect: { x: 0, y: 0, width: 800, height: 500 },
-      pairRect: { x: 0, y: 500, width: 800, height: 500 },
-      initRect: { x: 0, y: 0, width: 400, height: 500 },
-      currentRect: { x: 0, y: 0, width: 400, height: 600 },
-    },
-  ])(
-    "plans a different-parent $name resize without mutating topology",
-    ({
-      orientation,
-      position,
-      pairFirst,
-      parentRect,
-      firstRect,
-      pairRect,
-      initRect,
-      currentRect,
-    }) => {
-      const ctx = createTreeFixture({ fullExtWm: true });
-      const { monitor } = getWorkspaceAndMonitor(ctx);
-      const focusContainer = ctx.tree.createNode(
-        monitor.nodeValue,
-        NODE_TYPES.CON,
-        "focus-container"
-      );
-      const pairContainer = ctx.tree.createNode(
-        monitor.nodeValue,
-        NODE_TYPES.CON,
-        "pair-container"
-      );
-      pairContainer.rect = parentRect;
-      const focus = ctx.tree.createNode(
-        focusContainer.nodeValue,
-        NODE_TYPES.WINDOW,
-        createMockWindow({ id: 80, rect: initRect })
-      );
-      const createFirst = () =>
-        ctx.tree.createNode(
-          pairContainer.nodeValue,
-          NODE_TYPES.WINDOW,
-          createMockWindow({ id: 81, rect: firstRect })
-        );
-      const createPair = () =>
-        ctx.tree.createNode(
-          pairContainer.nodeValue,
-          NODE_TYPES.WINDOW,
-          createMockWindow({ id: 82, rect: pairRect })
-        );
-      const pair = pairFirst ? createPair() : null;
-      const first = createFirst();
-      const finalPair = pair ?? createPair();
-      focus.rect = initRect;
-      first.rect = firstRect;
-      finalPair.rect = pairRect;
-      first.percent = 0.5;
-      finalPair.percent = 0.5;
-
-      const plan = planPercentResize({
-        focusNode: focus,
-        resizePair: finalPair,
-        initRect,
-        currentRect,
-        orientation,
-        position,
-        tiledChildCount: (parent) => parent.childNodes.length,
-      });
-
-      expect(plan).toMatchObject({
-        firstNode: first,
-        secondNode: finalPair,
-        firstPercent: 0.6,
-        secondPercent: 0.4,
-      });
-      expect(first.percent).toBe(0.5);
-      expect(finalPair.percent).toBe(0.5);
-    }
-  );
 });

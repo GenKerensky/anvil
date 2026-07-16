@@ -25,6 +25,7 @@ import type { PointerFocusSource } from "./pointer-policy.js";
 import * as Main from "resource:///org/gnome/shell/ui/main.js";
 import type { EventSchedulerPort } from "./event-scheduler.js";
 import type { BorderRefreshMode } from "./render-scheduler.js";
+import type { LegacyWorkspaceTopology } from "./legacy-workspace-topology.js";
 type SignalId = number;
 
 /** Host surface for SignalManager — intentionally wide (C1 accepted seam). */
@@ -32,6 +33,7 @@ export interface SignalManagerHost {
   readonly coreTilingEngine: boolean;
   readonly tracker: WindowTracker;
   readonly tree: Tree;
+  readonly workspaceTopology: LegacyWorkspaceTopology;
   readonly layout: LayoutEngine;
   readonly settingsBridge: SettingsBridge;
 
@@ -187,7 +189,7 @@ export class SignalManager {
       extWsm.connect("workspace-added", (_wsm, wsIndex) => {
         host.observePortableTopology();
         if (host.coreTilingEngine) return;
-        host.tree.addWorkspace(wsIndex);
+        host.workspaceTopology.addWorkspace(wsIndex);
         host.trackCurrentMonWs();
         this._workspaceAdded = true;
         host.renderTree("workspace-added");
@@ -195,7 +197,7 @@ export class SignalManager {
       extWsm.connect("workspace-removed", (_wsm, wsIndex) => {
         host.observePortableTopology();
         if (host.coreTilingEngine) return;
-        host.tree.removeWorkspace(wsIndex);
+        host.workspaceTopology.removeWorkspace(wsIndex);
         host.trackCurrentMonWs();
         this._workspaceRemoved = true;
         host.updateDecorationLayout();
@@ -242,8 +244,7 @@ export class SignalManager {
 
     this._overviewSignals = [
       Main.overview.connect("hiding", () => {
-        // TODO(overview-thrash): fromOverview was dead state — re-implement
-        // deliberately if overview-thrash skip is needed.
+        // Overview-thrash guards remain deferred until backed by a reproducible regression.
         const eventObj = {
           name: "focus-after-overview",
           callback: () => {
@@ -257,8 +258,7 @@ export class SignalManager {
         host.scheduler.enqueue(eventObj);
       }),
       Main.overview.connect("showing", () => {
-        // TODO(overview-thrash): toOverview was dead state — re-implement
-        // deliberately if overview-thrash skip is needed.
+        // See docs/plans/product-follow-ups.md for the owned decision point.
       }),
     ];
   }
@@ -325,10 +325,10 @@ export class SignalManager {
   }
 
   /**
-   * Per-workspace signal binding (shared with Tree via TreeHost — C11).
+   * Per-workspace signal binding (shared with LegacyWorkspaceTopology).
    *
    * S2: defers the actual `Meta.Workspace.connect()` until signals are bound
-   * (i.e. until `bindAll()` runs from `enable()`). `Tree._initWorkspaces` calls
+   * (i.e. until `bindAll()` runs from `enable()`). Topology initialization calls
    * this during runtime activation; without this guard it would connect signals
    * before `enable()`, violating architecture rule §1 (lifecycle purity). The
    * pre-bind call is a no-op; `bindAll()` loops the existing

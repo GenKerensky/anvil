@@ -41,7 +41,7 @@ function showAboutWindow(
   version = version ?? "development";
   const abt = new Adw.AboutWindow({
     ...(parent && { transient_for: parent }),
-    // TODO: fetch these from github at build time
+    // Remote contributor sourcing is tracked in docs/plans/product-follow-ups.md.
     application_name: _("Anvil"),
     application_icon: "anvil-logo-symbolic",
     version: `${String(PACKAGE_VERSION)}-${version.toString()}`,

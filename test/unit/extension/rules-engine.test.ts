@@ -485,5 +485,24 @@ describe("RulesEngine", () => {
         { wmClass: "B", mode: "tile" },
       ]);
     });
+
+    it("clears only runtime class-wide float overrides for a class", () => {
+      const props = {
+        overrides: [
+          { wmClass: "App", mode: "float" as const },
+          { wmClass: "App", wmTitle: "User Rule", mode: "float" as const },
+          { wmClass: "Other", mode: "float" as const },
+        ],
+      };
+      const configMgr = { windowProps: props };
+      engine.windowProps = props;
+
+      expect(engine.clearRuntimeFloatOverridesForClass("App", configMgr as any)).toBe(true);
+      expect(configMgr.windowProps.overrides).toEqual([
+        { wmClass: "App", wmTitle: "User Rule", mode: "float" },
+        { wmClass: "Other", mode: "float" },
+      ]);
+      expect(engine.clearRuntimeFloatOverridesForClass("Missing", configMgr as any)).toBe(false);
+    });
   });
 });

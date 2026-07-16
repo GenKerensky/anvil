@@ -1,5 +1,5 @@
 /*
- * AnvilRuntime window movement tests
+ * GNOME window-operation tests and runtime resize routing.
  *
  * Tests for move, moveCenter, rectForMonitor, and resize.
  * Ported from jcrussell/forge
@@ -8,24 +8,27 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
+import { GnomeWindowOperations } from "../../../src/lib/extension/gnome-window-operations.js";
 import {
   createMockWindow,
   createAnvilRuntimeFixture,
   getWorkspaceAndMonitor,
 } from "../mocks/helpers/index.js";
 
-describe("AnvilRuntime - Movement", () => {
+describe("GNOME window operations", () => {
   let ctx: any;
+  let operations: GnomeWindowOperations;
 
   beforeEach(() => {
     ctx = createAnvilRuntimeFixture();
+    operations = new GnomeWindowOperations();
   });
 
   const wm = () => ctx.anvilRuntime;
 
   describe("move", () => {
     it("should do nothing when metaWindow is null", () => {
-      expect(() => wm().move(null, { x: 0, y: 0, width: 100, height: 100 })).not.toThrow();
+      expect(() => operations.move(null, { x: 0, y: 0, width: 100, height: 100 })).not.toThrow();
     });
 
     it("should call move_frame and move_resize_frame with given rect", () => {
@@ -33,7 +36,7 @@ describe("AnvilRuntime - Movement", () => {
       const moveFrameSpy = vi.spyOn(metaWindow, "move_frame");
       const moveResizeSpy = vi.spyOn(metaWindow, "move_resize_frame");
 
-      wm().move(metaWindow, { x: 50, y: 60, width: 800, height: 600 });
+      operations.move(metaWindow, { x: 50, y: 60, width: 800, height: 600 });
 
       expect(moveFrameSpy).toHaveBeenCalledWith(true, 50, 60);
       expect(moveResizeSpy).toHaveBeenCalledWith(true, 50, 60, 800, 600);
@@ -43,7 +46,7 @@ describe("AnvilRuntime - Movement", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       const unmaximizeSpy = vi.spyOn(metaWindow, "unmaximize");
 
-      wm().move(metaWindow, { x: 0, y: 0, width: 100, height: 100 });
+      operations.move(metaWindow, { x: 0, y: 0, width: 100, height: 100 });
 
       expect(unmaximizeSpy).toHaveBeenCalled();
     });
@@ -53,7 +56,7 @@ describe("AnvilRuntime - Movement", () => {
       const actor = metaWindow.get_compositor_private();
       const removeTransitionsSpy = vi.spyOn(actor, "remove_all_transitions");
 
-      wm().move(metaWindow, { x: 0, y: 0, width: 100, height: 100 });
+      operations.move(metaWindow, { x: 0, y: 0, width: 100, height: 100 });
 
       expect(removeTransitionsSpy).toHaveBeenCalled();
     });
@@ -63,7 +66,7 @@ describe("AnvilRuntime - Movement", () => {
       (metaWindow as any).grabbed = true;
       const moveFrameSpy = vi.spyOn(metaWindow, "move_frame");
 
-      wm().move(metaWindow, { x: 10, y: 20, width: 300, height: 200 });
+      operations.move(metaWindow, { x: 10, y: 20, width: 300, height: 200 });
 
       expect(moveFrameSpy).not.toHaveBeenCalled();
     });
@@ -72,13 +75,15 @@ describe("AnvilRuntime - Movement", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       metaWindow.get_compositor_private = vi.fn(() => null) as any;
 
-      expect(() => wm().move(metaWindow, { x: 0, y: 0, width: 100, height: 100 })).not.toThrow();
+      expect(() =>
+        operations.move(metaWindow, { x: 0, y: 0, width: 100, height: 100 })
+      ).not.toThrow();
     });
   });
 
   describe("moveCenter", () => {
     it("should do nothing when metaWindow is null", () => {
-      expect(() => wm().moveCenter(null)).not.toThrow();
+      expect(() => operations.moveCenter(null)).not.toThrow();
     });
 
     it("should call move with centered coordinates", () => {
@@ -87,9 +92,9 @@ describe("AnvilRuntime - Movement", () => {
         title: "Test",
         rect: { x: 0, y: 0, width: 400, height: 300 },
       });
-      const moveSpy = vi.spyOn(wm(), "move");
+      const moveSpy = vi.spyOn(operations, "move");
 
-      wm().moveCenter(metaWindow);
+      operations.moveCenter(metaWindow);
 
       expect(moveSpy).toHaveBeenCalledTimes(1);
       const args = moveSpy.mock.calls[0] as any[];
@@ -103,11 +108,11 @@ describe("AnvilRuntime - Movement", () => {
 
   describe("rectForMonitor", () => {
     it("should return null for null node", () => {
-      expect(wm().rectForMonitor(null, 0)).toBeNull();
+      expect(operations.rectForMonitor(null, 0)).toBeNull();
     });
 
     it("should return null for non-window nodes", () => {
-      expect(wm().rectForMonitor(ctx.tree.rootNode, 0)).toBeNull();
+      expect(operations.rectForMonitor(ctx.tree.rootNode, 0)).toBeNull();
     });
 
     it("should return null for negative monitor index", () => {
@@ -115,7 +120,7 @@ describe("AnvilRuntime - Movement", () => {
       const { monitor } = getWorkspaceAndMonitor(ctx);
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
 
-      expect(wm().rectForMonitor(node, -1)).toBeNull();
+      expect(operations.rectForMonitor(node, -1)).toBeNull();
     });
 
     it("should scale rect for target monitor", () => {
@@ -128,11 +133,30 @@ describe("AnvilRuntime - Movement", () => {
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       node.rect = { x: 0, y: 0, width: 960, height: 540 };
 
-      const result = wm().rectForMonitor(node, 0);
+      const result = operations.rectForMonitor(node, 0);
 
       expect(result).not.toBeNull();
       expect(result!.width).toBeLessThanOrEqual(1920);
       expect(result!.height).toBeLessThanOrEqual(1080);
+    });
+
+    it("returns a projection without mutating the node rect", () => {
+      const metaWindow = createMockWindow({
+        wm_class: "TestApp",
+        title: "Test",
+        rect: { x: 0, y: 0, width: 960, height: 540 },
+      });
+      const { monitor } = getWorkspaceAndMonitor(ctx);
+      const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
+      const original = { x: 100, y: 50, width: 960, height: 540 };
+      node.rect = original;
+
+      const result = operations.rectForMonitor(node, 1);
+
+      expect(result).not.toBeNull();
+      expect(result).not.toBe(original);
+      expect(node.rect).toBe(original);
+      expect(node.rect).toEqual({ x: 100, y: 50, width: 960, height: 540 });
     });
 
     it("should return null for window without rect and tile mode", () => {
@@ -145,7 +169,7 @@ describe("AnvilRuntime - Movement", () => {
       node.rect = null;
       node.mode = "TILE";
 
-      expect(wm().rectForMonitor(node, 0)).toBeNull();
+      expect(operations.rectForMonitor(node, 0)).toBeNull();
     });
 
     it("should use frame rect for float windows without stored rect", () => {
@@ -159,7 +183,7 @@ describe("AnvilRuntime - Movement", () => {
       node.rect = null;
       node.mode = WINDOW_MODES.FLOAT;
 
-      const result = wm().rectForMonitor(node, 0);
+      const result = operations.rectForMonitor(node, 0);
 
       expect(result).not.toBeNull();
     });
@@ -174,13 +198,13 @@ describe("AnvilRuntime - Movement", () => {
       const node = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       node.rect = { x: 100, y: 50, width: 960, height: 540 };
 
-      const result = wm().rectForMonitor(node, 0);
+      const result = operations.rectForMonitor(node, 0);
 
       expect(result).not.toBeNull();
     });
   });
 
-  describe("resize", () => {
+  describe("runtime resize routing", () => {
     it("should call _handleGrabOpBegin with correct grab op", () => {
       const metaWindow = createMockWindow({ wm_class: "TestApp", title: "Test" });
       metaWindow._workspace = ctx.workspaces[0];

@@ -59,14 +59,17 @@ describe("TilingRender Layout Algorithms", () => {
       focusMetaWindow: null,
       determineSplitLayout: vi.fn(() => LAYOUT_TYPES.HSPLIT),
       floatingWindow: vi.fn(() => false),
-      bindWorkspaceSignals: vi.fn(),
+      adjacentMonitor: vi.fn(() => null),
       notifyFocusChanged: vi.fn(),
       presentation: createTreePresentationStub(),
     };
 
     tree = new Tree(mockAnvilRuntime as any);
     tree.initialize();
-    tree._initWorkspaces();
+    const workspace = tree.createNode(tree.nodeValue, NODE_TYPES.WORKSPACE, "ws0")!;
+    workspace.layout = LAYOUT_TYPES.HSPLIT;
+    const monitor = tree.createNode(workspace.nodeValue, NODE_TYPES.MONITOR, "mo0ws0")!;
+    monitor.layout = LAYOUT_TYPES.HSPLIT;
     mockAnvilRuntime.layoutEngine = new LayoutEngine({
       get tree() {
         return tree;

@@ -14,7 +14,7 @@ describe("Tiling Tree lifecycle", () => {
     expect(ctx.tree.nodeValue).toBe("root");
 
     ctx.tree.initialize();
-    ctx.tree._initWorkspaces();
+    ctx.topology.initialize();
     expect(ctx.windowGroup._children).toHaveLength(initialActorCount);
     expect(ctx.tree.getNodeByType(NODE_TYPES.WORKSPACE).length).toBeGreaterThan(0);
   });

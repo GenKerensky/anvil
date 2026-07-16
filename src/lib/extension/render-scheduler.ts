@@ -23,8 +23,7 @@ export interface RenderSchedulerHost {
   tilingRenderRender(from: string): void;
   recordSettledTilingComparison(): void;
   trackCurrentWindows(): void;
-  treeReinitializeWorkspaces(): void;
-  treeResetRoot(): void;
+  rebuildWorkspaceTopology(): void;
   disableDecorations(): void;
   get tilingModeEnabled(): boolean;
 }
@@ -69,8 +68,7 @@ export class RenderScheduler {
     if (!this._reloadSrcId) {
       this._reloadSrcId = GLib.idle_add(GLib.PRIORITY_LOW, () => {
         this.host.disableDecorations();
-        this.host.treeResetRoot();
-        this.host.treeReinitializeWorkspaces();
+        this.host.rebuildWorkspaceTopology();
         this.host.trackCurrentWindows();
         this.renderTree(from);
         this._reloadSrcId = 0;

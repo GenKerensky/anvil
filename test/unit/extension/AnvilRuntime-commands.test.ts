@@ -33,7 +33,7 @@ describe("AnvilRuntime - Commands", () => {
       ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, metaWindow);
       ctx.display.get_focus_window.mockReturnValue(metaWindow);
 
-      const moveSpy = vi.spyOn(wm(), "move");
+      const moveSpy = vi.spyOn(wm()._windowOperations, "move");
 
       wm().command({
         name: "FloatToggle",

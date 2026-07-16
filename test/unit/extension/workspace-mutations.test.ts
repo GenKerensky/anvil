@@ -9,6 +9,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import { NODE_TYPES } from "../../../src/lib/extension/tree.js";
+import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
 import {
   WorkspaceMutations,
   type WorkspaceMutationsHost,
@@ -166,6 +167,31 @@ describe("WorkspaceMutations", () => {
 
       expect(reparent).not.toHaveBeenCalled();
       expect(host.renderTree).toHaveBeenCalledExactlyOnceWith("test");
+    });
+  });
+
+  describe("always-on-top cleanup", () => {
+    it("removes and restores above state only for floating windows", () => {
+      const { monitor } = getWorkspaceAndMonitor(ctx, 0);
+      const floating = createMockWindow({ wm_class: "Float" });
+      const tiled = createMockWindow({ wm_class: "Tile" });
+      const floatingNode = ctx.tree.createNode(
+        monitor.nodeValue,
+        NODE_TYPES.WINDOW,
+        floating,
+        WINDOW_MODES.FLOAT
+      );
+      ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.WINDOW, tiled, WINDOW_MODES.TILE);
+      floating.make_above();
+      tiled.make_above();
+
+      mutations.cleanupAlwaysFloat();
+      expect(floating.is_above()).toBe(false);
+      expect(tiled.is_above()).toBe(true);
+
+      mutations.restoreAlwaysFloat();
+      expect(floating.is_above()).toBe(true);
+      expect(floatingNode?.mode).toBe(WINDOW_MODES.FLOAT);
     });
   });
 });

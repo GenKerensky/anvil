@@ -45,13 +45,15 @@ All remediation work must preserve these constraints:
 
 1. Follow the owner table in [the architecture rules](../../.agents/rules/architecture.md). A fix
    must land in the module that owns the affected state.
-2. Keep Tiling Render as the only production path that applies tiled window geometry.
+2. Keep Tiling Render as the sole owner of tiled geometry derivation and policy; delegate its
+   general imperative Meta frame application to GnomeWindowOperations while preserving
+   lifecycle-specific effects in their owners.
 3. Keep Tree structure, LayoutEngine percent algebra, RulesEngine classification, and
    GrabResizeSession operation state single-owned.
 4. Pair every GNOME/GObject signal, GLib source, actor, and settings override with an explicit
    lifetime.
-5. Test user commands through `AnvilAction` and CommandBus instead of adding direct runtime entry
-   points.
+5. Test user commands as `AnvilAction` data through the selected engine route: CommandBus in
+   legacy/shadow mode, or CorePlatformCommands and typed portable observation in core mode.
 6. Preserve the supported `AnvilExtension` test probe. Do not replace deleted private test helpers
    with broad runtime exposure.
 7. Separate behavior fixes from structural refactors. A commit should either change behavior or
@@ -72,30 +74,30 @@ All remediation work must preserve these constraints:
 
 ## Inventory summary
 
-| ID     | Status   | Priority | Area                  | Summary                                                         |
-| ------ | -------- | -------- | --------------------- | --------------------------------------------------------------- |
-| TD-001 | Complete | P0       | Window discovery      | Preferences-window lookup skips workspace zero                  |
-| TD-002 | Complete | P0       | Configuration         | Parsed window overrides bypass their runtime validator          |
-| TD-003 | Complete | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected        |
-| TD-004 | Complete | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                 |
-| TD-005 | Complete | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze       |
-| TD-006 | Complete | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection          |
-| TD-007 | Complete | P2       | Runtime API           | Thirteen private compatibility members exist only for tests     |
-| TD-008 | Complete | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain          |
-| TD-009 | Complete | P2       | Shared helpers        | Several helpers and conversions have no production consumer     |
-| TD-010 | Complete | P2       | Policy ownership      | Tested helpers are disconnected from their production owners    |
-| TD-011 | Complete | P2       | GSettings             | Four schema keys have no source consumer                        |
-| TD-012 | Complete | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference      |
-| TD-013 | Complete | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts   |
-| TD-014 | Complete | P2       | Build tooling         | Metadata generation is duplicated                               |
-| TD-015 | Complete | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters         |
-| TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate     |
-| TD-017 | Open     | P3       | Module depth          | Six production modules exceed the soft 500-line budget          |
-| TD-018 | Open     | P3       | Tree ownership        | Legacy Tree still owns platform workspace/monitor orchestration |
-| TD-019 | Complete | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved         |
-| TD-020 | Open     | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions  |
-| TD-021 | Tracked  | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`              |
-| TD-022 | Tracked  | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open     |
+| ID     | Status   | Priority | Area                  | Summary                                                        |
+| ------ | -------- | -------- | --------------------- | -------------------------------------------------------------- |
+| TD-001 | Complete | P0       | Window discovery      | Preferences-window lookup skips workspace zero                 |
+| TD-002 | Complete | P0       | Configuration         | Parsed window overrides bypass their runtime validator         |
+| TD-003 | Complete | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected       |
+| TD-004 | Complete | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                |
+| TD-005 | Complete | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze      |
+| TD-006 | Complete | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection         |
+| TD-007 | Complete | P2       | Runtime API           | Thirteen private compatibility members exist only for tests    |
+| TD-008 | Complete | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain         |
+| TD-009 | Complete | P2       | Shared helpers        | Several helpers and conversions have no production consumer    |
+| TD-010 | Complete | P2       | Policy ownership      | Tested helpers are disconnected from their production owners   |
+| TD-011 | Complete | P2       | GSettings             | Four schema keys have no source consumer                       |
+| TD-012 | Complete | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference     |
+| TD-013 | Complete | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts  |
+| TD-014 | Complete | P2       | Build tooling         | Metadata generation is duplicated                              |
+| TD-015 | Complete | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters        |
+| TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate    |
+| TD-017 | Open     | P3       | Module depth          | Eight production modules exceed the soft 500-line budget       |
+| TD-018 | Open     | P3       | Tree ownership        | Legacy topology extraction is implemented and awaiting review  |
+| TD-019 | Complete | P3       | Grab-Resize design    | Pair selection and session mechanics remain interleaved        |
+| TD-020 | Open     | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions |
+| TD-021 | Tracked  | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`             |
+| TD-022 | Tracked  | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open    |
 
 ## Detailed inventory
 
@@ -381,45 +383,60 @@ host-shell smoke tests may remain an explicit environment-qualified gate.
 
 ### TD-017: Production modules exceed the soft size budget
 
-The architecture rules set a soft budget of roughly 500 lines. Current production outliers are:
+The architecture rules set a soft budget of roughly 500 lines. Counts at the current unreviewed
+Stage 6 checkpoint are:
 
-| Module                   | Approximate lines | Dominant remaining concerns                              |
-| ------------------------ | ----------------- | -------------------------------------------------------- |
-| `anvil-runtime.ts`       | 1,496             | composition, adapters, legacy facade, engine routing     |
-| `tree.ts`                | 1,071             | structure, traversal, workspace/monitor topology         |
-| `grab-resize-session.ts` | 786               | session phases, pair selection, polling, percent updates |
-| `tiling-shadow.ts`       | 776               | fact normalization, parity, operation bridging           |
-| `layout-engine.ts`       | 619               | topology operations, percent algebra, movement           |
-| `command-handlers.ts`    | 541               | heterogeneous command semantics                          |
-| `tiling-render.ts`       | 533               | geometry derivation, constraints, frame application      |
+| Module                   | Approximate lines | Dominant remaining concerns                                          | Deletion-test rationale                                                                                            |
+| ------------------------ | ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `anvil-runtime.ts`       | 1,133             | graph composition, lifecycle rollback/teardown, engine routing       | Deletion spreads construction order, rollback, teardown, and host-adapter wiring across all owners.                |
+| `tree.ts`                | 973               | node identity, relationships, traversal, structural invariants       | Deletion recreates structural knowledge in layout, tracking, and rendering; a re-export split hides it nowhere.    |
+| `tiling-shadow.ts`       | 776               | normalized ingress, comparison, portable operation bridging          | Deletion spreads the experimental migration adapter across Runtime and GNOME adapters; TD-022 owns its retirement. |
+| `window-tracker.ts`      | 744               | admission readiness, window/actor signals, reconcile, destruction    | Deletion distributes one window-lifecycle state machine across Runtime, SignalManager, and layout.                 |
+| `layout-engine.ts`       | 625               | structural layout operations, percent algebra, focus and movement    | Deletion creates competing tree/percent writers in commands, tracking, drag/drop, and Grab-Resize.                 |
+| `grab-resize-session.ts` | 584               | recognition, polling, snapshots, percent apply, exemptions, cleanup  | Deletion scatters a timing-sensitive session across signal and command paths; pure planning is already extracted.  |
+| `command-handlers.ts`    | 550               | legacy/shadow typed handler table and command-family shell semantics | Deletion moves the same handler and host knowledge into CommandBus or Runtime without shrinking its interface.     |
+| `tiling-render.ts`       | 542               | tiled rect derivation, gaps, constraints, render cleanup             | Deletion spreads tiled geometry policy across Tree, Runtime, command handlers, and window operations.              |
 
-Size alone is not sufficient reason to split a module. Extraction is warranted only where it
-creates one deeper owner and reduces the interface exposed to callers.
+Size alone is not sufficient reason to split a module. The current extraction work removes
+platform topology, imperative shell operations, core platform commands, and pure resize policy at
+deeper seams. The remaining modules pass the deletion test above: removing one would redistribute
+its complexity to multiple callers, while a file-only split would not reduce any caller interface.
+TD-017 remains open until the Stage 6 reviewers confirm those exceptions and the validation gates
+pass.
 
-### TD-018: Legacy Tree owns platform topology orchestration
+### TD-018: Legacy Tree mixed structure with platform topology
 
-**Evidence:** `tree.ts` contains TODOs to move monitor and workspace behavior, and directly creates,
-removes, and reindexes workspace/monitor nodes using GNOME globals.
+**Pre-remediation evidence:** `tree.ts` directly created, removed, and reindexed
+workspace/monitor nodes using GNOME globals and contained TODOs to move that behavior.
 
 **Impact:** A nominally structural module still owns platform discovery and signal-adjacent
 orchestration. This complicates unit fixtures and makes later legacy retirement harder.
 
-**Remedy:** Extract a legacy `WorkspaceTopology` or equivalent adapter that owns GNOME workspace
-and monitor discovery. Keep Tree responsible for node structure, traversal, identity, and
-invariants. This is production legacy cleanup, not an attempt to turn the legacy GObject Tree into
-the portable Tiling State.
+**Current implementation, pending review:** `LegacyWorkspaceTopology` now owns GNOME workspace,
+monitor, and normal-window enumeration; creation and reindexing of legacy workspace/monitor
+identities; and active/adjacent monitor lookup. It requests per-workspace signal binding through a
+narrow host, while `SignalManager` retains connection/disconnection and timeout lifetime. Tree now
+exposes structural operations (`removeSubtree` and `renameNodeIdentity`) rather than discovering
+GNOME topology itself.
 
-### TD-019: Grab-Resize combines policy and mechanics
+This is production legacy cleanup, not an attempt to turn the legacy GObject Tree into the
+portable Tiling State. TD-018 remains open until focused topology/lifecycle validation and both
+Stage 6 review axes pass without blocking or important findings.
 
-**Evidence:** GrabResizeSession owns grab recognition, neighbor discovery, reversible snapshots,
-live polling, percent algebra, constraints, and cleanup.
+### TD-019: Grab-Resize combined policy and mechanics
+
+**Pre-remediation evidence:** GrabResizeSession owned grab recognition, neighbor discovery,
+reversible snapshots, live polling, percent algebra, constraints, and cleanup.
 
 **Impact:** Edge-case fixes require touching a large stateful module, and candidate-selection
 behavior is difficult to test without constructing a full session.
 
-**Remedy:** After TD-006, retain session lifecycle in GrabResizeSession but extract pure resize
-boundary/candidate selection and percent-delta calculation. Do not create another timer or percent
-writer.
+**Completion evidence:** `grab-resize-policy.ts` now owns pure candidate walking and percent-plan
+calculation. GrabResizeSession retains recognition, operation state, polling, snapshots, exemption
+state, cleanup, and the only percent-application path. Policy tests cover horizontal and vertical
+same/different-parent plans, invalid geometry and indices, missing rectangles, invalid directions,
+surface boundaries, skipped candidates, cycles, and non-mutation. No second timer or percent writer
+was introduced.
 
 ### TD-020: TODOs do not have one meaning
 
@@ -669,18 +686,43 @@ evidence.
 
 ### Stage 6: Deepen legacy production modules
 
+**Status:** In progress — implementation and focused validation pass; review is pending.
+
 **Purpose:** Resolve TD-017 through TD-019 after correctness and dead-surface cleanup reduce the
 amount of code being moved.
 
 **Work order:**
 
-1. Extract legacy workspace/monitor discovery and reindexing from Tree into one topology owner.
-2. Reduce AnvilRuntime to composition, lifecycle, engine routing, and its intentional shell-facing
-   facade.
+1. [ ] Extract legacy workspace/monitor discovery and reindexing from Tree into one topology owner.
+2. [ ] Reduce AnvilRuntime to composition, lifecycle, engine routing, and its intentional
+       shell-facing facade.
 3. [x] Keep the Stage 3 resize selector pure and make GrabResizeSession the narrow session
        coordinator.
 4. Split other modules only when a proposed interface hides meaningful complexity and preserves
    the owner table.
+
+**Current implementation evidence, pending review (2026-07-16):**
+
+- `LegacyWorkspaceTopology` is a 164-line GNOME adapter with direct unit coverage. It owns the
+  GNOME-to-legacy-Tree projection and delegates structural mutation to Tree; `SignalManager` keeps
+  workspace signal lifetime.
+- `GnomeWindowOperations` is a 91-line owner for explicit Meta move/center effects and
+  monitor-space rectangle projection. TilingRender keeps tiled rectangle derivation, gap policy,
+  and constraints, and delegates imperative frame application through the injected move seam.
+- `CorePlatformCommands` is a 176-line core-mode platform handler. It bypasses generic
+  `observeCommand` and the legacy CommandBus for platform-owned actions, but uses named typed
+  observation hooks when those actions must update portable state.
+- `grab-resize-policy.ts` is a 103-line pure planner; GrabResizeSession delegates candidate/percent
+  planning while retaining all session mechanics and percent application.
+- AnvilRuntime has fallen from approximately 1,496 to 1,133 lines and Tree from approximately 1,071
+  to 973 lines. The eight remaining over-budget production modules have explicit deletion-test
+  rationales under TD-017 rather than line-count-only split proposals.
+- The ownership changes are recorded in the architecture rules, source map, and decision log. This
+  evidence does not close TD-017, TD-018, or Stage 6 until focused tests and both reviewer axes pass
+  with no blocking or important findings.
+- `npm test` passes with 55 portable tests, 1,030 unit tests, and 45 tooling tests (two expected
+  host-smoke skips). Fresh-shell E2E passes for the resize/constraints matrix (78/78), dynamic
+  workspace topology (3/3), and extension disable/re-enable lifecycle (4/4).
 
 **Constraints:**
 

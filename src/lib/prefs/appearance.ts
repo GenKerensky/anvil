@@ -26,7 +26,7 @@ export class AppearancePage extends PreferencesPage {
 
   static getCssSelectorAsMessage(selector: string) {
     switch (selector) {
-      // TODO: make separate color selection for preview hint
+      // Independent preview color is tracked in docs/plans/product-follow-ups.md.
       case ".window-tiled-border":
         return _("Tiled window");
       case ".window-tabbed-border":

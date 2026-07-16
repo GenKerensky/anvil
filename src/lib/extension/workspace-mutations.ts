@@ -210,4 +210,20 @@ export class WorkspaceMutations {
       }
     });
   }
+
+  cleanupAlwaysFloat(): void {
+    this.host.tree.getNodeByType(NODE_TYPES.WINDOW).forEach((node) => {
+      if (node.mode !== WINDOW_MODES.FLOAT) return;
+      const metaWindow = node.nodeValue as Meta.Window;
+      if (metaWindow.is_above()) metaWindow.unmake_above();
+    });
+  }
+
+  restoreAlwaysFloat(): void {
+    this.host.tree.getNodeByType(NODE_TYPES.WINDOW).forEach((node) => {
+      if (node.mode !== WINDOW_MODES.FLOAT) return;
+      const metaWindow = node.nodeValue as Meta.Window;
+      if (!metaWindow.is_above()) metaWindow.make_above();
+    });
+  }
 }
