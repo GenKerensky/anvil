@@ -13,40 +13,11 @@ const repositoryRoot = fileURLToPath(new URL("../", import.meta.url));
 // same change that removes or connects the corresponding declaration, setting, or icon.
 const UNUSED_DECLARATION_BASELINE = [];
 
-const UNUSED_SCHEMA_KEY_BASELINE = [
-  "focus-border-color",
-  "focus-border-size",
-  "primary-layout-mode",
-  "split-border-color",
-];
+const UNUSED_SCHEMA_KEY_BASELINE = [];
 
-const UNREFERENCED_ICON_BASELINE = [
-  "applications-science-symbolic.svg",
-  "appointment-soon-symbolic.svg",
-  "code-context-symbolic.svg",
-  "color-picker-symbolic.svg",
-  "color-select-symbolic.svg",
-  "colorfx-symbolic.svg",
-  "focus-windows-symbolic.svg",
-  "go-home-symbolic.svg",
-  "go-next-symbolic.svg",
-  "larger-brush-symbolic.svg",
-  "preferences-desktop-apps-symbolic.svg",
-  "preferences-desktop-keyboard-symbolic.svg",
-  "preferences-desktop-wallpaper-symbolic.svg",
-  "settings-symbolic.svg",
-  "shell-overview-symbolic.svg",
-  "tab-new-symbolic.svg",
-  "tool-brush-symbolic.svg",
-  "tool-rectangle-symbolic.svg",
-  "utilities-tweak-tool-symbolic.svg",
-  "view-dual-symbolic.svg",
-  "window-duplicate-symbolic.svg",
-];
+const UNREFERENCED_ICON_BASELINE = [];
 
-// The original Forge logo is retained as attribution/compatibility artwork rather than as an
-// Anvil UI icon. Keeping the exception explicit prevents it from hiding a newly orphaned icon.
-const RETAINED_UNREFERENCED_ICONS = ["forge-logo-symbolic.svg"];
+const RETAINED_UNREFERENCED_ICONS = [];
 
 const unusedDiagnosticCodes = new Set([6133, 6192, 6196]);
 const textExtensions = new Set([

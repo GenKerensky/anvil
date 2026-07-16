@@ -1,6 +1,6 @@
 # Technical debt inventory and remediation plan
 
-**Status:** In progress — Stages 0 through 4 complete
+**Status:** In progress — Stages 0 through 5 complete
 
 **Date:** 2026-07-15
 
@@ -84,10 +84,10 @@ All remediation work must preserve these constraints:
 | TD-008 | Complete | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain          |
 | TD-009 | Complete | P2       | Shared helpers        | Several helpers and conversions have no production consumer     |
 | TD-010 | Complete | P2       | Policy ownership      | Tested helpers are disconnected from their production owners    |
-| TD-011 | Open     | P2       | GSettings             | Four schema keys have no source consumer                        |
-| TD-012 | Open     | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference      |
-| TD-013 | Open     | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts   |
-| TD-014 | Open     | P2       | Build tooling         | Metadata generation is duplicated                               |
+| TD-011 | Complete | P2       | GSettings             | Four schema keys have no source consumer                        |
+| TD-012 | Complete | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference      |
+| TD-013 | Complete | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts   |
+| TD-014 | Complete | P2       | Build tooling         | Metadata generation is duplicated                               |
 | TD-015 | Complete | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters         |
 | TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate     |
 | TD-017 | Open     | P3       | Module depth          | Six production modules exceed the soft 500-line budget          |
@@ -460,7 +460,7 @@ change the default engine or retire the legacy writer.
 - [x] Stage 2: Make stylesheet upgrades non-destructive
 - [x] Stage 3: Finish interaction edge behavior
 - [x] Stage 4: Remove dead compatibility and enforce unused-code checks
-- [ ] Stage 5: Remove stale schema, resources, and tool entry points
+- [x] Stage 5: Remove stale schema, resources, and tool entry points
 - [ ] Stage 6: Deepen legacy production modules
 - [ ] Stage 7: Close the inventory and establish ongoing governance
 
@@ -632,19 +632,32 @@ Grab-Resize coverage, and the unit-test lint override.
 
 ### Stage 5: Remove stale schema, resources, and tool entry points
 
+**Status:** Complete — reviewed with no blocking or important findings.
+
 **Purpose:** Resolve TD-011 through TD-014 with packaging evidence.
 
 **Work order:**
 
-1. Verify the four schema keys are not documented external API; deprecate or remove them.
-2. Generate the used-icon inventory and delete the twenty-one unreferenced SVGs.
-3. Delete stale root debug scripts or replace only supported paths with forwarding wrappers.
-4. Extract one metadata generator used by Make and quick debug builds.
-5. Build and inspect the installed extension payload.
+1. [x] Verify the four schema keys are not documented external API; deprecate or remove them.
+2. [x] Generate the used-icon inventory and delete the twenty-one unreferenced SVGs.
+3. [x] Delete stale root debug scripts or replace only supported paths with forwarding wrappers.
+4. [x] Extract one metadata generator used by Make and quick debug builds.
+5. [x] Build and inspect the installed extension payload.
 
 **Exit gate:** Schema compilation passes, preferences and Quick Settings icons render, the canonical
 Devkit launcher starts from the current checkout, generated metadata is identical across build
 paths, and no documentation points to a removed script.
+
+**Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 977 unit tests,
+and 45 tooling tests (two host-only cases skipped by the deterministic gate). The debt audit reports
+zero unused schema keys and zero unreferenced icons. Strict schema compilation and the built ZIP
+confirm the four ineffective keys are absent, the schema is compiled, and exactly seven intentional
+SVG assets remain. The shared metadata generator produces byte-identical output from Make and the
+canonical quick build, including outside-checkout, empty-history, bot-filter, and email-deduplication
+coverage. The canonical Devkit launcher resolves the current repository and its `--help` path.
+Fedora Devbox E2E passes preferences lifecycle 1/1 and installed icon resolution 2/2 across the GTK
+preferences process and live St Quick Settings consumers. Both review axes passed after the icon
+runtime gate replaced static payload presence as evidence.
 
 **Suggested commits:**
 

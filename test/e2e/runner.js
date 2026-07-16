@@ -314,6 +314,7 @@ export async function run() {
     "./suites/monitor-churn.js",
     "./suites/session-mode.js",
     "./suites/constraints.js",
+    "./suites/icons.js",
     "./suites/preferences.js",
     "./suites/stylesheet.js",
     "./suites/extension.js",

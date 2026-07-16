@@ -45,6 +45,8 @@ distrobox enter fedora-devbox -- bash -lc \
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && make test-e2e-stylesheet'
 distrobox enter fedora-devbox -- bash -lc \
+  'cd /home/falco/code/anvil && make test-e2e-icons'
+distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --tag resize'
 distrobox enter fedora-devbox -- bash -lc \
   'cd /home/falco/code/anvil && python3 test/e2e/run.py --engine core --virtual-monitors 2 --tag monitor-churn'

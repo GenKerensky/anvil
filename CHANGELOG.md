@@ -35,8 +35,21 @@ testing, and ongoing maintainability.
   `jasmine.DEFAULT_TIMEOUT_INTERVAL = 15000` correctly as a global property,
   ensuring the configured 15s timeout actually applies to all specs.
 
+#### Removed
+
+- **Ineffective GSettings keys** — Removed the previously shipped but unused
+  `focus-border-size`, `focus-border-color`, `split-border-color`, and
+  `primary-layout-mode` keys. External scripts that addressed these keys must stop doing so; the
+  keys never changed Anvil behavior.
+- **Unused inherited resources and launchers** — Removed 21 unreferenced Forge-era icons and four
+  stale root debug scripts. The maintained Devkit launcher remains under
+  `.agents/skills/gnome-shell-debug/scripts/`.
+
 #### Fixed
 
+- **Focus after closing a tiled window** — The close pipeline now preserves the window's former
+  container long enough to focus an eligible sibling, with a current-workspace fallback when the
+  container is empty.
 - **Cross-monitor window swaps** — Directional swaps now commit both Tiling Tree changes
   atomically, render once, retain focus, and work in either direction at a monitor boundary without
   leaving rendering frozen.

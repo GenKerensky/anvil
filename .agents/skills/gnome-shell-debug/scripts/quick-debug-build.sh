@@ -15,16 +15,7 @@ echo "=== Quick Debug Build ($PROJECT_ROOT) ==="
 rm -rf dist
 rm -f src/lib/prefs/metadata.js
 
-printf 'export const developers = Object.entries(\n' > src/lib/prefs/metadata.js
-printf '  /** @type {Array<Record<string, string>>} */(\n' >> src/lib/prefs/metadata.js
-printf '  [\n' >> src/lib/prefs/metadata.js
-git -C "$PROJECT_ROOT" shortlog -sne >> src/lib/prefs/metadata.js || true
-awk '!/dependabot|noreply/' src/lib/prefs/metadata.js > src/lib/prefs/metadata.js.tmp &&
-  mv src/lib/prefs/metadata.js.tmp src/lib/prefs/metadata.js
-sed -i 's/^[[:space:]]*[0-9]*[[:space:]]*\(.*\) <\(.*\)>/    {name:"\1", email:"\2"},/g' src/lib/prefs/metadata.js
-printf '  ]\n' >> src/lib/prefs/metadata.js
-printf ').reduce((acc, x) => ({ ...acc, [x.email]: acc[x.email] ?? x.name }), {})\n' >> src/lib/prefs/metadata.js
-printf '.map(([email, name]) => name + " <" + email + ">")\n' >> src/lib/prefs/metadata.js
+node scripts/generate-contributor-metadata.mjs
 npx prettier --write src/lib/prefs/metadata.js 2>/dev/null || true
 
 echo "Building TypeScript..."

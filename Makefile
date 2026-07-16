@@ -6,7 +6,7 @@ MSGSRC = $(wildcard src/po/*.po)
         enable disable restart purge log journal \
         potfile compilemsgs metadata schemas format lint check \
         test-unit test-e2e test-e2e-monitor-churn test-e2e-cross-surface-swap test-e2e-preferences \
-        test-e2e-stylesheet test-debug-loop-lib
+        test-e2e-stylesheet test-e2e-icons test-debug-loop-lib
 
 all: build install
 
@@ -21,15 +21,7 @@ src/schemas/gschemas.compiled: src/schemas/*.gschema.xml
 	glib-compile-schemas src/schemas
 
 metadata:
-	printf 'export const developers = Object.entries(\n' > src/lib/prefs/metadata.js
-	printf '  /** @type {Array<Record<string, string>>} */(\n' >> src/lib/prefs/metadata.js
-	printf '  [\n' >> src/lib/prefs/metadata.js
-	git shortlog -sne >> src/lib/prefs/metadata.js || true
-	awk '!/dependabot|noreply/' src/lib/prefs/metadata.js > src/lib/prefs/metadata.js.tmp && mv src/lib/prefs/metadata.js.tmp src/lib/prefs/metadata.js
-	sed -i 's/^[[:space:]]*[0-9]*[[:space:]]*\(.*\) <\(.*\)>/    {name:"\1", email:"\2"},/g' src/lib/prefs/metadata.js
-	printf '  ]\n' >> src/lib/prefs/metadata.js
-	printf ').reduce((acc, x) => ({ ...acc, [x.email]: acc[x.email] ?? x.name }), {}))\n' >> src/lib/prefs/metadata.js
-	printf '.map(([email, name]) => name + " <" + email + ">")\n' >> src/lib/prefs/metadata.js
+	node scripts/generate-contributor-metadata.mjs
 	npx prettier --write src/lib/prefs/metadata.js
 
 build: clean metadata.json schemas compilemsgs metadata
@@ -134,6 +126,9 @@ test-e2e-preferences: dist
 
 test-e2e-stylesheet: dist
 	python3 test/e2e/run.py --no-build --tag stylesheet
+
+test-e2e-icons: dist
+	python3 test/e2e/run.py --no-build --tag icons
 
 # Backward-compatible alias for the deterministic Python tooling suite.
 test-debug-loop-lib:

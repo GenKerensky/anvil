@@ -8,6 +8,10 @@ Run `make test-e2e-stylesheet` first for an automated, isolated migration and li
 That target uses a temporary `XDG_CONFIG_HOME`; this checklist remains the final installed-package
 validation against the real user session.
 
+Run `make test-e2e-icons` after resource or packaging changes. It registers the installed icon path
+in a standalone GTK preferences process, resolves all six live local icons from that payload, and
+verifies that the active Shell resolves the Quick Settings tile/header icon through St.
+
 The smoke changes Anvil settings and may initialize the user stylesheet. The preparation below
 captures both so the cleanup can restore them.
 
@@ -48,6 +52,9 @@ for file in \
   prefs.js \
   stylesheet.css \
   schemas/gschemas.compiled \
+  resources/icons/hicolor/scalable/actions/anvil-logo-symbolic.svg \
+  resources/icons/hicolor/scalable/actions/bug-symbolic.svg \
+  resources/icons/hicolor/scalable/actions/forge-logo-symbolic.svg \
   resources/icons/hicolor/scalable/actions/view-grid-symbolic.svg \
   resources/icons/hicolor/scalable/actions/brush-symbolic.svg \
   resources/icons/hicolor/scalable/actions/input-keyboard-symbolic.svg \
@@ -88,9 +95,16 @@ Visit every page and verify that the page opens without an empty body or a broke
 4. **Windows** — `window-symbolic`
 5. **Monitors** — `video-display-symbolic` from the system icon theme
 
+Also open **About** and confirm the Anvil logo renders. Experimental controls on **Tiling** and
+**Appearance** must display their local `bug-symbolic` badge rather than a broken-image glyph.
+
 Close the window, run the command again, and revisit **Monitors**. Controls and the monitor drawing
 must refresh normally. This open/close/reopen pass also checks that the installed preferences
 process does not leave a duplicate window or visibly stale page.
+
+`forge-logo-symbolic.svg` is intentionally retained in the package as upstream attribution
+artwork; it is not a live Anvil UI icon. This packaging contract keeps the attribution asset from
+being mistaken for an orphaned UI resource.
 
 ## Quick Settings indicator
 

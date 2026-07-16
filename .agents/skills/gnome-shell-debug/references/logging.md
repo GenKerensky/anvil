@@ -25,7 +25,8 @@ journalctl -f -o cat /usr/bin/gnome-shell
 journalctl -f -o cat /usr/bin/gnome-shell | grep -i anvil
 ```
 
-Devkit sessions started by `scripts/run-devkit-session.sh` write to a temp log — path printed at launch.
+Devkit sessions started by `.agents/skills/gnome-shell-debug/scripts/run-devkit-session.sh` write
+to a temp log — path printed at launch.
 
 ## Gotchas
 
