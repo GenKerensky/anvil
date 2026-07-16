@@ -31,7 +31,13 @@ const rootBuildToolingFiles = new Set([
   "package.json",
 ]);
 
-const rawDebtMarkerPattern = /\b(?:TODO|FIXME|HACK|XXX)\b/g;
+const rawDebtMarkerNames = [
+  ["TO", "DO"].join(""),
+  ["FIX", "ME"].join(""),
+  ["HA", "CK"].join(""),
+  ["X", "XX"].join(""),
+];
+const rawDebtMarkerPattern = new RegExp(`\\b(?:${rawDebtMarkerNames.join("|")})\\b`, "g");
 
 const unusedDiagnosticCodes = new Set([6133, 6192, 6196]);
 const textExtensions = new Set([
@@ -188,22 +194,25 @@ function isRootBuildToolingFile(repositoryPath) {
   );
 }
 
+function isCanonicalSkillScript(repositoryPath) {
+  return /^\.agents\/skills\/.+\/scripts\/.+$/.test(repositoryPath);
+}
+
 export function collectUnownedMarkers(
   root = repositoryRoot,
   trackedPaths = trackedRepositoryFiles(root)
 ) {
-  const auditFile = resolve(root, "scripts/check-technical-debt.mjs");
   const scopedPaths = trackedPaths
     .filter((path) => {
-      const absolutePath = resolve(path);
       const repositoryPath = relativePath(path, root);
       const rootBuildToolingFile = isRootBuildToolingFile(repositoryPath);
+      const canonicalSkillScript = isCanonicalSkillScript(repositoryPath);
       return (
-        absolutePath !== auditFile &&
         (isTextFile(path) || rootBuildToolingFile) &&
         (repositoryPath.startsWith("src/") ||
           repositoryPath.startsWith("scripts/") ||
           repositoryPath.startsWith(".github/workflows/") ||
+          canonicalSkillScript ||
           rootBuildToolingFile)
       );
     })

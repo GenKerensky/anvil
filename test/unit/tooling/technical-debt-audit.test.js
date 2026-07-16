@@ -74,6 +74,7 @@ describe("technical debt audit", () => {
 
   it("finds raw markers only in tracked production and tooling scope", () => {
     const trackedFiles = new Map([
+      [".agents/skills/testing/scripts/check.py", "# FIXME stale harness\n"],
       [".github/workflows/ci.yml", "# XXX release credentials\n"],
       ["Makefile", "# TODO package the extension\n"],
       ["docs/history.md", "TODO historical note\n"],
@@ -95,8 +96,13 @@ describe("technical debt audit", () => {
     const trackedPaths = trackedRepositoryFiles(repository);
 
     expect(collectUnownedMarkers(repository, trackedPaths)).toEqual([
+      ".agents/skills/testing/scripts/check.py:1:FIXME",
       ".github/workflows/ci.yml:1:XXX",
       "Makefile:1:TODO",
+      "scripts/check-technical-debt.mjs:1:TODO",
+      "scripts/check-technical-debt.mjs:1:FIXME",
+      "scripts/check-technical-debt.mjs:1:HACK",
+      "scripts/check-technical-debt.mjs:1:XXX",
       "scripts/release.mjs:1:FIXME",
       "src/extension.ts:2:TODO",
       "src/extension.ts:3:HACK",
