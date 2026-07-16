@@ -654,10 +654,11 @@ zero unused schema keys and zero unreferenced icons. Strict schema compilation a
 confirm the four ineffective keys are absent, the schema is compiled, and exactly seven intentional
 SVG assets remain. The shared metadata generator produces byte-identical output from Make and the
 canonical quick build, including outside-checkout, empty-history, bot-filter, and email-deduplication
-coverage. The canonical Devkit launcher resolves the current repository and its `--help` path.
-Fedora Devbox E2E passes preferences lifecycle 1/1 and installed icon resolution 2/2 across the GTK
-preferences process and live St Quick Settings consumers. Both review axes passed after the icon
-runtime gate replaced static payload presence as evidence.
+coverage. The canonical Devkit launcher resolves the current repository, starts an isolated
+profile, and reaches ACTIVE with Anvil enabled. Fedora Devbox E2E passes preferences lifecycle 1/1
+and installed icon resolution 2/2 across the GTK preferences process and live St Quick Settings
+consumers. Both review axes passed after the icon runtime gate replaced static payload presence as
+evidence.
 
 **Suggested commits:**
 
