@@ -1,6 +1,6 @@
 # Technical debt inventory and remediation plan
 
-**Status:** In progress — Stages 0 through 5 complete
+**Status:** In progress — Stages 0 through 6 complete
 
 **Date:** 2026-07-15
 
@@ -92,9 +92,9 @@ All remediation work must preserve these constraints:
 | TD-014 | Complete | P2       | Build tooling         | Metadata generation is duplicated                              |
 | TD-015 | Complete | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters        |
 | TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate    |
-| TD-017 | Open     | P3       | Module depth          | Eight production modules exceed the soft 500-line budget       |
-| TD-018 | Open     | P3       | Tree ownership        | Legacy topology extraction is implemented and awaiting review  |
-| TD-019 | Open     | P3       | Grab-Resize design    | Pure policy extraction is implemented and awaiting review      |
+| TD-017 | Complete | P3       | Module depth          | Deep seams extracted; remaining size exceptions are justified  |
+| TD-018 | Complete | P3       | Tree ownership        | GNOME topology projection moved behind one dedicated owner     |
+| TD-019 | Complete | P3       | Grab-Resize design    | Pure policy is separated from session mechanics                |
 | TD-020 | Open     | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions |
 | TD-021 | Tracked  | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`             |
 | TD-022 | Tracked  | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open    |
@@ -383,8 +383,8 @@ host-shell smoke tests may remain an explicit environment-qualified gate.
 
 ### TD-017: Production modules exceed the soft size budget
 
-The architecture rules set a soft budget of roughly 500 lines. Counts at the current unreviewed
-Stage 6 checkpoint are:
+The architecture rules set a soft budget of roughly 500 lines. Counts at the reviewed Stage 6
+checkpoint are:
 
 | Module                   | Approximate lines | Dominant remaining concerns                                          | Deletion-test rationale                                                                                            |
 | ------------------------ | ----------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -401,8 +401,8 @@ Size alone is not sufficient reason to split a module. The current extraction wo
 platform topology, imperative shell operations, core platform commands, and pure resize policy at
 deeper seams. The remaining modules pass the deletion test above: removing one would redistribute
 its complexity to multiple callers, while a file-only split would not reduce any caller interface.
-TD-017 remains open until the Stage 6 reviewers confirm those exceptions and the validation gates
-pass.
+Both Stage 6 reviewers confirmed these deletion-test exceptions after the full validation gate
+passed, so the remaining files are explicit soft-budget exceptions rather than unowned split debt.
 
 ### TD-018: Legacy Tree mixed structure with platform topology
 
@@ -412,7 +412,7 @@ workspace/monitor nodes using GNOME globals and contained TODOs to move that beh
 **Impact:** A nominally structural module still owns platform discovery and signal-adjacent
 orchestration. This complicates unit fixtures and makes later legacy retirement harder.
 
-**Current implementation, pending review:** `LegacyWorkspaceTopology` now owns GNOME workspace,
+**Completion evidence:** `LegacyWorkspaceTopology` now owns GNOME workspace,
 monitor, and normal-window enumeration; creation and reindexing of legacy workspace/monitor
 identities; and active/adjacent monitor lookup. It requests per-workspace signal binding through a
 narrow host, while `SignalManager` retains connection/disconnection and timeout lifetime. Tree now
@@ -420,8 +420,8 @@ exposes structural operations (`removeSubtree` and `renameNodeIdentity`) rather 
 GNOME topology itself.
 
 This is production legacy cleanup, not an attempt to turn the legacy GObject Tree into the
-portable Tiling State. TD-018 remains open until focused topology/lifecycle validation and both
-Stage 6 review axes pass without blocking or important findings.
+portable Tiling State. Focused topology/lifecycle validation and both Stage 6 review axes passed
+without blocking or important findings.
 
 ### TD-019: Grab-Resize combined policy and mechanics
 
@@ -431,12 +431,12 @@ reversible snapshots, live polling, percent algebra, constraints, and cleanup.
 **Impact:** Edge-case fixes require touching a large stateful module, and candidate-selection
 behavior is difficult to test without constructing a full session.
 
-**Current implementation, pending review:** `grab-resize-policy.ts` now owns pure candidate walking and percent-plan
+**Completion evidence:** `grab-resize-policy.ts` now owns pure candidate walking and percent-plan
 calculation. GrabResizeSession retains recognition, operation state, polling, snapshots, exemption
 state, cleanup, and the only percent-application path. Policy tests cover horizontal and vertical
 same/different-parent plans, invalid geometry and indices, missing rectangles, invalid directions,
 surface boundaries, skipped candidates, cycles, and non-mutation. No second timer or percent writer
-was introduced.
+was introduced, and both Stage 6 review axes passed.
 
 ### TD-020: TODOs do not have one meaning
 
@@ -478,7 +478,7 @@ change the default engine or retire the legacy writer.
 - [x] Stage 3: Finish interaction edge behavior
 - [x] Stage 4: Remove dead compatibility and enforce unused-code checks
 - [x] Stage 5: Remove stale schema, resources, and tool entry points
-- [ ] Stage 6: Deepen legacy production modules
+- [x] Stage 6: Deepen legacy production modules
 - [ ] Stage 7: Close the inventory and establish ongoing governance
 
 ### Stage 0: Establish reproducible debt gates
@@ -686,22 +686,22 @@ evidence.
 
 ### Stage 6: Deepen legacy production modules
 
-**Status:** In progress — implementation and focused validation pass; review is pending.
+**Status:** Complete — reviewed with no blocking or important findings.
 
 **Purpose:** Resolve TD-017 through TD-019 after correctness and dead-surface cleanup reduce the
 amount of code being moved.
 
 **Work order:**
 
-1. [ ] Extract legacy workspace/monitor discovery and reindexing from Tree into one topology owner.
-2. [ ] Reduce AnvilRuntime to composition, lifecycle, engine routing, and its intentional
+1. [x] Extract legacy workspace/monitor discovery and reindexing from Tree into one topology owner.
+2. [x] Reduce AnvilRuntime to composition, lifecycle, engine routing, and its intentional
        shell-facing facade.
-3. [ ] Keep the Stage 3 resize selector pure and make GrabResizeSession the narrow session
+3. [x] Keep the Stage 3 resize selector pure and make GrabResizeSession the narrow session
        coordinator.
 4. Split other modules only when a proposed interface hides meaningful complexity and preserves
    the owner table.
 
-**Current implementation evidence, pending review (2026-07-16):**
+**Completion evidence (2026-07-16):**
 
 - `LegacyWorkspaceTopology` is a 164-line GNOME adapter with direct unit coverage. It owns the
   GNOME-to-legacy-Tree projection and delegates structural mutation to Tree; `SignalManager` keeps
@@ -717,10 +717,10 @@ amount of code being moved.
 - AnvilRuntime has fallen from 1,404 to 1,133 lines and Tree from 1,054 to 973 lines. The eight
   remaining over-budget production modules have explicit deletion-test
   rationales under TD-017 rather than line-count-only split proposals.
-- The ownership changes are recorded in the architecture rules, source map, and decision log. This
-  evidence does not close TD-017, TD-018, or Stage 6 until focused tests and both reviewer axes pass
-  with no blocking or important findings.
-- `npm test` passes with 55 portable tests, 1,030 unit tests, and 45 tooling tests (two expected
+- The ownership changes are recorded in the architecture rules, source map, and decision log. Both
+  standards and spec reviewers returned `PASS — no blocking or important findings` after the
+  behavior-parity and guard-coverage remediations.
+- `npm test` passes with 55 portable tests, 1,043 unit tests, and 45 tooling tests (two expected
   host-smoke skips). Fresh-shell E2E passes for the resize/constraints matrix (78/78), dynamic
   workspace topology (3/3), and extension disable/re-enable lifecycle (4/4).
 
