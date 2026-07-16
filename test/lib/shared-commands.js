@@ -333,9 +333,13 @@ export async function closeAllWindows() {
   // windows. The legacy writer must also remove transient containers or the
   // next spec can inherit an empty layout slot.
   const deadline = Date.now() + 5000;
+  let remainingMetaWindows = windows.length;
+  let remainingTrackedWindows = 0;
+  let remainingContainers = 0;
   while (Date.now() < deadline) {
     await sleep(200);
-    if (windowsAcrossWorkspaces().length !== 0) continue;
+    remainingMetaWindows = windowsAcrossWorkspaces().length;
+    if (remainingMetaWindows !== 0) continue;
     try {
       getAnvilRuntime().forceRender("e2e-close-all");
     } catch {
@@ -344,6 +348,7 @@ export async function closeAllWindows() {
 
     const state = JSON.parse(getAnvilRuntime().getStateJson());
     let transientContainers = 0;
+    /** @param {any} node */
     function countTransientContainers(node) {
       if (!node) return;
       if (node.type === "CON") transientContainers += 1;
@@ -351,15 +356,22 @@ export async function closeAllWindows() {
     }
     countTransientContainers(state.tree);
 
+    const portableWindows = /** @type {Array<{participating: boolean}>} */ (
+      state.portableTiling?.windows || []
+    );
     const tracked =
       state.tilingEngineMode === "core"
-        ? (state.portableTiling?.windows || []).filter(function (window) {
+        ? portableWindows.filter(function (window) {
             return window.participating;
           }).length
         : getRuntimeWindowStates().length;
+    remainingTrackedWindows = tracked;
+    remainingContainers = transientContainers;
     if (tracked === 0 && (state.tilingEngineMode === "core" || transientContainers === 0)) return;
   }
-  throw new Error("Timed out waiting for Mutter and the tiling writer to close all windows");
+  throw new Error(
+    `Timed out waiting for window cleanup (Meta=${remainingMetaWindows}, tracked=${remainingTrackedWindows}, containers=${remainingContainers})`
+  );
 }
 
 // ---------------------------------------------------------------------------
