@@ -1,6 +1,6 @@
 # Technical debt inventory and remediation plan
 
-**Status:** In progress — Stages 0 through 3 complete
+**Status:** In progress — Stages 0 through 4 complete
 
 **Date:** 2026-07-15
 
@@ -273,19 +273,25 @@ ignored compatibility arguments without a documented external contract.
 
 ### TD-009: Helpers with no production consumer
 
-**Evidence:** Repository reference scans show these helpers are used only by their own tests:
+**Evidence:** Repository reference scans confirmed that these helpers were used only by their own
+tests:
 
 - `Logger.format`;
 - `allowResizeGrabOp`;
 - `isGnome`;
-- `RGBAToHexA` and `hexAToRGBA`; and
-- ThemeManagerBase's `defaultPalette`/`getDefaultPalette()`/`getDefaults()` chain.
+- `RGBAToHexA` and `hexAToRGBA`.
+
+The same scan initially flagged ThemeManagerBase's
+`defaultPalette`/`getDefaultPalette()`/`getDefaults()` chain, but owner-level tracing showed that
+`src/lib/prefs/appearance.ts` consumes the palette when resetting appearance preferences. That
+chain is therefore live production behavior, not debt.
 
 **Impact:** Tests create the appearance of supported behavior while production has no dependency
-on it. Theme construction also performs unused CSS parsing work.
+on it. Treating reference-scan candidates as confirmed dead code without tracing their owner can
+also remove user-visible behavior such as appearance reset defaults.
 
-**Remedy:** Delete the helpers and their dedicated tests unless a near-term production consumer is
-named. If retained, first wire the production consumer and test through that owner.
+**Remedy:** Delete the five confirmed dead helpers and their dedicated tests. Retain the palette
+chain and cover it through the preferences owner that consumes it.
 
 ### TD-010: Tested policy helpers are disconnected from production
 
@@ -607,7 +613,7 @@ constraints before Mutter reports the move. Both review axes passed after one re
 the public test probe remains narrow; and no production method exists solely because a unit test
 reaches it through an `any` fixture.
 
-**Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 976 unit tests,
+**Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 977 unit tests,
 and 41 tooling tests (two host-only cases skipped by the deterministic gate). The debt audit
 reports zero unused declarations; TypeScript rejects unused production/portable declarations and
 ESLint rejects unused test declarations. Owner-focused suites now cover command handlers, rules,

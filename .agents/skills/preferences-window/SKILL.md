@@ -228,8 +228,11 @@ which extends `ThemeManagerBase` (`src/lib/shared/theme.ts`).
 
 ### How it works
 
-1. `ThemeManagerBase._importCss()` reads `stylesheet.css` (or `$HOME/.config/anvil/stylesheet/anvil/stylesheet.css`), parses it into an AST via `src/lib/css/index.ts`
-2. `getCssProperty(selector, property)` reads from the AST
+1. `ThemeManagerBase.initializeStylesheet()` asks the migration service for the shipped base and
+   user override files, then parses each available stylesheet into its own AST via
+   `src/lib/css/index.ts`
+2. `getCssProperty(selector, property)` reads the user override first and falls back to the shipped
+   base AST
 3. `setCssProperty(selector, property, value)` modifies the AST, writes it back to disk, then calls `reloadStylesheet()`
 4. `PrefsThemeManager.reloadStylesheet()` sets the `css-updated` GSettings key to a timestamp, which signals the extension process to reload themes
 
@@ -298,8 +301,8 @@ Keybinding GSettings key names follow a prefix pattern for grouping:
 </key>
 ```
 
-2. Register the keybinding action in `src/lib/extension/keybindings.ts`.
-3. The preferences UI auto-discovers it via the prefix — no widget code needed if the
+1. Register the keybinding action in `src/lib/extension/keybindings.ts`.
+2. The preferences UI auto-discovers it via the prefix — no widget code needed if the
    prefix matches an existing group.
 
 ### Shortcut validation
@@ -465,8 +468,10 @@ Steps: `test/e2e/features/steps/preferences_steps.py`.
 
 ### Unit
 
-Pure-logic tests in `test/shared/theme.test.ts` verify `RGBAToHexA`, `hexAToRGBA`,
-CSS persistence. GSettings and GObject APIs are mocked via `test/unit/__mocks__/`.
+Pure-logic tests in `test/unit/shared/theme.test.ts` verify default-palette derivation and CSS
+persistence. `test/unit/prefs/appearance.test.ts` exercises the appearance reset consumer so the
+shipped palette reaches both stylesheet updates and widget state. GSettings and GObject APIs are
+mocked via `test/unit/__mocks__/`.
 
 ## Debugging
 
