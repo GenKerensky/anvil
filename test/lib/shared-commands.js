@@ -312,8 +312,19 @@ export async function closeFocusedWindow(timeoutMs = 5000) {
 }
 
 export async function closeAllWindows() {
-  const ws = global.display.get_workspace_manager().get_active_workspace();
-  const windows = global.display.get_tab_list(Meta.TabList.NORMAL_ALL, ws);
+  function windowsAcrossWorkspaces() {
+    const workspaceManager = global.display.get_workspace_manager();
+    const byId = new Map();
+    for (let index = 0; index < workspaceManager.get_n_workspaces(); index += 1) {
+      const workspace = workspaceManager.get_workspace_by_index(index);
+      for (const window of global.display.get_tab_list(Meta.TabList.NORMAL_ALL, workspace)) {
+        byId.set(window.get_id(), window);
+      }
+    }
+    return [...byId.values()];
+  }
+
+  const windows = windowsAcrossWorkspaces();
   const t = global.display.get_current_time_roundtrip();
   windows.forEach(function (w) {
     w.delete(t);
@@ -324,7 +335,7 @@ export async function closeAllWindows() {
   const deadline = Date.now() + 5000;
   while (Date.now() < deadline) {
     await sleep(200);
-    if (getWindowCount() !== 0) continue;
+    if (windowsAcrossWorkspaces().length !== 0) continue;
     try {
       getAnvilRuntime().forceRender("e2e-close-all");
     } catch {

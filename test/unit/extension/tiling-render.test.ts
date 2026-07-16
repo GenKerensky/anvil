@@ -87,4 +87,15 @@ describe("TilingRender - Window Classification", () => {
 
     expect(node.mode).toBe(WINDOW_MODES.TILE);
   });
+
+  it("removes a nested chain of empty containers in one cleanup pass", () => {
+    const { monitor } = getWorkspaceAndMonitor(ctx);
+    const outer = ctx.tree.createNode(monitor.nodeValue, NODE_TYPES.CON, "outer");
+    ctx.tree.createNode(outer.nodeValue, NODE_TYPES.CON, "inner");
+    expect(ctx.tree.getNodeByType(NODE_TYPES.CON)).toHaveLength(2);
+
+    render.cleanTree();
+
+    expect(ctx.tree.getNodeByType(NODE_TYPES.CON)).toHaveLength(0);
+  });
 });
