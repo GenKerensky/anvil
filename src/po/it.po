@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-16 04:05+0000\n"
+"POT-Creation-Date: 2026-07-16 03:51-0400\n"
 "PO-Revision-Date: 2024-09-15 20:16+0100\n"
 "Last-Translator: Albano Battistella <albanobattistella@gmail.com>\n"
 "Language-Team: Italian <albanobattistella@gmail.com>\n"
@@ -72,104 +72,104 @@ msgstr "Indicatore per la direzione di divisione"
 msgid "Appearance"
 msgstr "Aspetto"
 
-#: src/lib/prefs/appearance.ts:49
+#: src/lib/prefs/appearance.ts:51
 msgid "Gaps"
 msgstr "Margini"
 
-#: src/lib/prefs/appearance.ts:50
+#: src/lib/prefs/appearance.ts:52
 msgid "Change the gap size between windows"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:53
+#: src/lib/prefs/appearance.ts:55
 msgid "Gap size"
 msgstr ""
 
 # I'm not sure that marges are a correct translation of gaps. There are other possibilities.
-#: src/lib/prefs/appearance.ts:59
+#: src/lib/prefs/appearance.ts:61
 #, fuzzy
 msgid "Gap size multiplier"
 msgstr "Moltiplicatore delle dimensioni dei margini"
 
-#: src/lib/prefs/appearance.ts:65
+#: src/lib/prefs/appearance.ts:67
 msgid "Disable gaps for single window"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:66
+#: src/lib/prefs/appearance.ts:68
 msgid "Disables window gaps when only a single window is present"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:93
+#: src/lib/prefs/appearance.ts:95
 #, fuzzy
 msgid "Border radius"
 msgstr "Bordi"
 
-#: src/lib/prefs/appearance.ts:94
+#: src/lib/prefs/appearance.ts:96
 msgid "Set to 0 for square corners"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:119
+#: src/lib/prefs/appearance.ts:121
 msgid "Style"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:120
+#: src/lib/prefs/appearance.ts:122
 msgid "Change how the shell looks"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:123
+#: src/lib/prefs/appearance.ts:125
 #, fuzzy
 msgid "Preview hint"
 msgstr "Attiva/disattiva l'indice di anteprima"
 
-#: src/lib/prefs/appearance.ts:124
+#: src/lib/prefs/appearance.ts:126
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:130
+#: src/lib/prefs/appearance.ts:132
 #, fuzzy
 msgid "Border around focused window"
 msgstr ""
 "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
 
-#: src/lib/prefs/appearance.ts:131
+#: src/lib/prefs/appearance.ts:133
 msgid "Display a colored border around the focused window"
 msgstr "Visualizza un bordo colorato attorno alla finestra focalizzata"
 
-#: src/lib/prefs/appearance.ts:136
+#: src/lib/prefs/appearance.ts:138
 #, fuzzy
 msgid "Window split hint border"
 msgstr "Mostra suggerimento finestra del bordo di messa a fuoco"
 
-#: src/lib/prefs/appearance.ts:137
+#: src/lib/prefs/appearance.ts:139
 msgid "Show split direction border on focused window"
 msgstr ""
 "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
 
-#: src/lib/prefs/appearance.ts:142
+#: src/lib/prefs/appearance.ts:144
 #, fuzzy
 msgid "Anvil in quick settings"
 msgstr "Mostra le impostazioni rapide di affiancamento"
 
-#: src/lib/prefs/appearance.ts:143
+#: src/lib/prefs/appearance.ts:145
 #, fuzzy
 msgid "Toggles the Anvil tile in quick settings"
 msgstr "Attiva la visualizzazione di Anvil nelle impostazioni rapide"
 
-#: src/lib/prefs/appearance.ts:152
+#: src/lib/prefs/appearance.ts:154
 msgid "Color"
 msgstr "Colore"
 
-#: src/lib/prefs/appearance.ts:153
+#: src/lib/prefs/appearance.ts:155
 #, fuzzy
 msgid "Changes the focused window's border and preview hint colors"
 msgstr ""
 "Mostra il bordo della direzione di divisione sulla finestra focalizzata"
 
-#: src/lib/prefs/appearance.ts:172
+#: src/lib/prefs/appearance.ts:174
 #, fuzzy
 msgid "Border size"
 msgstr "Dimensione del bordo"
 
-#: src/lib/prefs/appearance.ts:243
+#: src/lib/prefs/appearance.ts:245
 #, fuzzy
 msgid "Border color"
 msgstr "Couleur de la bordure"
