@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   auditBaseline,
+  collectUnownedMarkers,
   collectUnusedSchemaKeys,
   collectUnreferencedIcons,
   repositoryReferenceSources,
@@ -69,6 +70,63 @@ describe("technical debt audit", () => {
     const trackedPaths = trackedRepositoryFiles(repository);
 
     expect(collectUnusedSchemaKeys(repository, trackedPaths)).toEqual([settingName]);
+  });
+
+  it("finds raw markers only in tracked production and tooling scope", () => {
+    const trackedFiles = new Map([
+      [".github/workflows/ci.yml", "# XXX release credentials\n"],
+      ["Makefile", "# TODO package the extension\n"],
+      ["docs/history.md", "TODO historical note\n"],
+      ["scripts/check-technical-debt.mjs", "TODO FIXME HACK XXX\n"],
+      ["scripts/release.mjs", "// FIXME publish transaction\n"],
+      ["src/extension.ts", "const ready = true;\n// TODO connect owner\n// HACK temporary\n"],
+      ["test/unit/example.test.ts", "// TODO test-only note\n"],
+    ]);
+    for (const [path, contents] of trackedFiles) {
+      mkdirSync(dirname(join(repository, path)), { recursive: true });
+      writeFileSync(join(repository, path), contents, "utf8");
+    }
+    writeFileSync(join(repository, ".gitignore"), "src/ignored.ts\n", "utf8");
+    execFileSync("git", ["add", "."], { cwd: repository });
+
+    writeFileSync(join(repository, "src/ignored.ts"), "// TODO ignored\n", "utf8");
+    writeFileSync(join(repository, "src/untracked.ts"), "// FIXME untracked\n", "utf8");
+
+    const trackedPaths = trackedRepositoryFiles(repository);
+
+    expect(collectUnownedMarkers(repository, trackedPaths)).toEqual([
+      ".github/workflows/ci.yml:1:XXX",
+      "Makefile:1:TODO",
+      "scripts/release.mjs:1:FIXME",
+      "src/extension.ts:2:TODO",
+      "src/extension.ts:3:HACK",
+    ]);
+  });
+
+  it("matches complete marker words and reports their source lines deterministically", () => {
+    const sourceDirectory = join(repository, "src");
+    mkdirSync(sourceDirectory, { recursive: true });
+    writeFileSync(
+      join(sourceDirectory, "markers.ts"),
+      [
+        "// TODO first TODO",
+        "// TODOING MYTODO TODO_ lowercase-todo",
+        "// (FIXME), HACK! XXX.",
+        "// TODO-after-punctuation",
+      ].join("\n"),
+      "utf8"
+    );
+    execFileSync("git", ["add", "src/markers.ts"], { cwd: repository });
+
+    const trackedPaths = trackedRepositoryFiles(repository);
+
+    expect(collectUnownedMarkers(repository, trackedPaths)).toEqual([
+      "src/markers.ts:1:TODO",
+      "src/markers.ts:3:FIXME",
+      "src/markers.ts:3:HACK",
+      "src/markers.ts:3:XXX",
+      "src/markers.ts:4:TODO",
+    ]);
   });
 
   it("fails for both unexpected findings and stale baseline entries", () => {

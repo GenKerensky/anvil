@@ -74,30 +74,30 @@ All remediation work must preserve these constraints:
 
 ## Inventory summary
 
-| ID     | Status   | Priority | Area                  | Summary                                                        |
-| ------ | -------- | -------- | --------------------- | -------------------------------------------------------------- |
-| TD-001 | Complete | P0       | Window discovery      | Preferences-window lookup skips workspace zero                 |
-| TD-002 | Complete | P0       | Configuration         | Parsed window overrides bypass their runtime validator         |
-| TD-003 | Complete | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected       |
-| TD-004 | Complete | P0       | User data             | Stylesheet upgrade can overwrite customized CSS                |
-| TD-005 | Complete | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze      |
-| TD-006 | Complete | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection         |
-| TD-007 | Complete | P2       | Runtime API           | Thirteen private compatibility members exist only for tests    |
-| TD-008 | Complete | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain         |
-| TD-009 | Complete | P2       | Shared helpers        | Several helpers and conversions have no production consumer    |
-| TD-010 | Complete | P2       | Policy ownership      | Tested helpers are disconnected from their production owners   |
-| TD-011 | Complete | P2       | GSettings             | Four schema keys have no source consumer                       |
-| TD-012 | Complete | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference     |
-| TD-013 | Complete | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts  |
-| TD-014 | Complete | P2       | Build tooling         | Metadata generation is duplicated                              |
-| TD-015 | Complete | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters        |
-| TD-016 | Complete | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate    |
-| TD-017 | Complete | P3       | Module depth          | Deep seams extracted; remaining size exceptions are justified  |
-| TD-018 | Complete | P3       | Tree ownership        | GNOME topology projection moved behind one dedicated owner     |
-| TD-019 | Complete | P3       | Grab-Resize design    | Pure policy is separated from session mechanics                |
-| TD-020 | Open     | P3       | Debt governance       | TODOs mix defects, features, stale notes, and design questions |
-| TD-021 | Tracked  | Tracked  | Vendored parser       | Third-party CSS parser remains under `@ts-nocheck`             |
-| TD-022 | Tracked  | Tracked  | Portable core         | Experimental migration and proposed surface ADR remain open    |
+| ID     | Status     | Priority | Area                  | Summary                                                       |
+| ------ | ---------- | -------- | --------------------- | ------------------------------------------------------------- |
+| TD-001 | Complete   | P0       | Window discovery      | Preferences-window lookup skips workspace zero                |
+| TD-002 | Complete   | P0       | Configuration         | Parsed window overrides bypass their runtime validator        |
+| TD-003 | Complete   | P0       | Preferences lifecycle | Monitor settings signal is stored but never disconnected      |
+| TD-004 | Complete   | P0       | User data             | Stylesheet upgrade can overwrite customized CSS               |
+| TD-005 | Complete   | P1       | Layout                | Cross-surface legacy swap is disabled because of a freeze     |
+| TD-006 | Complete   | P1       | Grab-Resize           | Ineligible adjacent windows stop resize-pair selection        |
+| TD-007 | Complete   | P2       | Runtime API           | Thirteen private compatibility members exist only for tests   |
+| TD-008 | Complete   | P2       | Local APIs            | Unused drag parameter and SpinButtonRow options remain        |
+| TD-009 | Complete   | P2       | Shared helpers        | Several helpers and conversions have no production consumer   |
+| TD-010 | Complete   | P2       | Policy ownership      | Tested helpers are disconnected from their production owners  |
+| TD-011 | Complete   | P2       | GSettings             | Four schema keys have no source consumer                      |
+| TD-012 | Complete   | P2       | Resources             | Twenty-one packaged SVG icons have no repository reference    |
+| TD-013 | Complete   | P2       | Debug tooling         | Four stale root scripts duplicate the canonical skill scripts |
+| TD-014 | Complete   | P2       | Build tooling         | Metadata generation is duplicated                             |
+| TD-015 | Complete   | P2       | Static enforcement    | Normal builds do not reject unused locals or parameters       |
+| TD-016 | Complete   | P2       | Test orchestration    | Python tooling tests are outside the normal `npm test` gate   |
+| TD-017 | Complete   | P3       | Module depth          | Deep seams extracted; remaining size exceptions are justified |
+| TD-018 | Complete   | P3       | Tree ownership        | GNOME topology projection moved behind one dedicated owner    |
+| TD-019 | Complete   | P3       | Grab-Resize design    | Pure policy is separated from session mechanics               |
+| TD-020 | Open       | P3       | Debt governance       | Owned marker gate is implemented and awaiting review          |
+| TD-021 | Superseded | Tracked  | CSS parser            | The reported source-wide type exemption does not exist        |
+| TD-022 | Deferred   | Tracked  | Portable core         | Experimental migration remains owned by its separate plan     |
 
 ## Detailed inventory
 
@@ -456,12 +456,23 @@ comment.
 stable debt ID or tracker reference, move the feature to a product backlog, or remove it after
 proving it obsolete. Do not leave unowned prose TODOs in production modules.
 
-### TD-021: Vendored CSS parser remains unchecked
+**Current implementation, pending review:** `npm run check:debt` now scans tracked production and
+tooling files for raw `TODO`, `FIXME`, `HACK`, and `XXX` markers against an empty baseline. Deferred
+product and design work is owned by [`product-follow-ups.md`](./product-follow-ups.md), including
+GNOME Extensions publication, while resolved and obsolete markers have been removed. Historical
+plans and tests remain outside the marker gate so evidence and fixture text cannot hide a new
+production finding.
 
-`src/lib/css/index.ts` is approximately 955 lines of third-party parser code under `@ts-nocheck`.
-This is accepted debt while it remains isolated, licensed, and covered by parser tests. Do not mix
-opportunistic typing or formatting changes into theme fixes. Replace or type it only as a dedicated
-vendor upgrade with fixture parity.
+### TD-021: CSS parser exemption claim is superseded
+
+**Inventory correction:** `src/lib/css/index.ts` is a 955-line licensed parser port, but it has no
+`@ts-nocheck` directive or TypeScript `any` annotations. It is compiled by the strict source
+project, and its parser suite currently passes 34 focused fixtures. The architecture and convention
+docs that repeated the exemption claim have been corrected.
+
+**Disposition:** Superseded. Preserve the upstream attribution and parser fixtures, and continue to
+treat a parser replacement or vendor upgrade as dedicated work, but do not carry debt for a type
+exemption that is absent.
 
 ### TD-022: Portable-core migration remains experimental
 
@@ -469,6 +480,12 @@ Large files in `src/lib/tiling/`, `tiling-shadow.ts`, and GNOME adapter modules 
 experimental migration. Their interface and cutover debt belongs to the portable migration plan.
 This plan may improve shared test gates but must not use production cleanup as authorization to
 change the default engine or retire the legacy writer.
+
+**Disposition:** Deferred and owned by
+[`portable-tiling-state-machine.md`](./portable-tiling-state-machine.md). Phase 7 of that plan is
+explicitly unapproved, and the portable core remains experimental. Reconsider only through a newly
+accepted cutover plan with explicit approval after the repeated pointer-grab manual soak, physical
+output hotplug validation, and disposition of proposed ADR 0002.
 
 ## Staged remediation roadmap
 
@@ -745,16 +762,32 @@ their size.
 
 ### Stage 7: Close the inventory and establish ongoing governance
 
+**Status:** In progress — implementation and deterministic validation pass; review is pending.
+
 **Purpose:** Resolve TD-020 and prevent the plan from becoming a stale checklist.
 
 **Work:**
 
-1. Re-run the full debt audit and update each debt ID as complete, deferred, or superseded.
-2. Remove resolved TODOs and convert remaining product ideas into tracked feature work.
-3. Update `CHANGELOG.md` for user-visible fixes and removed settings.
-4. Update architecture context and decisions for new module ownership.
-5. Re-run package, unit, portable, tooling, and focused E2E validation.
-6. Archive or replace this plan when no active stage remains.
+1. [ ] Re-run the full debt audit and update each debt ID as complete, deferred, or superseded.
+2. [ ] Remove resolved TODOs and convert remaining product ideas into tracked feature work.
+3. [ ] Update `CHANGELOG.md` for user-visible fixes and removed settings.
+4. [ ] Update architecture context and decisions for new module ownership.
+5. [ ] Re-run package, unit, portable, tooling, and focused E2E validation.
+6. [ ] Retain this plan as a completed historical record and link its ongoing governance owners.
+
+**Current implementation evidence, pending review (2026-07-16):**
+
+- The tracked-file debt audit enforces an empty baseline for unowned raw markers in production,
+  scripts, release workflows, and root build tooling. Fixture coverage proves ignored, untracked,
+  documentation, test, partial-word, and self-reference exclusions cannot hide or fabricate debt.
+- All live product/design deferrals have an owner, rationale, and next decision point in
+  `product-follow-ups.md`; release automation points to that owner instead of retaining an inactive
+  upload recipe.
+- TD-021 is superseded by strict compilation plus 34 focused parser fixtures. TD-022 is deferred to
+  the unapproved cutover phase in the portable migration plan, with its remaining manual gates and
+  proposed ADR disposition named explicitly.
+- Architecture context no longer claims a nonexistent CSS-parser type exemption, and the changelog
+  includes every user-visible bounded fix and removed setting from this remediation series.
 
 **Exit gate:** No unowned TODO remains in production code, no high-priority debt ID is unresolved,
 and deferred items name an owner, rationale, and next decision point.

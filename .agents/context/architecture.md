@@ -10,7 +10,7 @@ src/
     extension/          # Core tiling: tree, windows, keybindings, utils, theme
     shared/             # Shared between extension + prefs: logger, settings, theme
     prefs/              # Preferences UI (metadata.js is gitignored + auto-generated)
-    css/                # CSS parsing (@ts-nocheck — third-party library)
+    css/                # Licensed CSS parser port with strict TypeScript coverage
   config/windows.json   # Default window override config
   po/                   # Translation files (POT, PO, MO)
   resources/            # Static assets (icons)

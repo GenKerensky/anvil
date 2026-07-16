@@ -47,6 +47,12 @@ testing, and ongoing maintainability.
 
 #### Fixed
 
+- **Preferences window reuse across workspaces** — Opening preferences now searches workspace zero
+  and every later workspace without an out-of-range lookup, activating an existing Anvil
+  preferences window instead of opening a duplicate.
+- **Window override validation** — Malformed JSON and structurally invalid override rows are now
+  rejected before they can become runtime configuration; only non-empty window classes with
+  supported `float` or `tile` modes are accepted.
 - **Focus after closing a tiled window** — The close pipeline now preserves the window's former
   container long enough to focus an eligible sibling, with a current-workspace fallback when the
   container is empty.

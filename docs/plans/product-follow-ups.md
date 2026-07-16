@@ -45,3 +45,12 @@ code does not carry ambiguous `TODO` markers.
   failure modes without a current release requirement.
 - **Next decision point:** Release provenance requirements identify information unavailable from the
   checked-out repository and specify a reproducible cache/fallback policy.
+
+## Publish releases to GNOME Extensions
+
+- **Owner:** Release workflow and extension-review process.
+- **Why deferred:** Publication requires GNOME Extensions approval and credentials; keeping an
+  unverified upload recipe commented out in the workflow would make that release path appear
+  supported before those prerequisites exist.
+- **Next decision point:** After the extension review checklist passes and the Anvil UUID is
+  approved.

@@ -1,8 +1,8 @@
 # Key Conventions
 
 - **Language**: TypeScript. `tsc` compiles to `dist/`. `module: NodeNext`, `target: ES2022`.
-- **Strict mode**: `strict: true`. One `@ts-nocheck` file: `src/lib/css/index.ts`. See `TODO.md`
-  for remaining `any` usage.
+- **Strict mode**: `strict: true` for all source modules; no source file is exempted with
+  `@ts-nocheck`.
 - **GJS imports**: `gi://Gio`, `resource:///org/gnome/shell/...`. Unit tests remap via vitest
   aliases to `test/unit/__mocks__/`.
 - **Test globals**: `log`, `logError`, `print`, `global` mocked in `test/unit/setup.js`.

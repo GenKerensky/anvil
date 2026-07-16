@@ -19,6 +19,20 @@ const UNREFERENCED_ICON_BASELINE = [];
 
 const RETAINED_UNREFERENCED_ICONS = [];
 
+const UNOWNED_MARKER_BASELINE = [];
+
+const rootBuildToolingFiles = new Set([
+  ".markdownlint.json",
+  ".prettierignore",
+  ".prettierrc.json",
+  "Makefile",
+  "eslint.config.js",
+  "package-lock.json",
+  "package.json",
+]);
+
+const rawDebtMarkerPattern = /\b(?:TODO|FIXME|HACK|XXX)\b/g;
+
 const unusedDiagnosticCodes = new Set([6133, 6192, 6196]);
 const textExtensions = new Set([
   ".cjs",
@@ -164,6 +178,54 @@ export function repositoryReferenceSources(
     .map((path) => readFileSync(path, "utf8"));
 }
 
+function isRootBuildToolingFile(repositoryPath) {
+  if (repositoryPath.includes("/")) return false;
+
+  return (
+    rootBuildToolingFiles.has(repositoryPath) ||
+    /^tsconfig(?:\.[^.]+)*\.json$/.test(repositoryPath) ||
+    /^vitest(?:\.[^.]+)*\.config\.[cm]?js$/.test(repositoryPath)
+  );
+}
+
+export function collectUnownedMarkers(
+  root = repositoryRoot,
+  trackedPaths = trackedRepositoryFiles(root)
+) {
+  const auditFile = resolve(root, "scripts/check-technical-debt.mjs");
+  const scopedPaths = trackedPaths
+    .filter((path) => {
+      const absolutePath = resolve(path);
+      const repositoryPath = relativePath(path, root);
+      const rootBuildToolingFile = isRootBuildToolingFile(repositoryPath);
+      return (
+        absolutePath !== auditFile &&
+        (isTextFile(path) || rootBuildToolingFile) &&
+        (repositoryPath.startsWith("src/") ||
+          repositoryPath.startsWith("scripts/") ||
+          repositoryPath.startsWith(".github/workflows/") ||
+          rootBuildToolingFile)
+      );
+    })
+    .sort((left, right) => {
+      const leftPath = relativePath(left, root);
+      const rightPath = relativePath(right, root);
+      return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0;
+    });
+
+  const findings = [];
+  for (const path of scopedPaths) {
+    const repositoryPath = relativePath(path, root);
+    const lines = readFileSync(path, "utf8").split(/\r?\n/);
+    for (const [index, line] of lines.entries()) {
+      const markers = new Set([...line.matchAll(rawDebtMarkerPattern)].map((match) => match[0]));
+      for (const marker of markers) findings.push(`${repositoryPath}:${index + 1}:${marker}`);
+    }
+  }
+
+  return findings;
+}
+
 export function collectUnreferencedIcons(
   referenceSources,
   root = repositoryRoot,
@@ -228,6 +290,7 @@ export function runTechnicalDebtAudit(root = repositoryRoot, logger = console) {
   const failures = [];
   const unusedDeclarations = collectUnusedDeclarations(root);
   const unusedSchemaKeys = collectUnusedSchemaKeys(root, trackedPaths);
+  const unownedMarkers = collectUnownedMarkers(root, trackedPaths);
   const referenceSources = repositoryReferenceSources(root, trackedPaths);
   const allUnreferencedIcons = collectUnreferencedIcons(referenceSources, root, trackedPaths);
   const retainedIcons = allUnreferencedIcons.filter((icon) =>
@@ -249,6 +312,13 @@ export function runTechnicalDebtAudit(root = repositoryRoot, logger = console) {
     "Unused GSettings schema keys",
     unusedSchemaKeys,
     UNUSED_SCHEMA_KEY_BASELINE,
+    failures,
+    logger
+  );
+  auditBaseline(
+    "Unowned raw debt markers",
+    unownedMarkers,
+    UNOWNED_MARKER_BASELINE,
     failures,
     logger
   );

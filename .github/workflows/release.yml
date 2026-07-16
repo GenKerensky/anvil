@@ -72,15 +72,4 @@ jobs:
           files: anvil@GenKerensky.github.com.zip
           generate_release_notes: true
 
-      # TODO: Publish to GNOME Extensions website
-      # Requires the extension to pass GNOME Extensions review first.
-      # After review approval, uncomment and configure a secret token.
-      #
-      # - name: Publish to extensions.gnome.org
-      #   env:
-      #     GNOME_EXTENSIONS_TOKEN: ${{ secrets.GNOME_EXTENSIONS_TOKEN }}
-      #   run: |
-      #     curl -X POST "https://extensions.gnome.org/upload/" \
-      #       -H "Authorization: Bearer ${GNOME_EXTENSIONS_TOKEN}" \
-      #       -F "file=@anvil@GenKerensky.github.com.zip" \
-      #       -F "uuid=anvil@GenKerensky.github.com"
+      # Publication is intentionally deferred; see docs/plans/product-follow-ups.md.
