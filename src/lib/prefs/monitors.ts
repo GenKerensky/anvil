@@ -217,6 +217,14 @@ export class MonitorsPage extends Adw.PreferencesPage {
     });
   }
 
+  override vfunc_dispose(): void {
+    if (this._settingsChangedId !== 0) {
+      this._settings.disconnect(this._settingsChangedId);
+      this._settingsChangedId = 0;
+    }
+    super.vfunc_dispose();
+  }
+
   private _drawMonitors(cr: Cairo.Context, widgetWidth: number, widgetHeight: number): void {
     if (this._monitors.length === 0) return;
 

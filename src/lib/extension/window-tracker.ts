@@ -599,7 +599,7 @@ export class WindowTracker {
     const host = this._host;
     const metaWindow = nodeWindow.nodeValue as Meta.Window;
     if (metaWindow) {
-      if (metaWindow.get_title() === host.prefsTitle) {
+      if (Utils.isPreferencesWindow(metaWindow, host.prefsTitle)) {
         metaWindow
           .get_workspace()
           .activate_with_focus(metaWindow, global.display.get_current_time());

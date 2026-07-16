@@ -15,6 +15,12 @@ class GObjectBase extends withSignals() {
   constructor() {
     super();
   }
+
+  vfunc_dispose() {}
+
+  run_dispose() {
+    this.vfunc_dispose();
+  }
 }
 
 export { GObjectBase as Object };

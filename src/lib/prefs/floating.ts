@@ -9,13 +9,7 @@ import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensio
 
 // Extension imports
 import { PreferencesPage, RemoveItemRow, ResetButton } from "./widgets.js";
-import { ConfigManager } from "../shared/settings.js";
-
-interface WindowOverride {
-  wmClass: string;
-  wmTitle?: string;
-  mode: string;
-}
+import { ConfigManager, type WindowOverride } from "../shared/settings.js";
 
 export class FloatingPage extends PreferencesPage {
   static {
@@ -79,6 +73,8 @@ export class FloatingPage extends PreferencesPage {
 
   onResetHandler() {
     const defaultWindowProps = this.configMgr.loadDefaultWindowConfigContents();
+    if (!defaultWindowProps) return;
+
     const original = defaultWindowProps.overrides as WindowOverride[];
     this.saveOverrides(original);
 

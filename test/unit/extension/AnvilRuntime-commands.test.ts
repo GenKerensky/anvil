@@ -8,6 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import { WINDOW_MODES } from "../../../src/lib/extension/window/constants.js";
+import { PREFERENCES_WINDOW_CLASS } from "../../../src/lib/extension/utils/window-filters.js";
 import { NODE_TYPES, LAYOUT_TYPES, ORIENTATION_TYPES } from "../../../src/lib/extension/tree.js";
 import {
   createMockWindow,
@@ -343,6 +344,55 @@ describe("AnvilRuntime - Commands", () => {
       const skipList = ctx.settings.get_string("workspace-skip-tile");
       expect(skipList).not.toContain("1");
     });
+  });
+
+  describe("PrefsOpen", () => {
+    it.each(["shadow", "core"] as const)(
+      "activates the existing workspace-zero preferences window in %s mode",
+      (mode) => {
+        const workspace = ctx.workspaces[0];
+        const preferencesWindow = createMockWindow({
+          title: wm().prefsTitle,
+          wm_class: PREFERENCES_WINDOW_CLASS,
+          workspace,
+        });
+        const activateSpy = vi.spyOn(workspace, "activate_with_focus");
+        const openPreferences = vi.fn();
+        ctx.extension.openPreferences = openPreferences;
+        ctx.display.get_tab_list.mockImplementation((_type: unknown, candidate: unknown) =>
+          candidate === workspace ? [preferencesWindow] : []
+        );
+        wm()._tilingEngineMode = mode;
+
+        wm().command({ name: "PrefsOpen" });
+
+        expect(ctx.workspaceManager.get_workspace_by_index).toHaveBeenCalledWith(0);
+        expect(activateSpy).toHaveBeenCalledExactlyOnceWith(preferencesWindow, 12345);
+        expect(openPreferences).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each(["shadow", "core"] as const)(
+      "opens preferences instead of activating an unrelated partial title in %s mode",
+      (mode) => {
+        const workspace = ctx.workspaces[0];
+        const unrelatedWindow = createMockWindow({
+          title: "Anvil documentation",
+          wm_class: "org.gnome.TextEditor",
+          workspace,
+        });
+        const activateSpy = vi.spyOn(workspace, "activate_with_focus");
+        const openPreferences = vi.fn();
+        ctx.extension.openPreferences = openPreferences;
+        ctx.display.get_tab_list.mockReturnValue([unrelatedWindow]);
+        wm()._tilingEngineMode = mode;
+
+        wm().command({ name: "PrefsOpen" });
+
+        expect(activateSpy).not.toHaveBeenCalled();
+        expect(openPreferences).toHaveBeenCalledOnce();
+      }
+    );
   });
 
   describe("LayoutStackedToggle", () => {

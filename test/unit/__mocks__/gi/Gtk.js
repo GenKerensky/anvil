@@ -29,6 +29,11 @@ class Widget extends withSignals() {
   show() {}
   hide() {}
   queue_draw() {}
+  vfunc_dispose() {}
+
+  run_dispose() {
+    this.vfunc_dispose();
+  }
 
   set_sensitive(v) {
     this.sensitive = v;

@@ -3,6 +3,8 @@
  */
 import Meta from "gi://Meta";
 
+export const PREFERENCES_WINDOW_CLASS = "org.gnome.Shell.Extensions";
+
 export function isEphemeralHelperWindow(metaWindow: Meta.Window) {
   const wmClass = (metaWindow.get_wm_class() ?? "").toLowerCase();
   const title = (metaWindow.get_title() ?? "").toLowerCase();
@@ -14,27 +16,34 @@ export function isEphemeralHelperWindow(metaWindow: Meta.Window) {
   return frame.width <= 2 && frame.height <= 2;
 }
 
-export function findWindowWith(title: string) {
+export function isPreferencesWindow(metaWindow: Meta.Window, title: string): boolean {
+  return (
+    !!title &&
+    metaWindow.get_wm_class()?.toLowerCase() === PREFERENCES_WINDOW_CLASS.toLowerCase() &&
+    !!metaWindow.title?.includes(title)
+  );
+}
+
+export function findWindowWith(title: string, wmClass?: string) {
+  if (!title) return undefined;
   const display = global.display;
   const type = Meta.TabList.NORMAL_ALL;
   const workspaceMgr = display.get_workspace_manager();
   const workspaces = workspaceMgr.get_n_workspaces();
+  let partialMatch: Meta.Window | undefined;
 
-  for (let wsId = 1; wsId <= workspaces; wsId++) {
+  for (let wsId = 0; wsId < workspaces; wsId++) {
     const workspace = workspaceMgr.get_workspace_by_index(wsId);
+    if (!workspace) continue;
     const tabList = (display as Meta.Display).get_tab_list(type, workspace);
     for (const metaWindow of tabList) {
-      if (
-        metaWindow.title &&
-        title &&
-        (metaWindow.title === title || metaWindow.title.includes(title))
-      ) {
-        return metaWindow;
-      }
+      if (wmClass && metaWindow.get_wm_class()?.toLowerCase() !== wmClass.toLowerCase()) continue;
+      if (metaWindow.title === title) return metaWindow;
+      if (!partialMatch && metaWindow.title?.includes(title)) partialMatch = metaWindow;
     }
   }
 
-  return undefined;
+  return partialMatch;
 }
 
 export function monitorIndex(monitorValue: string) {

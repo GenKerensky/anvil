@@ -327,7 +327,7 @@ function handleCancelOperation(host: CommandHandlerHost) {
 }
 
 function handlePrefsOpen(host: CommandHandlerHost) {
-  const existWindow = Utils.findWindowWith(host.prefsTitle);
+  const existWindow = Utils.findWindowWith(host.prefsTitle, Utils.PREFERENCES_WINDOW_CLASS);
   if (existWindow && existWindow.get_workspace()) {
     existWindow.get_workspace().activate_with_focus(existWindow, global.display.get_current_time());
     host.moveCenter(existWindow);

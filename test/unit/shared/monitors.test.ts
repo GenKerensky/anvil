@@ -64,6 +64,23 @@ describe("MonitorsPage", () => {
       new MonitorsPage({ settings });
       expect(connectSpy).toHaveBeenCalledWith("changed::monitor-constraints", expect.any(Function));
     });
+
+    it("disconnects the settings handler when the page is disposed", () => {
+      settings = createSettings();
+      const page = new MonitorsPage({ settings });
+      const refreshSpy = vi.spyOn(page as any, "_refreshControls");
+      const disconnectSpy = vi.spyOn(settings, "disconnect");
+
+      expect((settings as any).getHandlerCount("changed::monitor-constraints")).toBe(1);
+
+      (page as any).run_dispose();
+      (page as any).run_dispose();
+      settings.emit("changed::monitor-constraints");
+
+      expect((settings as any).getHandlerCount("changed::monitor-constraints")).toBe(0);
+      expect(disconnectSpy).toHaveBeenCalledTimes(1);
+      expect(refreshSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe("_readConstraints / _writeConstraints", () => {

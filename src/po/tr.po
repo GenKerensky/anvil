@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-14 09:42+0000\n"
+"POT-Creation-Date: 2026-07-16 04:05+0000\n"
 "PO-Revision-Date: 2025-08-22 12:00+0300\n"
 "Last-Translator: Mucahit Sahin <mucahitsahin786@gmail.com>\n"
 "Language-Team: Turkish\n"
@@ -14,10 +14,6 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
-
-#: src/lib/extension/anvil-runtime.ts:156 src/lib/extension/indicator.ts:118
-msgid "Settings"
-msgstr "Ayarlar"
 
 #: src/lib/extension/indicator.ts:71 src/lib/prefs/settings.ts:87
 msgid "Tiling"
@@ -42,6 +38,10 @@ msgstr "Odak İpucu Kenarlığını Göster"
 #: src/lib/extension/indicator.ts:110
 msgid "Move Pointer with the Focus"
 msgstr "İmleci Odakla Birlikte Taşı"
+
+#: src/lib/extension/indicator.ts:118
+msgid "Settings"
+msgstr "Ayarlar"
 
 #: src/lib/prefs/appearance.ts:31
 msgid "Tiled window"
@@ -156,16 +156,16 @@ msgstr "Kenarlık boyutu"
 msgid "Border color"
 msgstr "Kenarlık rengi"
 
-#: src/lib/prefs/floating.ts:31
+#: src/lib/prefs/floating.ts:25
 msgid "Windows"
 msgstr ""
 
-#: src/lib/prefs/floating.ts:40
+#: src/lib/prefs/floating.ts:34
 #, fuzzy
 msgid "Floating Windows"
 msgstr "Yüzen pencere"
 
-#: src/lib/prefs/floating.ts:41
+#: src/lib/prefs/floating.ts:35
 msgid "Windows that will not be tiled"
 msgstr ""
 
@@ -261,7 +261,7 @@ msgstr ""
 msgid "Let manually resized windows exceed the size limits"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:336
+#: src/lib/prefs/monitors.ts:344
 msgid "Monitor:"
 msgstr ""
 
@@ -388,15 +388,15 @@ msgstr ""
 "<b>DİKKAT</b>: Bu ayarı etkinleştirmek hatalara yol açabilir veya kabuğun "
 "çökmesine neden olabilir"
 
-#: src/lib/prefs/widgets.ts:253
+#: src/lib/prefs/widgets.ts:245
 msgid "Clear shortcut"
 msgstr "Kısayolu temizle"
 
-#: src/lib/prefs/widgets.ts:277
+#: src/lib/prefs/widgets.ts:269
 msgid "Reset to default"
 msgstr "Varsayılana sıfırla"
 
-#: src/lib/prefs/widgets.ts:302
+#: src/lib/prefs/widgets.ts:294
 msgid "Remove Item"
 msgstr ""
 

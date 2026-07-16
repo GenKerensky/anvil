@@ -21,8 +21,6 @@ import GLib from "gi://GLib";
 import Meta from "gi://Meta";
 
 // Gnome Shell imports
-import { gettext as _ } from "resource:///org/gnome/shell/extensions/extension.js";
-import { PACKAGE_VERSION } from "resource:///org/gnome/shell/misc/config.js";
 
 // Shared state
 import { Logger } from "../shared/logger.js";
@@ -32,7 +30,6 @@ import type { WindowConfig } from "../shared/settings.js";
 import * as Utils from "./utils.js";
 import { Keybindings } from "./keybindings.js";
 import { Tree, Node, NODE_TYPES, RectLike } from "./tree.js";
-import { production } from "../shared/settings.js";
 import { PointerPolicy, type PointerFocusSource } from "./pointer-policy.js";
 import { TilingRender } from "./tiling-render.js";
 import { RulesEngine } from "./rules-engine.js";
@@ -153,9 +150,10 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   constructor(ext: AnvilExtension) {
     super();
     this.ext = ext;
-    this.prefsTitle = `Anvil ${_("Settings")} - ${
-      !production ? "DEV" : `${PACKAGE_VERSION}-${ext.metadata.version}`
-    }`;
+    // GNOME names the managed preferences window from extension metadata.
+    // Using the same stable substring works across supported Shell versions,
+    // whose decorations may add their own localized suffix.
+    this.prefsTitle = ext.metadata.name;
     this.disabled = true;
     this._session = createSessionFlags();
   }
@@ -806,7 +804,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       return true;
     }
     if (action.name === "PrefsOpen") {
-      const existing = Utils.findWindowWith(this.prefsTitle);
+      const existing = Utils.findWindowWith(this.prefsTitle, Utils.PREFERENCES_WINDOW_CLASS);
       if (existing?.get_workspace()) {
         existing.get_workspace()!.activate_with_focus(existing, global.display.get_current_time());
         this.moveCenter(existing);

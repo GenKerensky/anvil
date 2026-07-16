@@ -3,13 +3,16 @@
  * Ported from jcrussell/forge
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { ConfigManager, production } from "../../../src/lib/shared/settings.js";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { ConfigManager, isWindowConfig, production } from "../../../src/lib/shared/settings.js";
+import { Logger } from "../../../src/lib/shared/logger.js";
 import Gio from "gi://Gio";
 
 const sampleWindowConfig = {
-  float: [{ wmClass: "Firefox", title: "Picture-in-Picture" }],
-  tile: [],
+  overrides: [
+    { wmClass: "Firefox", wmTitle: "Picture-in-Picture", mode: "float" },
+    { wmClass: "Terminal", mode: "tile" },
+  ],
 };
 
 function createMockDir(path = "/mock/extension") {
@@ -54,6 +57,25 @@ describe("production constant", () => {
   });
 });
 
+describe("isWindowConfig", () => {
+  it("accepts a valid override configuration", () => {
+    expect(isWindowConfig(sampleWindowConfig)).toBe(true);
+  });
+
+  it.each([
+    null,
+    {},
+    { overrides: "not-an-array" },
+    { overrides: [null] },
+    { overrides: [{ mode: "float" }] },
+    { overrides: [{ wmClass: "Firefox" }] },
+    { overrides: [{ wmClass: "", mode: "float" }] },
+    { overrides: [{ wmClass: "Firefox", mode: "unknown" }] },
+  ])("rejects invalid configuration %#", (value) => {
+    expect(isWindowConfig(value)).toBe(false);
+  });
+});
+
 describe("ConfigManager", () => {
   let configManager: ConfigManager;
   let mockDir: any;
@@ -61,6 +83,10 @@ describe("ConfigManager", () => {
   beforeEach(() => {
     mockDir = createMockDir("/test/extension/path");
     configManager = new ConfigManager({ dir: mockDir });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   describe("constructor", () => {
@@ -254,6 +280,18 @@ describe("ConfigManager", () => {
       const result = configManager.loadDefaultWindowConfigContents();
       expect(result).toBeNull();
     });
+
+    it("rejects a structurally invalid default configuration", () => {
+      const mockFile = createMockFile("/default/windows.json", {
+        contents: JSON.stringify({ overrides: "invalid" }),
+      });
+      Object.defineProperty(configManager, "defaultWindowConfigFile", {
+        get: () => mockFile,
+        configurable: true,
+      });
+
+      expect(configManager.loadDefaultWindowConfigContents()).toBeNull();
+    });
   });
 
   describe("windowProps getter", () => {
@@ -302,6 +340,37 @@ describe("ConfigManager", () => {
       const props = configManager.windowProps;
       expect(props).toBeNull();
     });
+
+    it("rejects syntactically valid JSON with an invalid configuration shape", () => {
+      const mockFile = createMockFile("/config/windows.json", {
+        contents: JSON.stringify({ overrides: "invalid" }),
+      });
+      Object.defineProperty(configManager, "windowConfigFile", {
+        get: () => mockFile,
+        configurable: true,
+      });
+      const errorSpy = vi.spyOn(Logger, "error");
+
+      expect(configManager.windowProps).toBeNull();
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("Invalid window config"));
+      expect(mockFile.replace_contents).not.toHaveBeenCalled();
+    });
+
+    it("distinguishes malformed JSON from an invalid configuration shape", () => {
+      const mockFile = createMockFile("/config/windows.json", {
+        contents: "{not-json",
+      });
+      Object.defineProperty(configManager, "windowConfigFile", {
+        get: () => mockFile,
+        configurable: true,
+      });
+      const errorSpy = vi.spyOn(Logger, "error");
+
+      expect(configManager.windowProps).toBeNull();
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to parse window config")
+      );
+    });
   });
 
   describe("windowProps setter", () => {
@@ -334,7 +403,7 @@ describe("ConfigManager", () => {
         configurable: true,
       });
 
-      configManager.windowProps = { test: true } as any;
+      configManager.windowProps = sampleWindowConfig as any;
 
       const writtenContents = (mockFile.replace_contents as any).mock.calls[0][0];
       expect(writtenContents).toContain("    ");
@@ -358,6 +427,19 @@ describe("ConfigManager", () => {
       configManager.windowProps = sampleWindowConfig as any;
 
       expect(mockDefaultFile.replace_contents).toHaveBeenCalled();
+    });
+
+    it("does not write a structurally invalid configuration", () => {
+      const mockFile = createMockFile("/config/windows.json");
+      mockFile.get_parent = vi.fn(() => ({ get_path: () => "/config" }));
+      Object.defineProperty(configManager, "windowConfigFile", {
+        get: () => mockFile,
+        configurable: true,
+      });
+
+      configManager.windowProps = { overrides: "invalid" } as any;
+
+      expect(mockFile.replace_contents).not.toHaveBeenCalled();
     });
   });
 

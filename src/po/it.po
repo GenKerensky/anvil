@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-14 09:42+0000\n"
+"POT-Creation-Date: 2026-07-16 04:05+0000\n"
 "PO-Revision-Date: 2024-09-15 20:16+0100\n"
 "Last-Translator: Albano Battistella <albanobattistella@gmail.com>\n"
 "Language-Team: Italian <albanobattistella@gmail.com>\n"
@@ -15,10 +15,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1)\n"
 "X-Generator: Gtranslator 42.0\n"
-
-#: src/lib/extension/anvil-runtime.ts:156 src/lib/extension/indicator.ts:118
-msgid "Settings"
-msgstr "Impostazioni"
 
 #: src/lib/extension/indicator.ts:71 src/lib/prefs/settings.ts:87
 msgid "Tiling"
@@ -43,6 +39,10 @@ msgstr "Mostra suggerimento del bordo di messa a fuoco"
 #: src/lib/extension/indicator.ts:110
 msgid "Move Pointer with the Focus"
 msgstr "Sposta il puntatore con il focus"
+
+#: src/lib/extension/indicator.ts:118
+msgid "Settings"
+msgstr "Impostazioni"
 
 #: src/lib/prefs/appearance.ts:31
 #, fuzzy
@@ -174,16 +174,16 @@ msgstr "Dimensione del bordo"
 msgid "Border color"
 msgstr "Couleur de la bordure"
 
-#: src/lib/prefs/floating.ts:31
+#: src/lib/prefs/floating.ts:25
 #, fuzzy
 msgid "Windows"
 msgstr "Finestri"
 
-#: src/lib/prefs/floating.ts:40
+#: src/lib/prefs/floating.ts:34
 msgid "Floating Windows"
 msgstr "Finestre flottanti"
 
-#: src/lib/prefs/floating.ts:41
+#: src/lib/prefs/floating.ts:35
 msgid "Windows that will not be tiled"
 msgstr ""
 
@@ -281,7 +281,7 @@ msgstr ""
 msgid "Let manually resized windows exceed the size limits"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:336
+#: src/lib/prefs/monitors.ts:344
 msgid "Monitor:"
 msgstr ""
 
@@ -421,16 +421,16 @@ msgstr ""
 "<b>ATTENZIONE</b>: l'attivazione di questa impostazione può portare a bug o "
 "causare il crash della shell"
 
-#: src/lib/prefs/widgets.ts:253
+#: src/lib/prefs/widgets.ts:245
 #, fuzzy
 msgid "Clear shortcut"
 msgstr "Scorciatoie per i container"
 
-#: src/lib/prefs/widgets.ts:277
+#: src/lib/prefs/widgets.ts:269
 msgid "Reset to default"
 msgstr ""
 
-#: src/lib/prefs/widgets.ts:302
+#: src/lib/prefs/widgets.ts:294
 msgid "Remove Item"
 msgstr ""
 

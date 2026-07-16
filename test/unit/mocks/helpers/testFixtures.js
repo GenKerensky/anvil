@@ -122,7 +122,7 @@ export function createMockExtension(options = {}) {
   const { settings = {}, configMgr = {}, version = "1.0.0" } = options;
 
   return {
-    metadata: { version },
+    metadata: { name: "Anvil", version },
     settings: createMockSettings(settings),
     configMgr: createMockConfigManager(configMgr),
     keybindings: null,

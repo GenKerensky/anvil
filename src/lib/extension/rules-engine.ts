@@ -261,7 +261,11 @@ export class RulesEngine {
     const currentProps = configMgr.windowProps;
     if (!currentProps) return;
     const overrides = currentProps.overrides;
-    const wmClass = metaWindow.get_wm_class() ?? "";
+    const wmClass = metaWindow.get_wm_class()?.trim();
+    if (!wmClass) {
+      Logger.warn("Cannot add a window override before wm_class is available");
+      return;
+    }
     const wmId = metaWindow.get_id();
 
     for (const override of overrides) {

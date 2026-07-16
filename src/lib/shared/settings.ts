@@ -36,7 +36,7 @@ export interface WindowOverride {
   wmClass: string;
   wmTitle?: string;
   wmId?: string;
-  mode: WindowOverrideMode | string;
+  mode: WindowOverrideMode;
 }
 
 export interface WindowConfig {
@@ -51,7 +51,13 @@ export function isWindowConfig(value: unknown): value is WindowConfig {
   return o.overrides.every((item) => {
     if (!item || typeof item !== "object") return false;
     const row = item as WindowOverride;
-    return typeof row.wmClass === "string" && typeof row.mode === "string";
+    return (
+      typeof row.wmClass === "string" &&
+      row.wmClass.trim().length > 0 &&
+      (row.mode === "float" || row.mode === "tile") &&
+      (row.wmTitle === undefined || typeof row.wmTitle === "string") &&
+      (row.wmId === undefined || typeof row.wmId === "string")
+    );
   });
 }
 
@@ -113,11 +119,11 @@ export class ConfigManager extends GObject.Object {
     if (defaultSettingFile) {
       const contents = this.loadFileContents(defaultSettingFile);
       if (contents) {
-        try {
-          return JSON.parse(contents);
-        } catch (e) {
-          Logger.error(`Failed to parse default window config: ${e}`);
-        }
+        return this.parseWindowConfig(
+          contents,
+          "default window config",
+          defaultSettingFile.get_path()
+        );
       }
     }
     return null;
@@ -173,17 +179,20 @@ export class ConfigManager extends GObject.Object {
     const [success, contents] = windowConfigFile.load_contents(null);
     if (success) {
       const windowConfigContents = new TextDecoder().decode(contents as Uint8Array);
-      Logger.trace(`${windowConfigContents}`);
-      try {
-        windowProps = JSON.parse(windowConfigContents);
-      } catch (e) {
-        Logger.error(`Failed to parse window config: ${e}`);
-      }
+      windowProps = this.parseWindowConfig(
+        windowConfigContents,
+        "window config",
+        windowConfigFile.get_path()
+      );
     }
     return windowProps;
   }
 
   set windowProps(props: WindowConfig | null) {
+    if (!isWindowConfig(props)) {
+      Logger.error("Invalid window config: refusing to write");
+      return;
+    }
     let windowConfigFile = this.windowConfigFile;
     // if (!windowConfigFile || !production) {
     if (!windowConfigFile) {
@@ -206,5 +215,25 @@ export class ConfigManager extends GObject.Object {
         null
       );
     }
+  }
+
+  private parseWindowConfig(
+    contents: string,
+    label: string,
+    path: string | null = null
+  ): WindowConfig | null {
+    const source = path ? `${label} (${path})` : label;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(contents);
+    } catch (e) {
+      Logger.error(`Failed to parse ${source}: ${e}`);
+      return null;
+    }
+    if (!isWindowConfig(parsed)) {
+      Logger.error(`Invalid ${source}: expected valid float/tile override rows`);
+      return null;
+    }
+    return parsed;
   }
 }

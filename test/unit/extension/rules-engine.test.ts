@@ -2,7 +2,7 @@
  * RulesEngine pure unit tests — title grammar and evaluation order.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import Meta from "gi://Meta";
 import {
   RulesEngine,
@@ -183,6 +183,28 @@ describe("RulesEngine", () => {
       const win = createMockWindow({ wm_class: "App", id: 99 });
       engine.addFloatOverride(win, true, configMgr as any);
       expect(configMgr.windowProps.overrides[0].wmId).toBe("99");
+    });
+
+    it("does not cache or persist an override before wm_class is available", () => {
+      const storedProps = { overrides: [{ wmClass: "Existing", mode: "float" as const }] };
+      const write = vi.fn();
+      const configMgr = {
+        get windowProps() {
+          return storedProps;
+        },
+        set windowProps(value) {
+          write(value);
+        },
+      };
+      const engineProps = engine.windowProps;
+      const win = createMockWindow({ wm_class: null, id: 99 });
+
+      engine.addFloatOverride(win, true, configMgr as any);
+
+      expect(storedProps.overrides).toEqual([{ wmClass: "Existing", mode: "float" }]);
+      expect(write).not.toHaveBeenCalled();
+      expect(engine.windowProps).toBe(engineProps);
+      expect(engine.windowProps.overrides).toEqual([]);
     });
 
     it("removeFloatOverride drops matching class rule", () => {

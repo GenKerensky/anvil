@@ -71,7 +71,7 @@ export class DragDropTile {
       const tabbed = parentNodeTarget!.isTabbed();
       const stackedOrTabbed = stacked || tabbed;
 
-      const updatePreview = (previewTarget: Node, previewParams: PreviewParams) => {
+      const updatePreview = (previewParams: PreviewParams) => {
         const previewHintEnabled = this.host.settings.get_boolean("preview-hint-enabled");
         const previewRect = previewParams.targetRect;
         if (!previewHintEnabled || !previewRect) {
@@ -389,7 +389,7 @@ export class DragDropTile {
           this.host.renderTree("drag-swap");
         }
       } else {
-        updatePreview(focusNodeWindow, previewParams);
+        updatePreview(previewParams);
       }
     }
   }

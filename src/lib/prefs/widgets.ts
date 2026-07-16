@@ -105,10 +105,6 @@ interface SpinButtonRowOptions {
   onChange?: (value: number) => void;
   settings?: Gio.Settings;
   bind?: string;
-  _max_width_chars?: number;
-  _max_length?: number;
-  _width_chars?: number;
-  _xalign?: number;
 }
 
 export class SpinButtonRow extends Adw.ActionRow {
@@ -122,10 +118,6 @@ export class SpinButtonRow extends Adw.ActionRow {
     subtitle = "",
     init = undefined,
     onChange = undefined,
-    _max_width_chars = undefined,
-    _max_length = undefined,
-    _width_chars = undefined,
-    _xalign = undefined,
     settings = undefined,
     bind = undefined,
   }: SpinButtonRowOptions) {
