@@ -540,11 +540,11 @@ preferences-to-shell reload shows the selected stylesheet without journal errors
 
 **Completion evidence (2026-07-16):** `npm test` passes with 55 portable tests, 1,104 unit tests,
 and 40 tooling tests (two host-only cases skipped by the deterministic gate). The isolated Fedora
-Devbox stylesheet E2E preserves custom bytes across extension re-enable and verifies the live
-`St.ThemeNode` color changes after a preferences-style reload token; the real host stylesheet hash
-is unchanged before and after the run. The isolated preferences lifecycle E2E also passes. Both the
-standards and spec review axes passed after remediation of exclusive first-install creation,
-test-config isolation, fresh cross-process selection, and failed stylesheet-unload tracking.
+Devbox stylesheet E2E preserves custom bytes across extension re-enable and verifies that a live
+`St.Widget` changes color after a preferences-style reload token. The isolated preferences
+lifecycle E2E also passes. Both review axes passed after remediation of recovery-file
+classification, exclusive first-install creation, write/verification failure accounting, and fresh
+cross-process stylesheet selection.
 
 **Suggested commits:**
 
