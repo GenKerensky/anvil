@@ -101,14 +101,16 @@ export function findEligibleResizePair(args: {
   direction: Meta.MotionDirection;
   nextVisible: (node: Node, direction: Meta.MotionDirection) => Node | null;
   isEligible: (node: Node) => boolean;
+  isBoundary?: (node: Node) => boolean;
 }): Node | null {
-  const { focusNode, direction, nextVisible, isEligible } = args;
+  const { focusNode, direction, nextVisible, isEligible, isBoundary = () => false } = args;
   const visited = new Set<Node>([focusNode]);
   let cursor = focusNode;
 
   while (true) {
     const candidate = nextVisible(cursor, direction);
     if (!candidate || visited.has(candidate)) return null;
+    if (isBoundary(candidate)) return null;
     if (isEligible(candidate)) return candidate;
     visited.add(candidate);
     cursor = candidate;
@@ -445,14 +447,17 @@ export class GrabResizeSession {
         Logger.debug(`_handleResizing: KEYBOARD_RESIZING_UNKNOWN — return early`);
         return;
       } else if (direction !== undefined) {
+        const focusMonitor = host.tree.findAncestorMonitor(focusNodeWindow);
         const findPair = (searchDirection: Meta.MotionDirection) =>
           findEligibleResizePair({
             focusNode: focusNodeWindow,
             direction: searchDirection,
             nextVisible: (node, candidateDirection) =>
               host.tree.nextVisible(node, candidateDirection),
+            isBoundary: (candidate) =>
+              !focusMonitor || host.tree.findAncestorMonitor(candidate) !== focusMonitor,
             isEligible: (candidate) =>
-              !host.floatingWindow(candidate) && !host.minimizedWindow(candidate),
+              Boolean(candidate.rect) && host.tree.getTiledChildren([candidate]).length > 0,
           });
         resizePairForWindow = findPair(direction);
         if (!resizePairForWindow) {

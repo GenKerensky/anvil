@@ -55,6 +55,38 @@ describe("findEligibleResizePair", () => {
     ).toBeNull();
   });
 
+  it("stops at a surface boundary instead of walking onto another monitor", () => {
+    const focus = node("focus");
+    const monitor = node("monitor");
+    const remote = node("remote");
+    const nextVisible = vi.fn((current: Node) => (current === focus ? monitor : remote));
+
+    expect(
+      findEligibleResizePair({
+        focusNode: focus,
+        direction: Meta.MotionDirection.RIGHT,
+        nextVisible,
+        isBoundary: (candidate) => candidate === monitor,
+        isEligible: (candidate) => candidate === remote,
+      })
+    ).toBeNull();
+    expect(nextVisible).toHaveBeenCalledOnce();
+  });
+
+  it("selects an eligible nested container", () => {
+    const focus = node("focus");
+    const container = node("container");
+
+    expect(
+      findEligibleResizePair({
+        focusNode: focus,
+        direction: Meta.MotionDirection.LEFT,
+        nextVisible: (current) => (current === focus ? container : null),
+        isEligible: (candidate) => candidate === container,
+      })
+    ).toBe(container);
+  });
+
   it("terminates when a malformed traversal cycles", () => {
     const focus = node("focus");
     const unavailable = node("unavailable");

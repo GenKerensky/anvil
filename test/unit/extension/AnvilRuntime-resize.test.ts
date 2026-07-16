@@ -646,27 +646,41 @@ describe("AnvilRuntime - Resize", () => {
     it("skips a floating horizontal sibling and resizes the next tiled sibling", () => {
       const { windows, nodes } = setupThreeWindows(ctx, LAYOUT_TYPES.HSPLIT);
       nodes[1].mode = WINDOW_MODES.FLOAT;
+      nodes[0].percent = 0.5;
+      nodes[1].percent = undefined;
+      nodes[2].percent = 0.5;
+      nodes[0].rect = { x: 0, y: 0, width: 960, height: 1080 };
+      nodes[2].rect = { x: 960, y: 0, width: 960, height: 1080 };
+      windows[0].move_resize_frame(true, 0, 0, 960, 1080);
 
       wm()._handleGrabOpBegin(ctx.display, windows[0], Meta.GrabOp.RESIZING_E);
-      windows[0].move_resize_frame(true, 0, 0, 740, 1080);
+      windows[0].move_resize_frame(true, 0, 0, 1060, 1080);
       wm()._grab.handleResizing(nodes[0]);
 
-      expect(nodes[0].percent).toBeCloseTo(740 / 1920, 3);
-      expect(nodes[1].percent).toBeCloseTo(1 / 3, 3);
-      expect(nodes[2].percent).toBeCloseTo(540 / 1920, 3);
+      expect(nodes[0].percent).toBeCloseTo(1060 / 1920, 3);
+      expect(nodes[1].percent).toBeUndefined();
+      expect(nodes[2].percent).toBeCloseTo(860 / 1920, 3);
+      expect(nodes[0].percent! + nodes[2].percent!).toBeCloseTo(1, 6);
     });
 
     it("skips a minimized vertical sibling and resizes the next tiled sibling", () => {
       const { windows, nodes } = setupThreeWindows(ctx, LAYOUT_TYPES.VSPLIT);
       windows[1].minimized = true;
+      nodes[0].percent = 0.5;
+      nodes[1].percent = undefined;
+      nodes[2].percent = 0.5;
+      nodes[0].rect = { x: 0, y: 0, width: 1920, height: 540 };
+      nodes[2].rect = { x: 0, y: 540, width: 1920, height: 540 };
+      windows[0].move_resize_frame(true, 0, 0, 1920, 540);
 
       wm()._handleGrabOpBegin(ctx.display, windows[0], Meta.GrabOp.RESIZING_S);
-      windows[0].move_resize_frame(true, 0, 0, 1920, 460);
+      windows[0].move_resize_frame(true, 0, 0, 1920, 640);
       wm()._grab.handleResizing(nodes[0]);
 
-      expect(nodes[0].percent).toBeCloseTo(460 / 1080, 3);
-      expect(nodes[1].percent).toBeCloseTo(1 / 3, 3);
-      expect(nodes[2].percent).toBeCloseTo(260 / 1080, 3);
+      expect(nodes[0].percent).toBeCloseTo(640 / 1080, 3);
+      expect(nodes[1].percent).toBeUndefined();
+      expect(nodes[2].percent).toBeCloseTo(440 / 1080, 3);
+      expect(nodes[0].percent! + nodes[2].percent!).toBeCloseTo(1, 6);
     });
 
     it("should not change percent when initGrabOp is KEYBOARD_RESIZING_UNKNOWN", () => {
