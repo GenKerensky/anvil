@@ -65,7 +65,31 @@ export class Actor extends withSignals() {
   queue_repaint() {}
 
   add_child(child) {
-    this._children.push(child);
+    if (!this._children.includes(child)) this._children.push(child);
+    child._parent = this;
+  }
+
+  remove_child(child) {
+    const index = this._children.indexOf(child);
+    if (index !== -1) this._children.splice(index, 1);
+    child._parent = null;
+  }
+
+  get_children() {
+    return [...this._children];
+  }
+
+  get_parent() {
+    return this._parent ?? null;
+  }
+
+  set_child_below_sibling(child, sibling) {
+    const childIndex = this._children.indexOf(child);
+    if (childIndex !== -1) this._children.splice(childIndex, 1);
+    const siblingIndex = sibling ? this._children.indexOf(sibling) : -1;
+    if (siblingIndex >= 0) this._children.splice(siblingIndex, 0, child);
+    else this._children.push(child);
+    child._parent = this;
   }
 
   get_first_child() {

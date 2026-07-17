@@ -222,7 +222,7 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 - RulesEngine caches match() by window id + identity until override reload (B7-1).
 - **BorderController** owns focus/split border actors; WM is a facade (B7-2).
 
-### Native window-shadow ownership (2026-07-14)
+### Native window-shadow ownership (2026-07-14, superseded 2026-07-16)
 
 - Mutter or the Wayland client owns window shadows; Anvil does not create sibling shadow actors.
 - `BorderController` owns only rounded surface masks and singleton focus/split hints. The effect
@@ -232,6 +232,21 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
 - Native reliability takes precedence over extension-specific shadow styling controls.
 - Removing Anvil's focused/unfocused shadow customization is an intentional compatibility change;
   those settings and stylesheet hooks are not part of the native-shadow contract.
+
+### Post-mask rounded shadow ownership (2026-07-16)
+
+- **The surface mask removes source shadow pixels**: native/client shadows are painted before or
+  outside Anvil's rounded crop and retain square corner plates. Pixels outside the masked frame are
+  therefore transparent rather than preserved.
+- **`BorderController` owns one replacement shadow per drawable window**: the rounded Clutter
+  child sits below the compositor actor's surface. Parenting it to the compositor actor gives it
+  Mutter's workspace visibility and lifetime instead of leaving a free-standing shadow in
+  `global.window_group`. Focus changes only its focused/unfocused CSS class; geometry uses the same
+  frame-plus-inset rectangle as hints, translated into window-buffer-local coordinates.
+- **Decoration records own the full lifecycle**: minimize, maximize, fullscreen, overview suspend,
+  unmanage, actor destroy, and extension teardown hide or destroy the shadow through the same
+  record that owns the mask target. No independent shadow registry or second lifecycle authority is
+  permitted.
 
 ### Residual Stage 16 — layout/focus/pointer (2026-07-11)
 
@@ -683,3 +698,7 @@ A second audit of the refactor found remaining work; all resolved.
   and portable `PlaceWindow` effects must not call `unmaximize`, `move_frame`, or
   `move_resize_frame` until `get_compositor_private()` returns an actor. A later map/reconcile edge
   retries work that was skipped before actor creation.
+- **Late actor mapping completes presentation admission**: legacy Xwayland windows may enter the
+  tree before `get_compositor_private()` returns an actor. The later map edge must register that
+  actor with `BorderController`, bind actor lifecycle signals, and reconcile again on first-frame
+  when the real surface exists; being structurally tracked does not imply presentation is ready.

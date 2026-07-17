@@ -496,6 +496,31 @@ describe("AnvilRuntime - Lifecycle", () => {
       expect(renderSpy).toHaveBeenCalledWith("window-create", true);
     });
 
+    it("registers decorations when a tracked Xwayland window maps its actor later", () => {
+      ctx.settings.set_boolean("focus-border-toggle", true);
+      const window = createMockWindow({
+        wm_class: "obsidian",
+        title: "Obsidian",
+        window_type: Meta.WindowType.NORMAL,
+      });
+      const actor = window.get_compositor_private();
+      const getActor = vi.spyOn(window, "get_compositor_private").mockReturnValue(null);
+      ctx.display.get_focus_window.mockReturnValue(window);
+
+      wm()._tracker.trackWhenReady(ctx.display, window);
+
+      expect(ctx.tree.findNode(window)).not.toBeNull();
+      expect(actor.cornerShadow).toBeUndefined();
+
+      getActor.mockReturnValue(actor);
+      wm()._tracker.trackMappedActor(actor);
+
+      const surface = actor.get_children().find((child: any) => child !== actor.cornerShadow);
+      expect(surface.get_effect("anvil-window-corner-mask")).toBeTruthy();
+      expect(actor.cornerShadow?.get_parent()).toBe(actor);
+      expect(actor.border?.visible).toBe(true);
+    });
+
     it("should reconcile valid windows already present before their actor maps", () => {
       let reconcileCallback: (() => boolean) | null = null;
       vi.spyOn(GLib, "timeout_add").mockImplementation((_priority, _interval, callback) => {

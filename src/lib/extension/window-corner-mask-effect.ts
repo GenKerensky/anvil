@@ -33,8 +33,9 @@ const MASK_CODE = `
 vec2 point = cogl_tex_coord0_in.xy / anvilMaskPixelStep;
 float coverage = anvilPointInsideBounds(point, anvilMaskBounds)
   ? anvilInnerFrameCoverage(point, anvilMaskBounds, anvilMaskRadius)
-  // Preserve client-drawn shadow pixels outside the frame bounds.
-  : 1.0;
+  // Remove source shadow pixels; BorderController paints a rounded shadow
+  // from the already-masked frame as a separate sibling below the window.
+  : 0.0;
 cogl_color_out *= coverage;
 `;
 

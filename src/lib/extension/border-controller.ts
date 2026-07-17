@@ -2,8 +2,10 @@
  * BorderController — lifecycle owner for window decoration actors.
  *
  * Focus and split hints are singletons moved between windows. Rounded masks
- * are attached to each window's surface actor without replacing native shadows.
- * All state application is idempotent.
+ * remove the source shadow plate, then one per-window Clutter child paints the
+ * replacement shadow below the surface. Parenting the shadow to its compositor
+ * actor gives it the same workspace visibility and lifetime. All state
+ * application is idempotent.
  */
 
 import Gio from "gi://Gio";
@@ -30,6 +32,7 @@ interface DecorationRecord {
   readonly actor: AnvilWindowActor;
   maskTarget: Clutter.Actor | null;
   maskTargetDestroyId: number | null;
+  shadow: St.Bin | null;
 }
 
 export interface BorderControllerHost {
@@ -71,6 +74,7 @@ export class BorderController {
       actor,
       maskTarget: null,
       maskTargetDestroyId: null,
+      shadow: null,
     });
     this.reconcileWindow(metaWindow);
     if (this._host.focusMetaWindow === metaWindow) this.setActiveWindow(metaWindow);
@@ -91,6 +95,7 @@ export class BorderController {
         this.setActiveWindow(null);
       }
     }
+    this._destroyWindowShadow(record, actorDestroyed);
     // Mutter has already disposed the surface and its effects by the actor's
     // destroy signal. The earlier `unmanaged` path performs explicit removal;
     // touching either GObject here would itself trigger a GJS critical.
@@ -109,7 +114,13 @@ export class BorderController {
     const previous = this._activeWindow;
     if (previous === next) return;
 
-    if (previous) this._detachSingletons(this._records.get(previous)?.actor);
+    if (previous) {
+      const previousRecord = this._records.get(previous);
+      this._detachSingletons(previousRecord?.actor);
+      if (previousRecord) {
+        this._reconcileWindowShadow(previousRecord, this._isDrawable(previousRecord.window), false);
+      }
+    }
     this._activeWindow = next;
     if (next) this.reconcileActiveWindow();
     else this._hideSingletonHints();
@@ -122,6 +133,7 @@ export class BorderController {
     const drawable = this._isDrawable(metaWindow);
 
     this._reconcileMask(record, drawable);
+    this._reconcileWindowShadow(record, drawable, active);
     if (active) this._reconcileSingletonHints(record, drawable);
     this._reconcileStack(record, active);
   }
@@ -136,6 +148,7 @@ export class BorderController {
       this._hideSingletonHints();
       return;
     }
+    this._reconcileWindowShadow(record, this._isDrawable(record.window), true);
     this._reconcileSingletonHints(record, this._isDrawable(record.window));
     this._reconcileStack(record, true);
   }
@@ -148,7 +161,10 @@ export class BorderController {
 
   suspendAll(): void {
     this._hideSingletonHints();
-    for (const record of this._records.values()) this._removeWindowMask(record);
+    for (const record of this._records.values()) {
+      this._removeWindowMask(record);
+      this._setVisible(record.shadow, false);
+    }
   }
 
   destroy(): void {
@@ -163,7 +179,7 @@ export class BorderController {
   }
 
   private _reconcileMask(record: DecorationRecord, drawable: boolean): void {
-    const target = this._getWindowSurfaceActor(record.actor);
+    const target = this._getWindowSurfaceActor(record);
     if (record.maskTarget !== target) {
       this._detachMaskTarget(record);
       record.maskTarget = target;
@@ -282,6 +298,31 @@ export class BorderController {
     }
   }
 
+  private _reconcileWindowShadow(
+    record: DecorationRecord,
+    drawable: boolean,
+    active: boolean
+  ): void {
+    const surface = record.maskTarget;
+    if (!drawable || !surface) {
+      this._setVisible(record.shadow, false);
+      return;
+    }
+    if (!record.shadow) {
+      record.shadow = new St.Bin({ style_class: "window-unfocused-shadow" });
+      record.actor.cornerShadow = record.shadow;
+      record.actor.add_child(record.shadow);
+    }
+    this._setStyle(record.shadow, active ? "window-focused-shadow" : "window-unfocused-shadow");
+    this._setWindowLocalFrameGeometry(
+      record.shadow,
+      record.window.get_frame_rect(),
+      record.window.get_buffer_rect()
+    );
+    this._setVisible(record.shadow, true);
+    record.actor.set_child_below_sibling(record.shadow, surface);
+  }
+
   private _ensureFocusBorder(): St.Bin {
     if (!this._focusBorder) {
       this._focusBorder = new St.Bin({ style_class: "window-tiled-border" });
@@ -351,6 +392,19 @@ export class BorderController {
     if (actor.x !== x || actor.y !== y) actor.set_position(x, y);
   }
 
+  private _setWindowLocalFrameGeometry(
+    actor: St.Bin,
+    frame: { x: number; y: number; width: number; height: number },
+    buffer: { x: number; y: number }
+  ): void {
+    const width = frame.width + DEFAULT_BORDER_INSET * 2;
+    const height = frame.height + DEFAULT_BORDER_INSET * 2;
+    const x = frame.x - buffer.x - DEFAULT_BORDER_INSET;
+    const y = frame.y - buffer.y - DEFAULT_BORDER_INSET;
+    if (actor.width !== width || actor.height !== height) actor.set_size(width, height);
+    if (actor.x !== x || actor.y !== y) actor.set_position(x, y);
+  }
+
   private _setStyle(actor: St.Widget, style: string): void {
     if (actor.style_class !== style) actor.set_style_class_name(style);
   }
@@ -383,12 +437,29 @@ export class BorderController {
     record.maskTargetDestroyId = null;
   }
 
-  private _getWindowSurfaceActor(actor: AnvilWindowActor): Clutter.Actor | null {
+  private _destroyWindowShadow(record: DecorationRecord, actorDestroyed: boolean): void {
+    const shadow = record.shadow;
+    if (!shadow) return;
+    record.shadow = null;
+    // A shadow child is destroyed with its compositor actor. Avoid touching
+    // either disposed GObject from the actor's destroy callback.
+    if (actorDestroyed) return;
+    if (record.actor.cornerShadow === shadow) {
+      record.actor.cornerShadow = undefined;
+    }
+    this._removeActor(shadow);
+  }
+
+  private _getWindowSurfaceActor(record: DecorationRecord): Clutter.Actor | null {
     // Meta.WindowActor.get_texture() returns Meta.ShapedTexture (Clutter.Content),
-    // which cannot own a Clutter.Effect. Mutter's first child is the surface
-    // actor and keeps the effect below its X11 shadow paint. Fail open if that
-    // scene-graph contract no longer yields a Clutter actor.
-    const target = actor.get_first_child?.() ?? null;
+    // which cannot own a Clutter.Effect. Mutter's non-shadow child is the
+    // surface actor. Its mask removes source shadow pixels before the rounded
+    // child shadow is painted. Fail open if that scene-graph contract no longer
+    // yields a Clutter actor.
+    const target =
+      record.actor.get_children?.().find((child) => child !== record.shadow) ??
+      record.actor.get_first_child?.() ??
+      null;
     return target instanceof Clutter.Actor ? target : null;
   }
 

@@ -191,6 +191,7 @@ export class WindowTracker {
       if (host.coreTilingEngine) {
         this.trackCoreActor(metaWindow);
       } else {
+        this.trackLegacyActor(metaWindow);
         this._scheduleAdmissionUnmaximize(metaWindow);
       }
       this.clearPendingWindowSignals(metaWindow as AnvilMetaWindow);
@@ -430,7 +431,6 @@ export class WindowTracker {
         const anvilMetaWin = metaWindow as AnvilMetaWindow;
         this.clearPendingWindowSignals(anvilMetaWin);
         anvilMetaWin.firstRender = true;
-
         const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
 
         if (!anvilMetaWin.windowSignals) {
@@ -518,27 +518,7 @@ export class WindowTracker {
           anvilMetaWin.windowSignals = windowSignals;
         }
 
-        if (windowActor && !windowActor.actorSignals) {
-          const actorSignals = [
-            windowActor.connect("destroy", (actor: AnvilWindowActor) => {
-              this.windowDestroy(actor, metaWindow, true);
-            }),
-          ];
-          windowActor.actorSignals = actorSignals;
-        }
-
-        if (windowActor) {
-          host.registerWindowDecoration(metaWindow, windowActor);
-
-          // Re-classify on first-frame: this is when the client has provided
-          // its first buffer, which is typically after it has set final
-          // properties (class, title, resize hints, etc.). Helps for slow
-          // starting apps like Inkscape and Brave.
-          const reclassify = () => {
-            host.renderTree("first-frame-reclassify", true);
-          };
-          windowActor.connect("first-frame", reclassify);
-        }
+        this.trackLegacyActor(metaWindow);
 
         this.postProcessWindow(nodeWindow as Node | null);
         this._scheduleAdmissionUnmaximize(metaWindow);
@@ -552,6 +532,28 @@ export class WindowTracker {
         }
       }
     }
+  }
+
+  private trackLegacyActor(metaWindow: Meta.Window): void {
+    const host = this._host;
+    const windowActor = metaWindow.get_compositor_private() as AnvilWindowActor | null;
+    if (!windowActor) return;
+
+    host.registerWindowDecoration(metaWindow, windowActor);
+    if (windowActor.actorSignals) return;
+
+    windowActor.actorSignals = [
+      windowActor.connect("destroy", (actor: AnvilWindowActor) => {
+        this.windowDestroy(actor, metaWindow, true);
+      }),
+      // First-frame is when slow and Xwayland clients expose their final
+      // surface and metadata. Re-register idempotently so masks that could not
+      // attach at map time are reconciled against the real surface actor.
+      windowActor.connect("first-frame", () => {
+        host.registerWindowDecoration(metaWindow, windowActor);
+        host.renderTree("first-frame-reclassify", true);
+      }),
+    ];
   }
 
   private trackCoreWindow(metaWindow: Meta.Window): void {

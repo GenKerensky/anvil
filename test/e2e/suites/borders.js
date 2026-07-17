@@ -78,38 +78,75 @@ describe("Borders and Gaps", function () {
     const window = global.display.get_focus_window();
     expect(window).not.toBeNull();
     const actor = /** @type {any} */ (window.get_compositor_private());
-    const mask = () => actor.get_first_child()?.get_effect("anvil-window-corner-mask") ?? null;
+    const shadow = () => actor.cornerShadow ?? null;
+    const surface = () =>
+      actor.get_children().find((/** @type {any} */ child) => child !== shadow()) ?? null;
+    const mask = () => surface()?.get_effect("anvil-window-corner-mask") ?? null;
 
     expect(mask()).not.toBeNull();
     expect(actor.get_effect("anvil-window-corner-mask")).toBeNull();
+    expect(shadow()).not.toBeNull();
+    const stack = global.window_group.get_children();
+    expect(shadow().get_parent()).toBe(actor);
+    expect(stack.indexOf(shadow())).toBe(-1);
+    expect(actor.get_children().indexOf(shadow())).toBeLessThan(
+      actor.get_children().indexOf(surface())
+    );
+    expect(shadow().visible).toBe(true);
+
+    const workspaceManager = global.display.get_workspace_manager();
+    const originalWorkspace = workspaceManager.get_active_workspace_index();
+    const temporaryWorkspace = workspaceManager.append_new_workspace(
+      true,
+      global.display.get_current_time()
+    );
+    await sleep(500);
+    expect(actor.get_paint_visibility()).toBe(false);
+    expect(shadow().get_paint_visibility()).toBe(false);
+
+    const originalWorkspaceObject = workspaceManager.get_workspace_by_index(originalWorkspace);
+    if (!originalWorkspaceObject) throw new Error("original workspace disappeared");
+    originalWorkspaceObject.activate(global.display.get_current_time());
+    await sleep(500);
+    expect(workspaceManager.get_active_workspace_index()).toBe(originalWorkspace);
+    expect(actor.get_paint_visibility()).toBe(true);
+    expect(shadow().get_paint_visibility()).toBe(true);
+    workspaceManager.remove_workspace(temporaryWorkspace, global.display.get_current_time());
 
     window.minimize();
     await sleep(400);
     expect(mask()).toBeNull();
+    expect(shadow().visible).toBe(false);
 
     window.unminimize();
     await sleep(400);
     expect(mask()).not.toBeNull();
+    expect(shadow().visible).toBe(true);
 
     maximizeWindow(window);
     await sleep(400);
     expect(mask()).toBeNull();
+    expect(shadow().visible).toBe(false);
 
     unmaximizeWindow(window);
     await sleep(400);
     expect(mask()).not.toBeNull();
+    expect(shadow().visible).toBe(true);
 
     window.make_fullscreen();
     await sleep(400);
     expect(mask()).toBeNull();
+    expect(shadow().visible).toBe(false);
 
     window.unmake_fullscreen();
     await sleep(400);
     expect(mask()).not.toBeNull();
+    expect(shadow().visible).toBe(true);
 
     getSettings().set_boolean("focus-border-toggle", false);
     await sleep(200);
     expect(mask()).toBeNull();
+    expect(shadow().visible).toBe(false);
   });
 
   it("GapSize increase changes window spacing", async function () {

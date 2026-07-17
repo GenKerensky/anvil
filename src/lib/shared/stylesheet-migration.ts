@@ -21,11 +21,11 @@ export interface StylesheetMigrationManifest {
 }
 
 export const CURRENT_STYLESHEET_MANIFEST: StylesheetMigrationManifest = {
-  version: 38,
-  currentDigest: "d32b4d2c1ffed899138b015f78ce769afbc1526bd9b6b0d52b50e0aebfc0e4ac",
+  version: 39,
+  currentDigest: "cd35937ff88a7a7e491c2640a8590f6e5b445888f4f6553e39a7d394a1503997",
   knownDefaultDigests: [
-    "d32b4d2c1ffed899138b015f78ce769afbc1526bd9b6b0d52b50e0aebfc0e4ac",
     "cd35937ff88a7a7e491c2640a8590f6e5b445888f4f6553e39a7d394a1503997",
+    "d32b4d2c1ffed899138b015f78ce769afbc1526bd9b6b0d52b50e0aebfc0e4ac",
   ],
 };
 
