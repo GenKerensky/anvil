@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-17 21:21-0400\n"
+"POT-Creation-Date: 2026-07-18 17:56+0000\n"
 "PO-Revision-Date: 2025-08-22 12:00+0300\n"
 "Last-Translator: Mucahit Sahin <mucahitsahin786@gmail.com>\n"
 "Language-Team: Turkish\n"
@@ -421,7 +421,7 @@ msgstr "Günlükçü"
 msgid "Log level"
 msgstr "Günlük seviyesi"
 
-#: src/lib/prefs/widgets.ts:64
+#: src/lib/prefs/widgets.ts:65
 msgid ""
 "<b>CAUTION</b>: Enabling this setting can lead to bugs or cause the shell to "
 "crash"
@@ -429,15 +429,15 @@ msgstr ""
 "<b>DİKKAT</b>: Bu ayarı etkinleştirmek hatalara yol açabilir veya kabuğun "
 "çökmesine neden olabilir"
 
-#: src/lib/prefs/widgets.ts:245
+#: src/lib/prefs/widgets.ts:350
 msgid "Clear shortcut"
 msgstr "Kısayolu temizle"
 
-#: src/lib/prefs/widgets.ts:269
+#: src/lib/prefs/widgets.ts:374
 msgid "Reset to default"
 msgstr "Varsayılana sıfırla"
 
-#: src/lib/prefs/widgets.ts:294
+#: src/lib/prefs/widgets.ts:399
 msgid "Remove Item"
 msgstr ""
 

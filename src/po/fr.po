@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-17 21:21-0400\n"
+"POT-Creation-Date: 2026-07-18 17:56+0000\n"
 "PO-Revision-Date: 2023-02-28 17:16-0500\n"
 "Last-Translator: Wedone <wedoneofficiel@outlook.fr>\n"
 "Language-Team: French - Canada <wroy@proton.me>\n"
@@ -459,7 +459,7 @@ msgstr "Niveau de journalisation"
 msgid "Log level"
 msgstr "Niveau de journalisation"
 
-#: src/lib/prefs/widgets.ts:64
+#: src/lib/prefs/widgets.ts:65
 #, fuzzy
 msgid ""
 "<b>CAUTION</b>: Enabling this setting can lead to bugs or cause the shell to "
@@ -468,16 +468,16 @@ msgstr ""
 "ATTENTION : Ces paramètres, lorsqu'ils sont activés, sont bogués ou peuvent "
 "causer un plantage de l'environnement de bureau"
 
-#: src/lib/prefs/widgets.ts:245
+#: src/lib/prefs/widgets.ts:350
 #, fuzzy
 msgid "Clear shortcut"
 msgstr "Raccourcis pour les conteneurs"
 
-#: src/lib/prefs/widgets.ts:269
+#: src/lib/prefs/widgets.ts:374
 msgid "Reset to default"
 msgstr ""
 
-#: src/lib/prefs/widgets.ts:294
+#: src/lib/prefs/widgets.ts:399
 msgid "Remove Item"
 msgstr ""
 

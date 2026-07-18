@@ -47,6 +47,8 @@ class ActionRow extends Widget {
   }
 }
 
+class EntryRow extends ActionRow {}
+
 class StyleManager {
   constructor() {
     this.accent_color_rgba = { red: 0.2, green: 0.4, blue: 0.8, alpha: 1.0 };
@@ -60,11 +62,12 @@ class StyleManager {
   }
 }
 
-export { PreferencesPage, PreferencesGroup, ActionRow, StyleManager };
+export { PreferencesPage, PreferencesGroup, ActionRow, EntryRow, StyleManager };
 
 export default {
   PreferencesPage,
   PreferencesGroup,
   ActionRow,
+  EntryRow,
   StyleManager,
 };

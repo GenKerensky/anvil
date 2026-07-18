@@ -5,6 +5,7 @@ import Gio from "gi://Gio";
 import Gdk from "gi://Gdk";
 import Gtk from "gi://Gtk";
 import GObject from "gi://GObject";
+import Cairo from "gi://cairo";
 
 // GNOME imports
 import { gettext as _ } from "resource:///org/gnome/Shell/Extensions/js/extensions/prefs.js";
@@ -77,24 +78,128 @@ interface ColorRowOptions {
   subtitle?: string;
 }
 
+interface LiveColorButtonOptions {
+  rgba: Gdk.RGBA;
+  title: string;
+  onChange: (color: string) => void;
+}
+
+/**
+ * Gtk.ColorDialog only publishes the accepted result. Keep ownership of the
+ * chooser so previews can follow its RGBA property while the editor is open.
+ */
+class LiveColorButton extends Gtk.Button {
+  static {
+    GObject.registerClass(this);
+  }
+
+  private _rgba: Gdk.RGBA;
+  private _dialog: Gtk.ColorChooserDialog | null = null;
+  private readonly _preview: Gtk.DrawingArea;
+  private readonly _title: string;
+  private readonly _onChange: (color: string) => void;
+
+  constructor({ rgba, title, onChange }: LiveColorButtonOptions) {
+    const preview = new Gtk.DrawingArea({ content_width: 40, content_height: 22 });
+    super({
+      child: preview,
+      css_classes: ["color"],
+      tooltip_text: title,
+      valign: Gtk.Align.CENTER,
+    });
+
+    this._preview = preview;
+    this._rgba = rgba.copy();
+    this._title = title;
+    this._onChange = onChange;
+    this._preview.set_draw_func(
+      (_area: Gtk.DrawingArea, cr: Cairo.Context, width: number, height: number) =>
+        this._drawPreview(cr, width, height)
+    );
+    this.connect("clicked", () => this._openDialog());
+  }
+
+  get_rgba(): Gdk.RGBA {
+    return this._rgba.copy();
+  }
+
+  set_rgba(rgba: Gdk.RGBA): void {
+    this._rgba = rgba.copy();
+    this._preview.queue_draw();
+  }
+
+  private _openDialog(): void {
+    if (this._dialog) {
+      this._dialog.present();
+      return;
+    }
+
+    const root = this.get_root();
+    const parent = root instanceof Gtk.Window ? root : null;
+    const initialColor = this._rgba.copy();
+    let previewChanged = false;
+    const dialog = Gtk.ColorChooserDialog.new(this._title, parent) as Gtk.ColorChooserDialog;
+    dialog.modal = true;
+    dialog.show_editor = true;
+    dialog.use_alpha = true;
+    dialog.set_rgba(initialColor);
+    dialog.connect("notify::rgba", () => {
+      previewChanged = true;
+      this.set_rgba(dialog.get_rgba());
+      this._onChange(this._rgba.to_string());
+    });
+    dialog.connect("response", (_dialog, response) => {
+      if (response !== Gtk.ResponseType.OK && previewChanged) {
+        this.set_rgba(initialColor);
+        this._onChange(initialColor.to_string());
+      }
+      dialog.destroy();
+    });
+    dialog.connect("destroy", () => {
+      if (this._dialog === dialog) this._dialog = null;
+    });
+    this._dialog = dialog;
+    dialog.present();
+  }
+
+  private _drawPreview(cr: Cairo.Context, width: number, height: number): void {
+    const context = cr as unknown as ColorPreviewContext;
+    const checkerSize = 5;
+    for (let y = 0; y < height; y += checkerSize) {
+      for (let x = 0; x < width; x += checkerSize) {
+        const shade = (x / checkerSize + y / checkerSize) % 2 === 0 ? 0.75 : 0.45;
+        context.setSourceRGBA(shade, shade, shade, 1);
+        context.rectangle(x, y, checkerSize, checkerSize);
+        context.fill();
+      }
+    }
+    context.setSourceRGBA(this._rgba.red, this._rgba.green, this._rgba.blue, this._rgba.alpha);
+    context.rectangle(0, 0, width, height);
+    context.fill();
+  }
+}
+
 export class ColorRow extends Adw.ActionRow {
   static {
     GObject.registerClass(this);
   }
 
-  colorButton!: Gtk.ColorButton;
+  colorButton!: LiveColorButton;
 
   constructor({ title, init, onChange, subtitle = "" }: ColorRowOptions) {
     super({ title, subtitle });
     const rgba = new Gdk.RGBA();
     rgba.parse(init);
-    this.colorButton = new Gtk.ColorButton({ rgba, use_alpha: true, valign: Gtk.Align.CENTER });
-    this.colorButton.connect("color-set", () => {
-      onChange(this.colorButton.get_rgba().to_string());
-    });
+    this.colorButton = new LiveColorButton({ rgba, title, onChange });
     this.add_suffix(this.colorButton);
     this.activatable_widget = this.colorButton;
   }
+}
+
+interface ColorPreviewContext {
+  setSourceRGBA(red: number, green: number, blue: number, alpha: number): void;
+  rectangle(x: number, y: number, width: number, height: number): void;
+  fill(): void;
 }
 
 interface SpinButtonRowOptions {

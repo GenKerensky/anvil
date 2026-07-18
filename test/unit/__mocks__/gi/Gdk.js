@@ -1,5 +1,26 @@
 import { vi } from "vitest";
 
+class RGBA {
+  constructor() {
+    this.value = "rgba(0, 0, 0, 1)";
+  }
+
+  parse(value) {
+    this.value = value;
+    return true;
+  }
+
+  copy() {
+    const copy = new RGBA();
+    copy.value = this.value;
+    return copy;
+  }
+
+  to_string() {
+    return this.value;
+  }
+}
+
 class Monitor {
   constructor(config = {}) {
     this._geometry = config.geometry || { x: 0, y: 0, width: 1920, height: 1080 };
@@ -60,10 +81,11 @@ export function _resetDisplay() {
   _defaultDisplay = new Display();
 }
 
-export { Display, Monitor };
+export { Display, Monitor, RGBA };
 
 export default {
   Display,
   Monitor,
+  RGBA,
   _resetDisplay,
 };

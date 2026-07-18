@@ -26,6 +26,10 @@ class Widget extends withSignals() {
     return this.height ?? 100;
   }
 
+  get_root() {
+    return null;
+  }
+
   show() {}
   hide() {}
   queue_draw() {}
@@ -71,6 +75,10 @@ class Switch extends Widget {
   }
 }
 
+class Button extends Widget {}
+
+class Window extends Widget {}
+
 class SpinButton extends Widget {
   constructor(params) {
     super(params);
@@ -105,6 +113,47 @@ class SpinButton extends Widget {
     btn._max = max;
     btn._step = step;
     return btn;
+  }
+}
+
+class ColorChooserDialog extends Window {
+  static lastCreated = null;
+
+  constructor(params) {
+    super(params);
+    this._rgba = null;
+    this.use_alpha = params?.use_alpha ?? true;
+    this.show_editor = params?.show_editor ?? false;
+    ColorChooserDialog.lastCreated = this;
+  }
+
+  static new(title, parent) {
+    return new ColorChooserDialog({ title, transient_for: parent });
+  }
+
+  get_rgba() {
+    return this._rgba;
+  }
+
+  set_rgba(rgba) {
+    this._rgba = rgba;
+  }
+
+  select_rgba(rgba) {
+    this._rgba = rgba;
+    this.emit("notify::rgba");
+  }
+
+  respond(response) {
+    this.emit("response", this, response);
+  }
+
+  present() {
+    this.presented = true;
+  }
+
+  destroy() {
+    this.emit("destroy");
   }
 }
 
@@ -148,6 +197,12 @@ export const Orientation = {
   HORIZONTAL: 1,
 };
 
+export const ResponseType = {
+  CANCEL: -6,
+  DELETE_EVENT: -4,
+  OK: -5,
+};
+
 class IconTheme {
   constructor() {
     this._searchPaths = [];
@@ -162,18 +217,34 @@ class IconTheme {
   }
 }
 
-export { Widget, DrawingArea, Switch, SpinButton, Box, Image, GestureClick, IconTheme };
+export {
+  Widget,
+  DrawingArea,
+  Switch,
+  Button,
+  Window,
+  SpinButton,
+  ColorChooserDialog,
+  Box,
+  Image,
+  GestureClick,
+  IconTheme,
+};
 
 export default {
   Widget,
   DrawingArea,
   Switch,
+  Button,
+  Window,
   SpinButton,
+  ColorChooserDialog,
   Box,
   Image,
   GestureClick,
   GestureClick,
   Align,
   Orientation,
+  ResponseType,
   IconTheme,
 };

@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-17 21:21-0400\n"
+"POT-Creation-Date: 2026-07-18 17:56+0000\n"
 "PO-Revision-Date: 2024-09-15 20:16+0100\n"
 "Last-Translator: Albano Battistella <albanobattistella@gmail.com>\n"
 "Language-Team: Italian <albanobattistella@gmail.com>\n"
@@ -456,7 +456,7 @@ msgstr "Log"
 msgid "Log level"
 msgstr "Livello Log"
 
-#: src/lib/prefs/widgets.ts:64
+#: src/lib/prefs/widgets.ts:65
 msgid ""
 "<b>CAUTION</b>: Enabling this setting can lead to bugs or cause the shell to "
 "crash"
@@ -464,16 +464,16 @@ msgstr ""
 "<b>ATTENZIONE</b>: l'attivazione di questa impostazione può portare a bug o "
 "causare il crash della shell"
 
-#: src/lib/prefs/widgets.ts:245
+#: src/lib/prefs/widgets.ts:350
 #, fuzzy
 msgid "Clear shortcut"
 msgstr "Scorciatoie per i container"
 
-#: src/lib/prefs/widgets.ts:269
+#: src/lib/prefs/widgets.ts:374
 msgid "Reset to default"
 msgstr ""
 
-#: src/lib/prefs/widgets.ts:294
+#: src/lib/prefs/widgets.ts:399
 msgid "Remove Item"
 msgstr ""
 
