@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-16 03:51-0400\n"
+"POT-Creation-Date: 2026-07-17 21:21-0400\n"
 "PO-Revision-Date: 2025-08-22 12:00+0300\n"
 "Last-Translator: Mucahit Sahin <mucahitsahin786@gmail.com>\n"
 "Language-Team: Turkish\n"
@@ -43,116 +43,157 @@ msgstr "İmleci Odakla Birlikte Taşı"
 msgid "Settings"
 msgstr "Ayarlar"
 
-#: src/lib/prefs/appearance.ts:31
+#: src/lib/prefs/appearance.ts:38
 msgid "Tiled window"
 msgstr "Döşenmiş pencere"
 
-#: src/lib/prefs/appearance.ts:33
+#: src/lib/prefs/appearance.ts:40
 msgid "Tabbed window"
 msgstr "Sekmeli pencere"
 
-#: src/lib/prefs/appearance.ts:35
+#: src/lib/prefs/appearance.ts:42
 msgid "Stacked window"
 msgstr "Yığılmış pencere"
 
-#: src/lib/prefs/appearance.ts:37
+#: src/lib/prefs/appearance.ts:44
 msgid "Floating window"
 msgstr "Yüzen pencere"
 
-#: src/lib/prefs/appearance.ts:39
+#: src/lib/prefs/appearance.ts:46
 msgid "Split direction hint"
 msgstr "Bölme yönü ipucu"
 
-#: src/lib/prefs/appearance.ts:44
+#: src/lib/prefs/appearance.ts:51
 msgid "Appearance"
 msgstr "Görünüm"
 
-#: src/lib/prefs/appearance.ts:51
+#: src/lib/prefs/appearance.ts:58
 msgid "Gaps"
 msgstr "Boşluklar"
 
-#: src/lib/prefs/appearance.ts:52
+#: src/lib/prefs/appearance.ts:59
 msgid "Change the gap size between windows"
 msgstr "Pencereler arasındaki boşluk boyutunu değiştir"
 
-#: src/lib/prefs/appearance.ts:55
+#: src/lib/prefs/appearance.ts:62
 msgid "Gap size"
 msgstr "Boşluk boyutu"
 
-#: src/lib/prefs/appearance.ts:61
+#: src/lib/prefs/appearance.ts:68
 msgid "Gap size multiplier"
 msgstr "Boşluk boyutu çarpanı"
 
-#: src/lib/prefs/appearance.ts:67
+#: src/lib/prefs/appearance.ts:74
 msgid "Disable gaps for single window"
 msgstr "Tek pencere için boşlukları devre dışı bırak"
 
-#: src/lib/prefs/appearance.ts:68
+#: src/lib/prefs/appearance.ts:75
 msgid "Disables window gaps when only a single window is present"
 msgstr "Sadece tek pencere olduğunda pencere boşluklarını devre dışı bırakır"
 
-#: src/lib/prefs/appearance.ts:95
+#: src/lib/prefs/appearance.ts:104
 #, fuzzy
 msgid "Border radius"
 msgstr "Kenarlık boyutu"
 
-#: src/lib/prefs/appearance.ts:96
+#: src/lib/prefs/appearance.ts:105
 msgid "Set to 0 for square corners"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:121
+#: src/lib/prefs/appearance.ts:130
 msgid "Style"
 msgstr "Stil"
 
-#: src/lib/prefs/appearance.ts:122
+#: src/lib/prefs/appearance.ts:131
 msgid "Change how the shell looks"
 msgstr "Kabuğun nasıl göründüğünü değiştir"
 
-#: src/lib/prefs/appearance.ts:125
+#: src/lib/prefs/appearance.ts:134
 msgid "Preview hint"
 msgstr "Önizleme ipucu"
 
-#: src/lib/prefs/appearance.ts:126
+#: src/lib/prefs/appearance.ts:135
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr "Pencereyi bıraktığınızda nerede döşeneceğini gösterir"
 
-#: src/lib/prefs/appearance.ts:132
+#: src/lib/prefs/appearance.ts:141
 msgid "Border around focused window"
 msgstr "Odaklanmış pencere etrafında kenarlık"
 
-#: src/lib/prefs/appearance.ts:133
+#: src/lib/prefs/appearance.ts:142
 msgid "Display a colored border around the focused window"
 msgstr "Odaklanmış pencere etrafında renkli kenarlık göster"
 
-#: src/lib/prefs/appearance.ts:138
+#: src/lib/prefs/appearance.ts:147
 msgid "Window split hint border"
 msgstr "Pencere bölme ipucu kenarlığı"
 
-#: src/lib/prefs/appearance.ts:139
+#: src/lib/prefs/appearance.ts:148
 msgid "Show split direction border on focused window"
 msgstr "Odaklanmış pencerede bölme yönü kenarlığını göster"
 
-#: src/lib/prefs/appearance.ts:144
+#: src/lib/prefs/appearance.ts:153
 msgid "Anvil in quick settings"
 msgstr "Hızlı ayarlarda Anvil"
 
-#: src/lib/prefs/appearance.ts:145
+#: src/lib/prefs/appearance.ts:154
 msgid "Toggles the Anvil tile in quick settings"
 msgstr "Hızlı ayarlarda Anvil döşemesini açar/kapatır"
 
-#: src/lib/prefs/appearance.ts:154
+#: src/lib/prefs/appearance.ts:163
 msgid "Color"
 msgstr "Renk"
 
-#: src/lib/prefs/appearance.ts:155
+#: src/lib/prefs/appearance.ts:164
 msgid "Changes the focused window's border and preview hint colors"
 msgstr "Odaklanmış pencerenin kenarlık ve önizleme ipucu renklerini değiştirir"
 
 #: src/lib/prefs/appearance.ts:174
+msgid "Shadows"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:175
+#, fuzzy
+msgid "Customize shadows for focused and unfocused windows"
+msgstr "Odaklanmış pencere etrafında kenarlık"
+
+#: src/lib/prefs/appearance.ts:179
+#, fuzzy
+msgid "Focused window"
+msgstr "Yığılmış pencere"
+
+#: src/lib/prefs/appearance.ts:184
+#, fuzzy
+msgid "Unfocused window"
+msgstr "Odaklanmış pencere etrafında kenarlık"
+
+#: src/lib/prefs/appearance.ts:203
+msgid "Color and opacity"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:248
+msgid "Horizontal offset"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:249
+msgid "Vertical offset"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:250
+#, fuzzy
+msgid "Blur radius"
+msgstr "Kenarlık boyutu"
+
+#: src/lib/prefs/appearance.ts:251
+#, fuzzy
+msgid "Spread radius"
+msgstr "Kenarlık boyutu"
+
+#: src/lib/prefs/appearance.ts:264
 msgid "Border size"
 msgstr "Kenarlık boyutu"
 
-#: src/lib/prefs/appearance.ts:245
+#: src/lib/prefs/appearance.ts:335
 msgid "Border color"
 msgstr "Kenarlık rengi"
 
@@ -399,26 +440,6 @@ msgstr "Varsayılana sıfırla"
 #: src/lib/prefs/widgets.ts:294
 msgid "Remove Item"
 msgstr ""
-
-#, fuzzy
-#~ msgid "Customize shadows for focused and unfocused windows"
-#~ msgstr "Odaklanmış pencere etrafında kenarlık"
-
-#, fuzzy
-#~ msgid "Focused window"
-#~ msgstr "Yığılmış pencere"
-
-#, fuzzy
-#~ msgid "Unfocused window"
-#~ msgstr "Odaklanmış pencere etrafında kenarlık"
-
-#, fuzzy
-#~ msgid "Blur radius"
-#~ msgstr "Kenarlık boyutu"
-
-#, fuzzy
-#~ msgid "Spread radius"
-#~ msgstr "Kenarlık boyutu"
 
 #, fuzzy
 #~ msgid "Minimum tiled windows"

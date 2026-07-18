@@ -247,6 +247,10 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   unmanage, actor destroy, and extension teardown hide or destroy the shadow through the same
   record that owns the mask target. No independent shadow registry or second lifecycle authority is
   permitted.
+- **The user stylesheet is the shadow customization contract**: focused and unfocused
+  `box-shadow` declarations hold offset, blur, spread, color, and opacity. Appearance preferences
+  edit those declarations through `PrefsThemeManager`; the existing `css-updated` event reloads the
+  Shell without adding parallel GSettings state.
 
 ### Residual Stage 16 — layout/focus/pointer (2026-07-11)
 

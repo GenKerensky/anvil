@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-16 03:51-0400\n"
+"POT-Creation-Date: 2026-07-17 21:21-0400\n"
 "PO-Revision-Date: 2021-09-18 16:25-0400\n"
 "Last-Translator: Jose Maranan <jmmaranan@gmail.com>\n"
 "Language-Team: \n"
@@ -42,128 +42,169 @@ msgstr "Mover el puntero con el enfoque"
 msgid "Settings"
 msgstr "Configuración"
 
-#: src/lib/prefs/appearance.ts:31
+#: src/lib/prefs/appearance.ts:38
 #, fuzzy
 msgid "Tiled window"
 msgstr "Modo de mosaico en pestañas"
 
-#: src/lib/prefs/appearance.ts:33
+#: src/lib/prefs/appearance.ts:40
 #, fuzzy
 msgid "Tabbed window"
 msgstr "Modo de mosaico en pestañas"
 
-#: src/lib/prefs/appearance.ts:35
+#: src/lib/prefs/appearance.ts:42
 #, fuzzy
 msgid "Stacked window"
 msgstr "Modo de mosaico apilado"
 
-#: src/lib/prefs/appearance.ts:37
+#: src/lib/prefs/appearance.ts:44
 msgid "Floating window"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:39
+#: src/lib/prefs/appearance.ts:46
 #, fuzzy
 msgid "Split direction hint"
 msgstr "Sugerencia de dirección dividida"
 
-#: src/lib/prefs/appearance.ts:44
+#: src/lib/prefs/appearance.ts:51
 msgid "Appearance"
 msgstr "Apariencia"
 
-#: src/lib/prefs/appearance.ts:51
+#: src/lib/prefs/appearance.ts:58
 msgid "Gaps"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:52
+#: src/lib/prefs/appearance.ts:59
 msgid "Change the gap size between windows"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:55
+#: src/lib/prefs/appearance.ts:62
 msgid "Gap size"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:61
+#: src/lib/prefs/appearance.ts:68
 #, fuzzy
 msgid "Gap size multiplier"
 msgstr "Espacios"
 
-#: src/lib/prefs/appearance.ts:67
+#: src/lib/prefs/appearance.ts:74
 msgid "Disable gaps for single window"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:68
+#: src/lib/prefs/appearance.ts:75
 msgid "Disables window gaps when only a single window is present"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:95
+#: src/lib/prefs/appearance.ts:104
 #, fuzzy
 msgid "Border radius"
 msgstr "Tamaño del borde"
 
-#: src/lib/prefs/appearance.ts:96
+#: src/lib/prefs/appearance.ts:105
 msgid "Set to 0 for square corners"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:121
+#: src/lib/prefs/appearance.ts:130
 msgid "Style"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:122
+#: src/lib/prefs/appearance.ts:131
 msgid "Change how the shell looks"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:125
+#: src/lib/prefs/appearance.ts:134
 #, fuzzy
 msgid "Preview hint"
 msgstr "Alternar vista previa de sugerencia"
 
-#: src/lib/prefs/appearance.ts:126
+#: src/lib/prefs/appearance.ts:135
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:132
+#: src/lib/prefs/appearance.ts:141
 #, fuzzy
 msgid "Border around focused window"
 msgstr "Mostrar borde de dirección de división en la ventana enfocada"
 
-#: src/lib/prefs/appearance.ts:133
+#: src/lib/prefs/appearance.ts:142
 msgid "Display a colored border around the focused window"
 msgstr "Mostrar un borde de color alrededor de la ventana enfocada"
 
-#: src/lib/prefs/appearance.ts:138
+#: src/lib/prefs/appearance.ts:147
 #, fuzzy
 msgid "Window split hint border"
 msgstr "Mostrar borde de sugerencia de división de ventana"
 
-#: src/lib/prefs/appearance.ts:139
+#: src/lib/prefs/appearance.ts:148
 msgid "Show split direction border on focused window"
 msgstr "Mostrar borde de dirección de división en la ventana enfocada"
 
-#: src/lib/prefs/appearance.ts:144
+#: src/lib/prefs/appearance.ts:153
 #, fuzzy
 msgid "Anvil in quick settings"
 msgstr "Mostrar ajustes rápidos de mosaico"
 
-#: src/lib/prefs/appearance.ts:145
+#: src/lib/prefs/appearance.ts:154
 #, fuzzy
 msgid "Toggles the Anvil tile in quick settings"
 msgstr "Alternar la visualización de Anvil en los ajustes rápidos"
 
-#: src/lib/prefs/appearance.ts:154
+#: src/lib/prefs/appearance.ts:163
 msgid "Color"
 msgstr "Color"
 
-#: src/lib/prefs/appearance.ts:155
+#: src/lib/prefs/appearance.ts:164
 #, fuzzy
 msgid "Changes the focused window's border and preview hint colors"
 msgstr "Mostrar borde de dirección de división en la ventana enfocada"
 
 #: src/lib/prefs/appearance.ts:174
+msgid "Shadows"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:175
+#, fuzzy
+msgid "Customize shadows for focused and unfocused windows"
+msgstr "Mostrar borde de dirección de división en la ventana enfocada"
+
+#: src/lib/prefs/appearance.ts:179
+#, fuzzy
+msgid "Focused window"
+msgstr "Modo de mosaico apilado"
+
+#: src/lib/prefs/appearance.ts:184
+#, fuzzy
+msgid "Unfocused window"
+msgstr "Mostrar borde de dirección de división en la ventana enfocada"
+
+#: src/lib/prefs/appearance.ts:203
+msgid "Color and opacity"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:248
+msgid "Horizontal offset"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:249
+msgid "Vertical offset"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:250
+#, fuzzy
+msgid "Blur radius"
+msgstr "Tamaño del borde"
+
+#: src/lib/prefs/appearance.ts:251
+#, fuzzy
+msgid "Spread radius"
+msgstr "Tamaño del borde"
+
+#: src/lib/prefs/appearance.ts:264
 #, fuzzy
 msgid "Border size"
 msgstr "Tamaño del borde"
 
-#: src/lib/prefs/appearance.ts:245
+#: src/lib/prefs/appearance.ts:335
 #, fuzzy
 msgid "Border color"
 msgstr "Tamaño del borde"
@@ -424,26 +465,6 @@ msgstr ""
 #: src/lib/prefs/widgets.ts:294
 msgid "Remove Item"
 msgstr "Borrar Item"
-
-#, fuzzy
-#~ msgid "Customize shadows for focused and unfocused windows"
-#~ msgstr "Mostrar borde de dirección de división en la ventana enfocada"
-
-#, fuzzy
-#~ msgid "Focused window"
-#~ msgstr "Modo de mosaico apilado"
-
-#, fuzzy
-#~ msgid "Unfocused window"
-#~ msgstr "Mostrar borde de dirección de división en la ventana enfocada"
-
-#, fuzzy
-#~ msgid "Blur radius"
-#~ msgstr "Tamaño del borde"
-
-#, fuzzy
-#~ msgid "Spread radius"
-#~ msgstr "Tamaño del borde"
 
 #, fuzzy
 #~ msgid "Minimum tiled windows"

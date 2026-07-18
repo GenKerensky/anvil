@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-16 03:51-0400\n"
+"POT-Creation-Date: 2026-07-17 21:21-0400\n"
 "PO-Revision-Date: 2023-02-28 17:16-0500\n"
 "Last-Translator: Wedone <wedoneofficiel@outlook.fr>\n"
 "Language-Team: French - Canada <wroy@proton.me>\n"
@@ -46,129 +46,170 @@ msgstr "Déplacer le pointeur avec le Focus"
 msgid "Settings"
 msgstr "Paramètres"
 
-#: src/lib/prefs/appearance.ts:31
+#: src/lib/prefs/appearance.ts:38
 #, fuzzy
 msgid "Tiled window"
 msgstr "Mode d'affichage par onglets"
 
-#: src/lib/prefs/appearance.ts:33
+#: src/lib/prefs/appearance.ts:40
 #, fuzzy
 msgid "Tabbed window"
 msgstr "Mode d'affichage par onglets"
 
-#: src/lib/prefs/appearance.ts:35
+#: src/lib/prefs/appearance.ts:42
 #, fuzzy
 msgid "Stacked window"
 msgstr "Mode de tuiles empilées"
 
-#: src/lib/prefs/appearance.ts:37
+#: src/lib/prefs/appearance.ts:44
 msgid "Floating window"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:39
+#: src/lib/prefs/appearance.ts:46
 #, fuzzy
 msgid "Split direction hint"
 msgstr "Indicateur pour la direction du fractionnement"
 
-#: src/lib/prefs/appearance.ts:44
+#: src/lib/prefs/appearance.ts:51
 msgid "Appearance"
 msgstr "Apparence"
 
-#: src/lib/prefs/appearance.ts:51
+#: src/lib/prefs/appearance.ts:58
 msgid "Gaps"
 msgstr "Marges"
 
-#: src/lib/prefs/appearance.ts:52
+#: src/lib/prefs/appearance.ts:59
 msgid "Change the gap size between windows"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:55
+#: src/lib/prefs/appearance.ts:62
 msgid "Gap size"
 msgstr ""
 
 # I'm not sure that marges are a correct translation of gaps. There are other possibilities.
-#: src/lib/prefs/appearance.ts:61
+#: src/lib/prefs/appearance.ts:68
 #, fuzzy
 msgid "Gap size multiplier"
 msgstr "Taille des marges"
 
-#: src/lib/prefs/appearance.ts:67
+#: src/lib/prefs/appearance.ts:74
 msgid "Disable gaps for single window"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:68
+#: src/lib/prefs/appearance.ts:75
 msgid "Disables window gaps when only a single window is present"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:95
+#: src/lib/prefs/appearance.ts:104
 #, fuzzy
 msgid "Border radius"
 msgstr "Taille de la bordure"
 
-#: src/lib/prefs/appearance.ts:96
+#: src/lib/prefs/appearance.ts:105
 msgid "Set to 0 for square corners"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:121
+#: src/lib/prefs/appearance.ts:130
 msgid "Style"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:122
+#: src/lib/prefs/appearance.ts:131
 msgid "Change how the shell looks"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:125
+#: src/lib/prefs/appearance.ts:134
 #, fuzzy
 msgid "Preview hint"
 msgstr "Basculer l'indice de prévisualisation"
 
-#: src/lib/prefs/appearance.ts:126
+#: src/lib/prefs/appearance.ts:135
 msgid "Shows where the window will be tiled when you let go of it"
 msgstr ""
 
-#: src/lib/prefs/appearance.ts:132
+#: src/lib/prefs/appearance.ts:141
 #, fuzzy
 msgid "Border around focused window"
 msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
 
-#: src/lib/prefs/appearance.ts:133
+#: src/lib/prefs/appearance.ts:142
 msgid "Display a colored border around the focused window"
 msgstr "Afficher une bordure colorée autour de la fenêtre focalisée"
 
-#: src/lib/prefs/appearance.ts:138
+#: src/lib/prefs/appearance.ts:147
 #, fuzzy
 msgid "Window split hint border"
 msgstr "Indice de focus flottant"
 
-#: src/lib/prefs/appearance.ts:139
+#: src/lib/prefs/appearance.ts:148
 msgid "Show split direction border on focused window"
 msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
 
-#: src/lib/prefs/appearance.ts:144
+#: src/lib/prefs/appearance.ts:153
 #, fuzzy
 msgid "Anvil in quick settings"
 msgstr "Afficher les paramètres rapides de la mise en mosaïque"
 
-#: src/lib/prefs/appearance.ts:145
+#: src/lib/prefs/appearance.ts:154
 #, fuzzy
 msgid "Toggles the Anvil tile in quick settings"
 msgstr "Basculer l'affichage d'Anvil sur les réglages rapides"
 
-#: src/lib/prefs/appearance.ts:154
+#: src/lib/prefs/appearance.ts:163
 msgid "Color"
 msgstr "Couleur"
 
-#: src/lib/prefs/appearance.ts:155
+#: src/lib/prefs/appearance.ts:164
 #, fuzzy
 msgid "Changes the focused window's border and preview hint colors"
 msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
 
 #: src/lib/prefs/appearance.ts:174
+msgid "Shadows"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:175
+#, fuzzy
+msgid "Customize shadows for focused and unfocused windows"
+msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
+
+#: src/lib/prefs/appearance.ts:179
+#, fuzzy
+msgid "Focused window"
+msgstr "Mode de tuiles empilées"
+
+#: src/lib/prefs/appearance.ts:184
+#, fuzzy
+msgid "Unfocused window"
+msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
+
+#: src/lib/prefs/appearance.ts:203
+msgid "Color and opacity"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:248
+msgid "Horizontal offset"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:249
+msgid "Vertical offset"
+msgstr ""
+
+#: src/lib/prefs/appearance.ts:250
+#, fuzzy
+msgid "Blur radius"
+msgstr "Taille de la bordure"
+
+#: src/lib/prefs/appearance.ts:251
+#, fuzzy
+msgid "Spread radius"
+msgstr "Taille de la bordure"
+
+#: src/lib/prefs/appearance.ts:264
 #, fuzzy
 msgid "Border size"
 msgstr "Taille de la bordure"
 
-#: src/lib/prefs/appearance.ts:245
+#: src/lib/prefs/appearance.ts:335
 #, fuzzy
 msgid "Border color"
 msgstr "Couleur de la bordure"
@@ -439,26 +480,6 @@ msgstr ""
 #: src/lib/prefs/widgets.ts:294
 msgid "Remove Item"
 msgstr ""
-
-#, fuzzy
-#~ msgid "Customize shadows for focused and unfocused windows"
-#~ msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
-
-#, fuzzy
-#~ msgid "Focused window"
-#~ msgstr "Mode de tuiles empilées"
-
-#, fuzzy
-#~ msgid "Unfocused window"
-#~ msgstr "Afficher la bordure du sens de rotation sur la fenêtre focalisée"
-
-#, fuzzy
-#~ msgid "Blur radius"
-#~ msgstr "Taille de la bordure"
-
-#, fuzzy
-#~ msgid "Spread radius"
-#~ msgstr "Taille de la bordure"
 
 #, fuzzy
 #~ msgid "Minimum tiled windows"

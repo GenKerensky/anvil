@@ -150,13 +150,18 @@ gnome-extensions enable "${UUID}"
 3. Expand **Tiled window**, note its **Border size**, and change it by one step.
 4. Focus the tiled window. The new border width must appear without disabling the extension or
    restarting GNOME Shell.
-5. Confirm that the user stylesheet exists and changed during the smoke:
+5. With two tiled windows visible, expand **Shadows** and change the focused window's **Blur
+   radius** by one step. Verify that the focused shadow changes immediately.
+6. Change the unfocused window's **Blur radius** by one step, move focus to the other window, and
+   verify that the newly unfocused shadow uses the updated style independently.
+7. Use the reset buttons to restore both blur radii.
+8. Confirm that the user stylesheet exists and changed during the smoke:
 
    ```bash
    test -s "${CSS_FILE}" && sha256sum "${CSS_FILE}"
    ```
 
-6. Restore the original border size in preferences.
+9. Restore the original border size in preferences.
 
 Inspect logs from the exact smoke window:
 
