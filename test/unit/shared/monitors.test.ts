@@ -2,8 +2,13 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import Gio from "gi://Gio";
 import Gdk from "gi://Gdk";
 import GLib from "gi://GLib";
+import Cairo from "gi://cairo";
 
-import { MonitorsPage } from "../../../src/lib/prefs/monitors.js";
+import {
+  calculateMonitorLayout,
+  MonitorsPage,
+  type MonitorInfo,
+} from "../../../src/lib/prefs/monitors.js";
 
 function createSettings(initialValues: Record<string, unknown> = {}) {
   const settings = new Gio.Settings("org.gnome.shell.extensions.anvil" as any);
@@ -13,11 +18,70 @@ function createSettings(initialValues: Record<string, unknown> = {}) {
   return settings;
 }
 
+function displayState(primaryConnector: string) {
+  return {
+    deep_unpack: () => [
+      1,
+      [],
+      [[0, 0, 1, 0, true, [[primaryConnector, "Vendor", "Product", "Serial"]], {}]],
+      {},
+    ],
+  } as any;
+}
+
+function monitor(
+  connector: string,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  isPrimary = false
+): MonitorInfo {
+  return {
+    connector,
+    label: connector,
+    geometry: { x, y, width, height },
+    isPrimary,
+  };
+}
+
+describe("calculateMonitorLayout", () => {
+  it("centers the complete monitor arrangement in both axes", () => {
+    const layout = calculateMonitorLayout(
+      [monitor("DP-1", -1920, 0, 1920, 1080), monitor("HDMI-1", 0, 1080, 2560, 1440)],
+      600,
+      240
+    );
+
+    const left = Math.min(...layout.map((preview) => preview.x));
+    const top = Math.min(...layout.map((preview) => preview.y));
+    const right = Math.max(...layout.map((preview) => preview.x + preview.width));
+    const bottom = Math.max(...layout.map((preview) => preview.y + preview.height));
+
+    expect((left + right) / 2).toBeCloseTo(300);
+    expect((top + bottom) / 2).toBeCloseTo(120);
+  });
+
+  it("preserves relative monitor positions while scaling", () => {
+    const layout = calculateMonitorLayout(
+      [monitor("DP-1", 0, 0, 1920, 1080), monitor("HDMI-1", 1920, 360, 2560, 1440)],
+      600,
+      240
+    );
+
+    expect(layout[1].x).toBeCloseTo(layout[0].x + layout[0].width);
+    expect(layout[1].y).toBeGreaterThan(layout[0].y);
+  });
+});
+
 describe("MonitorsPage", () => {
   let settings: Gio.Settings;
 
   beforeEach(() => {
     (Gdk as any)._resetDisplay();
+    vi.mocked(Gio.DBus.session.call_sync)
+      .mockReset()
+      .mockReturnValue(null as any);
   });
 
   describe("constructor", () => {
@@ -56,6 +120,44 @@ describe("MonitorsPage", () => {
       expect((page as any)._monitors).toHaveLength(2);
       expect((page as any)._monitors[0].connector).toBe("DP-1");
       expect((page as any)._monitors[1].connector).toBe("HDMI-1");
+    });
+
+    it("selects Mutter's primary monitor by default", () => {
+      const display = Gdk.Display.get_default() as any;
+      display._addMonitor({
+        connector: "DP-1",
+        geometry: { x: 0, y: 0, width: 1920, height: 1080 },
+      });
+      display._addMonitor({
+        connector: "HDMI-1",
+        description: "Primary Display",
+        geometry: { x: 1920, y: 0, width: 2560, height: 1440 },
+      });
+      vi.mocked(Gio.DBus.session.call_sync).mockReturnValue(displayState("HDMI-1"));
+
+      const page = new MonitorsPage({ settings });
+
+      expect((page as any)._monitors[1].isPrimary).toBe(true);
+      expect((page as any)._selectedConnector).toBe("HDMI-1");
+      expect((page as any)._boundConnector).toBe("HDMI-1");
+      expect((page as any)._monitorGroup.title).toContain("Primary Display");
+    });
+
+    it("selects the first monitor when Mutter's primary state is unavailable", () => {
+      const display = Gdk.Display.get_default() as any;
+      display._addMonitor({
+        connector: "DP-1",
+        geometry: { x: 0, y: 0, width: 1920, height: 1080 },
+      });
+      display._addMonitor({
+        connector: "HDMI-1",
+        geometry: { x: 1920, y: 0, width: 2560, height: 1440 },
+      });
+
+      const page = new MonitorsPage({ settings });
+
+      expect((page as any)._monitors[0].isPrimary).toBe(true);
+      expect((page as any)._selectedConnector).toBe("DP-1");
     });
 
     it("connects settings changed handler", () => {
@@ -266,14 +368,18 @@ describe("MonitorsPage", () => {
         connector: "DP-1",
         geometry: { x: 0, y: 0, width: 1920, height: 1080 },
       });
+      display._addMonitor({
+        connector: "HDMI-1",
+        geometry: { x: 1920, y: 0, width: 2560, height: 1440 },
+      });
 
       const page = new MonitorsPage({ settings });
-      expect((page as any)._selectedConnector).toBeNull();
-      expect((page as any)._boundConnector).toBeNull();
-
-      (page as any)._selectMonitor("DP-1");
       expect((page as any)._selectedConnector).toBe("DP-1");
       expect((page as any)._boundConnector).toBe("DP-1");
+
+      (page as any)._selectMonitor("HDMI-1");
+      expect((page as any)._selectedConnector).toBe("HDMI-1");
+      expect((page as any)._boundConnector).toBe("HDMI-1");
     });
 
     it("updates monitor group title", () => {
@@ -306,6 +412,50 @@ describe("MonitorsPage", () => {
 
       (page as any)._selectMonitor("DP-1");
       expect(drawSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("monitor preview drawing", () => {
+    it("draws rounded corners and a black top bar on the primary monitor", () => {
+      settings = createSettings();
+      const display = Gdk.Display.get_default() as any;
+      display._addMonitor({
+        connector: "DP-1",
+        geometry: { x: 0, y: 0, width: 1920, height: 1080 },
+      });
+      vi.mocked(Gio.DBus.session.call_sync).mockReturnValue(displayState("DP-1"));
+      const page = new MonitorsPage({ settings });
+      const cr = new (Cairo.Context as any)();
+
+      (page as any)._drawMonitors(cr, 600, 200);
+
+      expect(cr._state.arcs).toHaveLength(12);
+      expect(cr._state.closedPaths).toBe(3);
+      expect(cr._state.clipped).toBe(1);
+      expect(cr._state.sources).toContainEqual({ r: 0, g: 0, b: 0, a: 1 });
+      expect(cr._state.rect.h).toBe(12);
+    });
+
+    it("uses centered preview bounds for click selection", () => {
+      settings = createSettings();
+      const display = Gdk.Display.get_default() as any;
+      display._addMonitor({
+        connector: "DP-1",
+        geometry: { x: 0, y: 0, width: 1920, height: 1080 },
+      });
+      display._addMonitor({
+        connector: "HDMI-1",
+        geometry: { x: 1920, y: 0, width: 2560, height: 1440 },
+      });
+      const page = new MonitorsPage({ settings });
+      (page as any)._drawingArea.width = 600;
+      (page as any)._drawingArea.height = 200;
+      const previews = calculateMonitorLayout((page as any)._monitors, 600, 200);
+      const second = previews[1];
+
+      (page as any)._handleClick(second.x + second.width / 2, second.y + second.height / 2);
+
+      expect((page as any)._selectedConnector).toBe("HDMI-1");
     });
   });
 

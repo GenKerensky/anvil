@@ -16,10 +16,76 @@ type MonitorConstraintTuple = [
   resizeExempt: boolean
 ];
 
-interface MonitorInfo {
+export interface MonitorInfo {
   connector: string;
   label: string;
   geometry: { x: number; y: number; width: number; height: number };
+  isPrimary: boolean;
+}
+
+export interface MonitorPreview {
+  connector: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type MonitorSpec = [connector: string, vendor: string, product: string, serial: string];
+
+type LogicalMonitorState = [
+  x: number,
+  y: number,
+  scale: number,
+  transform: number,
+  primary: boolean,
+  monitors: MonitorSpec[],
+  properties: Record<string, unknown>
+];
+
+type DisplayConfigState = [
+  serial: number,
+  monitors: unknown[],
+  logicalMonitors: LogicalMonitorState[],
+  properties: Record<string, unknown>
+];
+
+const DISPLAY_CONFIG_BUS_NAME = "org.gnome.Mutter.DisplayConfig";
+const DISPLAY_CONFIG_OBJECT_PATH = "/org/gnome/Mutter/DisplayConfig";
+const MONITOR_PADDING = 20;
+const MONITOR_CORNER_RADIUS = 8;
+
+export function calculateMonitorLayout(
+  monitors: MonitorInfo[],
+  widgetWidth: number,
+  widgetHeight: number
+): MonitorPreview[] {
+  if (monitors.length === 0) return [];
+
+  const minX = Math.min(...monitors.map((monitor) => monitor.geometry.x));
+  const minY = Math.min(...monitors.map((monitor) => monitor.geometry.y));
+  const maxX = Math.max(...monitors.map((monitor) => monitor.geometry.x + monitor.geometry.width));
+  const maxY = Math.max(...monitors.map((monitor) => monitor.geometry.y + monitor.geometry.height));
+  const contentWidth = maxX - minX || 1;
+  const contentHeight = maxY - minY || 1;
+  const availableWidth = Math.max(widgetWidth - MONITOR_PADDING * 2, 0);
+  const availableHeight = Math.max(widgetHeight - MONITOR_PADDING * 2, 0);
+  const scale = Math.max(
+    0,
+    Math.min(availableWidth / contentWidth, availableHeight / contentHeight, 1)
+  );
+  const renderedWidth = contentWidth * scale;
+  const renderedHeight = contentHeight * scale;
+  const originX = (widgetWidth - renderedWidth) / 2;
+  const originY = (widgetHeight - renderedHeight) / 2;
+
+  return monitors.map((monitor) => ({
+    connector: monitor.connector,
+    x: originX + (monitor.geometry.x - minX) * scale,
+    y: originY + (monitor.geometry.y - minY) * scale,
+    width: monitor.geometry.width * scale,
+    height: monitor.geometry.height * scale,
+  }));
 }
 
 export class MonitorsPage extends Adw.PreferencesPage {
@@ -44,12 +110,38 @@ export class MonitorsPage extends Adw.PreferencesPage {
     super({ title: _("Monitors"), icon_name: "video-display-symbolic" });
 
     this._settings = settings;
-    this._monitors = this._queryMonitors();
+    this._monitors = this._queryMonitors(this._queryPrimaryConnector());
 
     this._buildUi();
+
+    const initialMonitor = this._monitors.find((monitor) => monitor.isPrimary) ?? this._monitors[0];
+    if (initialMonitor) this._selectMonitor(initialMonitor.connector);
   }
 
-  private _queryMonitors(): MonitorInfo[] {
+  private _queryPrimaryConnector(): string | null {
+    // GDK4 exposes output geometry but not primary-output state; Mutter's
+    // current logical-monitor configuration is the authoritative source.
+    try {
+      const response = Gio.DBus.session.call_sync(
+        DISPLAY_CONFIG_BUS_NAME,
+        DISPLAY_CONFIG_OBJECT_PATH,
+        DISPLAY_CONFIG_BUS_NAME,
+        "GetCurrentState",
+        null,
+        null,
+        Gio.DBusCallFlags.NONE,
+        1000,
+        null
+      );
+      const state = response.deep_unpack() as unknown as DisplayConfigState;
+      const primaryLogicalMonitor = state[2].find((logicalMonitor) => logicalMonitor[4]);
+      return primaryLogicalMonitor?.[5]?.[0]?.[0] ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private _queryMonitors(primaryConnector: string | null): MonitorInfo[] {
     const display = Gdk.Display.get_default();
     if (!display) return [];
     const result: MonitorInfo[] = [];
@@ -67,7 +159,11 @@ export class MonitorsPage extends Adw.PreferencesPage {
         connector,
         label,
         geometry: { x: geo.x, y: geo.y, width: geo.width, height: geo.height },
+        isPrimary: connector === primaryConnector,
       });
+    }
+    if (result.length > 0 && !result.some((monitor) => monitor.isPrimary)) {
+      result[0].isPrimary = true;
     }
     return result;
   }
@@ -229,24 +325,7 @@ export class MonitorsPage extends Adw.PreferencesPage {
     if (this._monitors.length === 0) return;
 
     const crAny = cr as unknown as CairoContext;
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const m of this._monitors) {
-      minX = Math.min(minX, m.geometry.x);
-      minY = Math.min(minY, m.geometry.y);
-      maxX = Math.max(maxX, m.geometry.x + m.geometry.width);
-      maxY = Math.max(maxY, m.geometry.y + m.geometry.height);
-    }
-
-    const contentW = maxX - minX || 1;
-    const contentH = maxY - minY || 1;
-    const pad = 20;
-    const availW = widgetWidth - pad * 2;
-    const availH = widgetHeight - pad * 2;
-    const scale = Math.min(availW / contentW, availH / contentH, 1);
+    const previews = calculateMonitorLayout(this._monitors, widgetWidth, widgetHeight);
 
     let accentR = 0.2;
     let accentG = 0.4;
@@ -265,10 +344,11 @@ export class MonitorsPage extends Adw.PreferencesPage {
     crAny.selectFontFace("sans-serif", Cairo.FontSlant.NORMAL, Cairo.FontWeight.NORMAL);
 
     for (const m of this._monitors) {
-      const rx = pad + (m.geometry.x - minX) * scale;
-      const ry = pad + (m.geometry.y - minY) * scale;
-      const rw = m.geometry.width * scale;
-      const rh = m.geometry.height * scale;
+      const preview = previews.find((candidate) => candidate.connector === m.connector);
+      if (!preview) continue;
+      const { x: rx, y: ry, width: rw, height: rh } = preview;
+      if (rw <= 0 || rh <= 0) continue;
+      const radius = Math.min(MONITOR_CORNER_RADIUS, rw / 2, rh / 2);
 
       const isSelected = m.connector === this._selectedConnector;
 
@@ -277,8 +357,18 @@ export class MonitorsPage extends Adw.PreferencesPage {
       } else {
         crAny.setSourceRGBA(0.5, 0.5, 0.5, 0.1);
       }
-      crAny.rectangle(rx, ry, rw, rh);
+      this._roundedRectangle(crAny, rx, ry, rw, rh, radius);
       crAny.fill();
+
+      if (m.isPrimary) {
+        crAny.save();
+        this._roundedRectangle(crAny, rx, ry, rw, rh, radius);
+        crAny.clip();
+        crAny.setSourceRGBA(0, 0, 0, 1);
+        crAny.rectangle(rx, ry, rw, Math.min(12, Math.max(6, rh * 0.1)));
+        crAny.fill();
+        crAny.restore();
+      }
 
       if (isSelected) {
         crAny.setSourceRGBA(accentR, accentG, accentB, 0.8);
@@ -287,7 +377,7 @@ export class MonitorsPage extends Adw.PreferencesPage {
         crAny.setSourceRGBA(0.5, 0.5, 0.5, 0.5);
         crAny.setLineWidth(1);
       }
-      crAny.rectangle(rx, ry, rw, rh);
+      this._roundedRectangle(crAny, rx, ry, rw, rh, radius);
       crAny.stroke();
 
       crAny.setSourceRGBA(0.9, 0.9, 0.9, 1);
@@ -302,37 +392,39 @@ export class MonitorsPage extends Adw.PreferencesPage {
   private _handleClick(x: number, y: number): void {
     if (this._monitors.length === 0) return;
 
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const m of this._monitors) {
-      minX = Math.min(minX, m.geometry.x);
-      minY = Math.min(minY, m.geometry.y);
-      maxX = Math.max(maxX, m.geometry.x + m.geometry.width);
-      maxY = Math.max(maxY, m.geometry.y + m.geometry.height);
-    }
+    const previews = calculateMonitorLayout(
+      this._monitors,
+      this._drawingArea.get_width(),
+      this._drawingArea.get_height()
+    );
 
-    const widgetWidth = this._drawingArea.get_width();
-    const widgetHeight = this._drawingArea.get_height();
-    const contentW = maxX - minX || 1;
-    const contentH = maxY - minY || 1;
-    const pad = 20;
-    const availW = widgetWidth - pad * 2;
-    const availH = widgetHeight - pad * 2;
-    const scale = Math.min(availW / contentW, availH / contentH, 1);
-
-    for (const m of this._monitors) {
-      const rx = pad + (m.geometry.x - minX) * scale;
-      const ry = pad + (m.geometry.y - minY) * scale;
-      const rw = m.geometry.width * scale;
-      const rh = m.geometry.height * scale;
-
-      if (x >= rx && x <= rx + rw && y >= ry && y <= ry + rh) {
-        this._selectMonitor(m.connector);
+    for (const preview of previews) {
+      if (
+        x >= preview.x &&
+        x <= preview.x + preview.width &&
+        y >= preview.y &&
+        y <= preview.y + preview.height
+      ) {
+        this._selectMonitor(preview.connector);
         return;
       }
     }
+  }
+
+  private _roundedRectangle(
+    cr: CairoContext,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number
+  ): void {
+    cr.newSubPath();
+    cr.arc(x + width - radius, y + radius, radius, -Math.PI / 2, 0);
+    cr.arc(x + width - radius, y + height - radius, radius, 0, Math.PI / 2);
+    cr.arc(x + radius, y + height - radius, radius, Math.PI / 2, Math.PI);
+    cr.arc(x + radius, y + radius, radius, Math.PI, (Math.PI * 3) / 2);
+    cr.closePath();
   }
 
   private _selectMonitor(connector: string): void {
@@ -371,6 +463,12 @@ export class MonitorsPage extends Adw.PreferencesPage {
 
 interface CairoContext {
   setSourceRGBA(r: number, g: number, b: number, a: number): void;
+  newSubPath(): void;
+  arc(x: number, y: number, radius: number, angle1: number, angle2: number): void;
+  closePath(): void;
+  save(): void;
+  restore(): void;
+  clip(): void;
   rectangle(x: number, y: number, w: number, h: number): void;
   fill(): void;
   stroke(): void;

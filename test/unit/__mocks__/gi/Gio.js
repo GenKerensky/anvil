@@ -108,11 +108,23 @@ const FileCopyFlags = {
   TARGET_DEFAULT_PERMS: 32,
 };
 
-export { Settings, FileMock as File, FileCreateFlags, FileCopyFlags };
+const DBus = {
+  session: {
+    call_sync: vi.fn(() => null),
+  },
+};
+
+const DBusCallFlags = {
+  NONE: 0,
+};
+
+export { Settings, FileMock as File, FileCreateFlags, FileCopyFlags, DBus, DBusCallFlags };
 
 export default {
   Settings,
   File: FileMock,
   FileCreateFlags,
   FileCopyFlags,
+  DBus,
+  DBusCallFlags,
 };

@@ -16,6 +16,33 @@ class Context {
 
   setSourceRGBA(r, g, b, a) {
     this._state.fillRGBA = { r, g, b, a };
+    this._state.sources ??= [];
+    this._state.sources.push({ r, g, b, a });
+  }
+
+  newSubPath() {
+    this._state.newSubPaths = (this._state.newSubPaths ?? 0) + 1;
+  }
+
+  arc(x, y, radius, angle1, angle2) {
+    this._state.arcs ??= [];
+    this._state.arcs.push({ x, y, radius, angle1, angle2 });
+  }
+
+  closePath() {
+    this._state.closedPaths = (this._state.closedPaths ?? 0) + 1;
+  }
+
+  save() {
+    this._state.saved = (this._state.saved ?? 0) + 1;
+  }
+
+  restore() {
+    this._state.restored = (this._state.restored ?? 0) + 1;
+  }
+
+  clip() {
+    this._state.clipped = (this._state.clipped ?? 0) + 1;
   }
 
   rectangle(x, y, w, h) {
