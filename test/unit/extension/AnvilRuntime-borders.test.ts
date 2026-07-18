@@ -388,6 +388,23 @@ describe("AnvilRuntime - Borders", () => {
       expect(ctx.windowGroup._children.filter((actor: any) => actor === outline)).toHaveLength(1);
     });
 
+    it("paints the active focus outline above the focused window shadow", () => {
+      const ctx = createAnvilRuntimeFixture({
+        settings: { "focus-border-toggle": true, "split-border-toggle": false },
+      });
+      const window = createMockWindow({ workspace: ctx.workspaces[0] });
+      const windowActor = window.get_compositor_private();
+      ctx.windowGroup.add_child(windowActor);
+      trackTestWindow(ctx, window);
+
+      ctx.anvilRuntime._borders.setActiveWindow(window);
+
+      const focusBorder = windowActor.border;
+      expect(ctx.windowGroup._children.indexOf(focusBorder)).toBeGreaterThan(
+        ctx.windowGroup._children.indexOf(windowActor)
+      );
+    });
+
     it("reconciles active hints without entering full window reconciliation", () => {
       const ctx = createAnvilRuntimeFixture({
         settings: { "focus-border-toggle": true, "split-border-toggle": false },
@@ -414,11 +431,11 @@ describe("AnvilRuntime - Borders", () => {
       trackTestWindow(ctx, window);
       ctx.anvilRuntime._borders.setActiveWindow(window);
       ctx.anvilRuntime._borders.reconcileActiveWindow();
-      ctx.windowGroup.set_child_below_sibling.mockClear();
+      ctx.windowGroup.set_child_above_sibling.mockClear();
 
       ctx.anvilRuntime._borders.reconcileWindow(window);
 
-      expect(ctx.windowGroup.set_child_below_sibling).not.toHaveBeenCalled();
+      expect(ctx.windowGroup.set_child_above_sibling).not.toHaveBeenCalled();
     });
 
     it("treats repeated focus as a no-op and hides the singleton on null focus", () => {

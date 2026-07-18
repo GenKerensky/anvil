@@ -4,8 +4,9 @@
  * Focus and split hints are singletons moved between windows. Rounded masks
  * remove the source shadow plate, then one per-window Clutter child paints the
  * replacement shadow below the surface. Parenting the shadow to its compositor
- * actor gives it the same workspace visibility and lifetime. All state
- * application is idempotent.
+ * actor gives it the same workspace visibility and lifetime. Focus and split
+ * hints stay in a contiguous chain above that compositor actor so its shadow
+ * cannot dim their strokes. All state application is idempotent.
  */
 
 import Gio from "gi://Gio";
@@ -375,7 +376,7 @@ export class BorderController {
     const actors = active ? [this._splitBorder, this._focusBorder] : [];
     for (const actor of actors) {
       if (!actor?.visible) continue;
-      this._stackBelow(actor, sibling);
+      this._stackAbove(actor, sibling);
       sibling = actor;
     }
   }
@@ -416,10 +417,10 @@ export class BorderController {
     else actor.hide();
   }
 
-  private _stackBelow(actor: Clutter.Actor, sibling: Clutter.Actor): void {
+  private _stackAbove(actor: Clutter.Actor, sibling: Clutter.Actor): void {
     if (!global.window_group?.contains(actor)) return;
-    if (sibling.get_previous_sibling?.() === actor) return;
-    global.window_group.set_child_below_sibling(actor, sibling);
+    if (actor.get_previous_sibling?.() === sibling) return;
+    global.window_group.set_child_above_sibling(actor, sibling);
   }
 
   private _removeWindowMask(record: DecorationRecord): void {

@@ -103,6 +103,14 @@ export function createMockWindowGroup() {
       else children.push(child);
       attach(child);
     }),
+    set_child_above_sibling: vi.fn((child, sibling) => {
+      const childIndex = children.indexOf(child);
+      if (childIndex !== -1) children.splice(childIndex, 1);
+      const siblingIndex = sibling ? children.indexOf(sibling) : -1;
+      if (siblingIndex >= 0) children.splice(siblingIndex + 1, 0, child);
+      else children.push(child);
+      attach(child);
+    }),
   };
   return group;
 }

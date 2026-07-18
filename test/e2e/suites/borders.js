@@ -93,6 +93,13 @@ describe("Borders and Gaps", function () {
       actor.get_children().indexOf(surface())
     );
     expect(shadow().visible).toBe(true);
+    await sleep(1500);
+    const focusBorder = actor.border;
+    const settledStack = global.window_group.get_children();
+    expect(focusBorder).not.toBeNull();
+    expect(focusBorder.visible).toBe(true);
+    expect(focusBorder.get_parent()).toBe(global.window_group);
+    expect(settledStack.indexOf(focusBorder)).toBeGreaterThan(settledStack.indexOf(actor));
 
     const workspaceManager = global.display.get_workspace_manager();
     const originalWorkspace = workspaceManager.get_active_workspace_index();
