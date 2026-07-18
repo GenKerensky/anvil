@@ -45,15 +45,14 @@ function fixture() {
 }
 
 describe("ExtensionThemeManager", () => {
-  it("loads shipped CSS before the user override", () => {
+  it("loads only the complete user stylesheet when it is available", () => {
     const { manager, theme, baseFile, overrideFile } = fixture();
 
     expect(manager.reloadStylesheet()).toBe(true);
 
-    expect(theme.load_stylesheet.mock.calls.map(([loaded]) => loaded)).toEqual([
-      baseFile,
-      overrideFile,
-    ]);
+    expect(theme.load_stylesheet.mock.calls.map(([loaded]) => loaded)).toEqual([overrideFile]);
+    expect(theme.unload_stylesheet).toHaveBeenCalledWith(baseFile);
+    expect(manager.stylesheets).toEqual([overrideFile]);
   });
 
   it("keeps the shipped base active when loading the user override throws", () => {
@@ -75,7 +74,7 @@ describe("ExtensionThemeManager", () => {
     expect(manager.stylesheets).toEqual([baseFile]);
   });
 
-  it("reports failure when St rejects the shipped base", () => {
+  it("reports failure when St rejects both user and shipped stylesheets", () => {
     const { manager, theme } = fixture();
     theme.load_stylesheet.mockReturnValue(false);
 
@@ -89,8 +88,8 @@ describe("ExtensionThemeManager", () => {
     manager.reloadStylesheet();
 
     expect(theme.unload_stylesheet.mock.calls.map(([loaded]) => loaded)).toEqual([
-      overrideFile,
       baseFile,
+      overrideFile,
     ]);
   });
 
@@ -101,8 +100,8 @@ describe("ExtensionThemeManager", () => {
     manager.unloadStylesheets();
 
     expect(theme.unload_stylesheet.mock.calls.map(([loaded]) => loaded)).toEqual([
-      overrideFile,
       baseFile,
+      overrideFile,
     ]);
     expect(manager.stylesheets).toEqual([]);
     expect(manager.stylesheet).toBeNull();
@@ -118,15 +117,15 @@ describe("ExtensionThemeManager", () => {
     expect(manager.reloadStylesheet()).toBe(false);
     expect(manager.stylesheets).toEqual([overrideFile]);
     expect(manager.stylesheet).toBe(overrideFile);
-    expect(theme.load_stylesheet).toHaveBeenCalledTimes(2);
+    expect(theme.load_stylesheet).toHaveBeenCalledTimes(1);
 
     expect(manager.reloadStylesheet()).toBe(true);
     expect(theme.unload_stylesheet.mock.calls.map(([loaded]) => loaded)).toEqual([
-      overrideFile,
       baseFile,
       overrideFile,
+      overrideFile,
     ]);
-    expect(manager.stylesheets).toEqual([baseFile, overrideFile]);
+    expect(manager.stylesheets).toEqual([overrideFile]);
   });
 
   it("refreshes a fallback selection when a user override becomes available", () => {
@@ -146,9 +145,6 @@ describe("ExtensionThemeManager", () => {
     expect(manager.refreshStylesheet()).toBe(true);
 
     expect(initialize).toHaveBeenCalledOnce();
-    expect(theme.load_stylesheet.mock.calls.map(([loaded]) => loaded)).toEqual([
-      baseFile,
-      overrideFile,
-    ]);
+    expect(theme.load_stylesheet.mock.calls.map(([loaded]) => loaded)).toEqual([overrideFile]);
   });
 });

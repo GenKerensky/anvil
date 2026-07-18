@@ -576,7 +576,11 @@ A second audit of the refactor found remaining work; all resolved.
 - **The user stylesheet is the configuration contract**: focused and unfocused `box-shadow`
   declarations hold offset, blur, spread, color, and opacity. Appearance preferences edit those
   declarations through `PrefsThemeManager`; the existing `css-updated` event reloads the shell and
-  refreshes decoration layout without adding parallel GSettings state.
+  refreshes decoration layout without adding parallel GSettings state. The migrated user file is a
+  complete mutable stylesheet, not a sparse layer: `ExtensionThemeManager` detaches GNOME Shell's
+  automatically loaded packaged `stylesheet.css` and loads exactly one complete file. The packaged
+  file is used only when the user stylesheet is absent or rejected, preventing duplicate shipped
+  selectors from overriding live preference edits.
 
 ### Portable admission order and minimum-size facts (2026-07-13)
 
