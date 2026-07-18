@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 17:56+0000\n"
+"POT-Creation-Date: 2026-07-18 16:33-0400\n"
 "PO-Revision-Date: 2021-09-18 16:25-0400\n"
 "Last-Translator: Jose Maranan <jmmaranan@gmail.com>\n"
 "Language-Team: \n"
@@ -273,48 +273,48 @@ msgid ""
 "wiki/Keyboard-Shortcuts\">Syntax examples</a>"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:44
+#: src/lib/prefs/monitors.ts:110
 msgid "Monitors"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:143
+#: src/lib/prefs/monitors.ts:239
 msgid "Select a monitor to configure"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:148
+#: src/lib/prefs/monitors.ts:244
 msgid "Enable size constraints"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:149
+#: src/lib/prefs/monitors.ts:245
 msgid "New feature — may not have predictable behavior"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:154
+#: src/lib/prefs/monitors.ts:250
 msgid ""
 "<b>CAUTION</b>: This is a new feature and may not have predictable behavior"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:162
+#: src/lib/prefs/monitors.ts:258
 msgid "Max width"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:163 src/lib/prefs/monitors.ts:172
+#: src/lib/prefs/monitors.ts:259 src/lib/prefs/monitors.ts:268
 msgid "0 = no limit"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:171
+#: src/lib/prefs/monitors.ts:267
 msgid "Max height"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:179
+#: src/lib/prefs/monitors.ts:275
 msgid "Resize exemption"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:180
+#: src/lib/prefs/monitors.ts:276
 msgid "Let manually resized windows exceed the size limits"
 msgstr ""
 
-#: src/lib/prefs/monitors.ts:344
+#: src/lib/prefs/monitors.ts:436
 msgid "Monitor:"
 msgstr ""
 
