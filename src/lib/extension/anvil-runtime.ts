@@ -446,6 +446,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       removeFloatOverride: (w, withWmId) => self.removeFloatOverride(w, withWmId),
       trackCurrentMonWs: () => self.trackCurrentMonWs(),
       autoSplitFromFocus: () => self.layoutEngine.autoSplitFromFocus(),
+      resetTiledSiblingPercent: (parentNode) =>
+        self.layoutEngine.resetTiledSiblingPercent(parentNode),
       observePortableWindow: (w) =>
         self._withTilingShadow("window", (shadow) => shadow.observeWindow(w)),
       observePortableFrame: (w) => self._observePortableFrame(w),

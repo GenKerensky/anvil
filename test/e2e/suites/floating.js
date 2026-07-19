@@ -12,6 +12,7 @@ import {
   getSettings,
   getAnvilRuntime,
   getRuntimeWindowState,
+  getRuntimeWindowStates,
   sendAnvilCommand,
   sendAnvilCommandAndSettle,
   closeAllWindows,
@@ -19,6 +20,59 @@ import {
   waitForWindowCount,
   clearFloatOverridesForClass,
 } from "../../lib/shared-commands.js";
+
+function getTiledWindowPercents() {
+  return getRuntimeWindowStates()
+    .filter(function (state) {
+      return state.mode === "TILE";
+    })
+    .map(function (state) {
+      return { windowId: state.windowId, percent: state.percent };
+    });
+}
+
+/** @param {string} wmClass */
+function findWindowByClass(wmClass) {
+  const expected = wmClass.toLowerCase();
+  const windows = /** @type {any[]} */ (global.get_window_actors())
+    .map(
+      /** @param {any} actor */ function (actor) {
+        return actor.meta_window ?? actor.get_meta_window?.();
+      }
+    )
+    .filter(Boolean);
+  const window = windows.find(function (candidate) {
+    return candidate.get_wm_class()?.toLowerCase() === expected;
+  });
+  if (!window) {
+    throw new Error(
+      "Window class not found: " +
+        wmClass +
+        " (found " +
+        windows.map(function (candidate) {
+          return candidate.get_wm_class();
+        }) +
+        ")"
+    );
+  }
+  return window;
+}
+
+function setCustomTiledPercents() {
+  const runtime = getAnvilRuntime();
+  const tiledNodes = /** @type {any[]} */ (runtime.tree.nodeWindows).filter(
+    /** @param {any} node */ function (node) {
+      return node.mode === "TILE";
+    }
+  );
+  if (tiledNodes.length !== 2) {
+    throw new Error("Expected exactly two tiled nodes, got " + tiledNodes.length);
+  }
+  tiledNodes[0].percent = 0.7;
+  tiledNodes[1].percent = 0.3;
+  runtime.forceRender("e2e-custom-tiled-percents");
+  return getTiledWindowPercents();
+}
 
 describe("Floating and Snap Layout", function () {
   beforeEach(async function () {
@@ -28,6 +82,7 @@ describe("Floating and Snap Layout", function () {
     // state. Without this the spec is order-dependent (a prior override makes
     // the toggle un-float instead of float).
     clearFloatOverridesForClass("org.gnome.Nautilus");
+    clearFloatOverridesForClass("XTerm");
     await sleep(200);
   });
 
@@ -35,6 +90,7 @@ describe("Floating and Snap Layout", function () {
     // Ensure tiling is re-enabled and no Nautilus class float override bleeds
     getSettings().set_boolean("tiling-mode-enabled", true);
     clearFloatOverridesForClass("org.gnome.Nautilus");
+    clearFloatOverridesForClass("XTerm");
     await closeAllWindows();
   });
 
@@ -74,6 +130,56 @@ describe("Floating and Snap Layout", function () {
         return !before[i] || w.width !== before[i].width || w.height !== before[i].height;
       });
     expect(sizesChanged || totalAfter <= totalBefore).toBe(true);
+  });
+
+  it("preserves custom tiled sizes when a floating window is admitted", async function () {
+    await launchApp("org.gnome.Nautilus.desktop");
+    await launchApp("org.gnome.Nautilus.desktop");
+    await waitForWindowCount(2, 5000);
+
+    // Establish a class-level float rule through the same command users invoke,
+    // then close the setup window so its next instance exercises admission.
+    await launchApp("xterm.desktop");
+    await waitForWindowCount(3, 5000);
+    const setupXterm = findWindowByClass("XTerm");
+    setupXterm.activate(global.get_current_time());
+    await sleep(300);
+    await sendAnvilCommandAndSettle({
+      name: "FloatClassToggle",
+      mode: "float",
+      x: "center",
+      y: "center",
+      width: 0.65,
+      height: 0.75,
+    });
+    expect(getRuntimeWindowState(setupXterm)?.mode).toBe("FLOAT");
+    setupXterm.delete(global.get_current_time());
+    await waitForWindowCount(2, 5000);
+
+    // Direct percentages isolate this test from headless compositor resize
+    // variability while still exercising the real Meta window lifecycle.
+    const before = setCustomTiledPercents();
+    expect(before.length).toBe(2);
+    expect(
+      before.every(function (state) {
+        return typeof state.percent === "number";
+      })
+    ).toBe(true);
+    expect(Math.abs(before[0].percent - before[1].percent)).toBeGreaterThan(0.01);
+
+    await launchApp("xterm.desktop");
+    await waitForWindowCount(3, 5000);
+    await sleep(800);
+
+    expect(getRuntimeWindowState(findWindowByClass("XTerm"))?.mode).toBe("FLOAT");
+    const afterById = new Map(
+      getTiledWindowPercents().map(function (state) {
+        return [state.windowId, state.percent];
+      })
+    );
+    before.forEach(function (state) {
+      expect(afterById.get(state.windowId)).toBeCloseTo(state.percent, 6);
+    });
   });
 
   it("FloatClassToggle toggles float by window class", async function () {

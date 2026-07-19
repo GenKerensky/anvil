@@ -278,6 +278,63 @@ describe("AnvilRuntime - Lifecycle", () => {
   });
 
   describe("trackWindow", () => {
+    it("preserves custom tiled sibling percents when a floating window is admitted", () => {
+      const first = createMockWindow({
+        id: 1,
+        wm_class: "TiledApp",
+        workspace: ctx.workspaces[0],
+      });
+      const second = createMockWindow({
+        id: 2,
+        wm_class: "TiledApp",
+        workspace: ctx.workspaces[0],
+      });
+      wm()._tracker.trackWindow(ctx.display, first);
+      wm()._tracker.trackWindow(ctx.display, second);
+
+      const firstNode = ctx.tree.findNode(first);
+      const secondNode = ctx.tree.findNode(second);
+      expect(firstNode.parentNode).toBe(secondNode.parentNode);
+      firstNode.percent = 0.7;
+      secondNode.percent = 0.3;
+      ctx.settings._values["auto-split-enabled"] = true;
+      ctx.display.get_focus_window.mockReturnValue(second);
+
+      configMgr().windowProps.overrides = [{ wmClass: "FloatingApp", mode: "float" }];
+      const floating = createMockWindow({
+        id: 3,
+        wm_class: "FloatingApp",
+        workspace: ctx.workspaces[0],
+      });
+      wm()._tracker.trackWindow(ctx.display, floating);
+
+      expect(ctx.tree.findNode(floating).mode).toBe(WINDOW_MODES.FLOAT);
+      expect([ctx.tree.findNode(first).percent, ctx.tree.findNode(second).percent]).toEqual([
+        0.7, 0.3,
+      ]);
+    });
+
+    it("resets tiled sibling percents when another tiled window is admitted", () => {
+      const first = createMockWindow({ id: 1, workspace: ctx.workspaces[0] });
+      const second = createMockWindow({ id: 2, workspace: ctx.workspaces[0] });
+      wm()._tracker.trackWindow(ctx.display, first);
+      wm()._tracker.trackWindow(ctx.display, second);
+
+      const firstNode = ctx.tree.findNode(first);
+      const secondNode = ctx.tree.findNode(second);
+      firstNode.percent = 0.7;
+      secondNode.percent = 0.3;
+
+      const third = createMockWindow({ id: 3, workspace: ctx.workspaces[0] });
+      wm()._tracker.trackWindow(ctx.display, third);
+
+      expect([firstNode.percent, secondNode.percent, ctx.tree.findNode(third).percent]).toEqual([
+        undefined,
+        undefined,
+        undefined,
+      ]);
+    });
+
     it("removes a legacy node when the Meta window becomes unmanaged", () => {
       const window = createMockWindow({ workspace: ctx.workspaces[0] });
       wm()._tracker.trackWindow(ctx.display, window);

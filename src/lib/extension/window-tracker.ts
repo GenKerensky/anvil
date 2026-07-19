@@ -66,6 +66,8 @@ export interface WindowTrackerHost {
   trackCurrentMonWs(): void;
   /** LayoutEngine.autoSplitFromFocus — no command re-entry. */
   autoSplitFromFocus(): boolean;
+  /** LayoutEngine.resetTiledSiblingPercent — preserve float-independent sizing. */
+  resetTiledSiblingPercent(parentNode: Node | null): void;
   observePortableWindow(metaWindow: Meta.Window): void;
   observePortableFrame(metaWindow: Meta.Window): void;
   observePortableFocus(metaWindow: Meta.Window | null): void;
@@ -376,7 +378,13 @@ export class WindowTracker {
         this.trackCoreWindow(metaWindow);
         return;
       }
-      host.autoSplitFromFocus();
+      const initialMode =
+        host.isFloatingExempt(metaWindow) || !host.isActiveWindowWorkspaceTiled(metaWindow)
+          ? WINDOW_MODES.FLOAT
+          : WINDOW_MODES.TILE;
+      if (initialMode === WINDOW_MODES.TILE) {
+        host.autoSplitFromFocus();
+      }
       const existNodeWindow = host.tree.findNode(metaWindow);
       Logger.debug(`Meta Window ${metaWindow.get_title()} ${metaWindow.get_window_type()}`);
       if (!existNodeWindow) {
@@ -414,11 +422,6 @@ export class WindowTracker {
             attachTarget = metaMonWsNode;
           }
         }
-
-        const initialMode =
-          host.isFloatingExempt(metaWindow) || !host.isActiveWindowWorkspaceTiled(metaWindow)
-            ? WINDOW_MODES.FLOAT
-            : WINDOW_MODES.TILE;
 
         const nodeWindow = host.tree.createNode(
           attachTarget.nodeValue,
@@ -524,11 +527,8 @@ export class WindowTracker {
         this._scheduleAdmissionUnmaximize(metaWindow);
         host.renderTree("window-create", true);
 
-        if (nodeWindow?.parentNode) {
-          const childNodes = host.tree.getTiledChildren(nodeWindow!.parentNode!.childNodes);
-          childNodes.forEach((n) => {
-            n.percent = undefined;
-          });
+        if (nodeWindow?.mode === WINDOW_MODES.TILE) {
+          host.resetTiledSiblingPercent(nodeWindow.parentNode);
         }
       }
     }

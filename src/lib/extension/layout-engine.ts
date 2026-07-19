@@ -598,6 +598,14 @@ export class LayoutEngine {
     });
   }
 
+  /** Reset only siblings that participate in tiling after a tiled admission. */
+  resetTiledSiblingPercent(parentNode: Node | null) {
+    if (!parentNode) return;
+    this._host.tree.getTiledChildren(parentNode.childNodes).forEach((n: Node) => {
+      n.percent = undefined;
+    });
+  }
+
   redistributeSiblingPercent(parentNode: Node | null) {
     if (!parentNode) return;
     const children = parentNode.childNodes;
