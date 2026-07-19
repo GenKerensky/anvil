@@ -14,6 +14,7 @@ describe("SettingsBridge", () => {
     host = {
       settings: {
         get_boolean: vi.fn(() => true),
+        get_string: vi.fn(() => ""),
         connect: vi.fn((_signal, callback) => {
           changedCallback = callback;
           return 99;
@@ -37,6 +38,8 @@ describe("SettingsBridge", () => {
       clearResizedWindows: vi.fn(),
       suspendGrabResizeTilingEffects: vi.fn(),
       observePortablePolicy: vi.fn(),
+      startWindowPicker: vi.fn(),
+      cancelWindowPicker: vi.fn(),
     };
     bridge = new SettingsBridge(host);
   });
@@ -96,6 +99,25 @@ describe("SettingsBridge", () => {
     expect(host.reloadWindowOverrides.mock.invocationCallOrder[0]).toBeLessThan(
       host.observePortablePolicy.mock.invocationCallOrder[0]
     );
+  });
+
+  it("routes valid window picker requests and ignores malformed messages", () => {
+    host.settings.get_string.mockReturnValue(
+      JSON.stringify({ version: 1, id: "pick-1", action: "pick" })
+    );
+    emitChanged("window-picker-request");
+    expect(host.startWindowPicker).toHaveBeenCalledWith("pick-1");
+
+    host.settings.get_string.mockReturnValue(
+      JSON.stringify({ version: 1, id: "pick-1", action: "cancel" })
+    );
+    changedCallback!(host.settings, "window-picker-request");
+    expect(host.cancelWindowPicker).toHaveBeenCalledWith("pick-1");
+
+    host.settings.get_string.mockReturnValue("not json");
+    changedCallback!(host.settings, "window-picker-request");
+    expect(host.startWindowPicker).toHaveBeenCalledTimes(1);
+    expect(host.cancelWindowPicker).toHaveBeenCalledTimes(1);
   });
 
   it("unknown key is a no-op", () => {

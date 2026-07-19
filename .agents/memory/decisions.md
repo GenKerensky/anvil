@@ -191,6 +191,17 @@ Enforceable rules live in **`.agents/rules/architecture.md`** (also routed from 
   connect id. Removes the mega-switch from `WindowManager._bindSignals`.
 - **F5 prioritized roadmap fully complete.**
 
+## Preferences visible-window picker (2026-07-18)
+
+- Preferences and GNOME Shell remain separate processes. The floating-exception picker uses
+  versioned JSON messages in `window-picker-request` / `window-picker-result`, parsed by the shared
+  `window-picker-protocol` module and routed through `SettingsBridge`.
+- `WindowPicker` exclusively owns the full-stage reactive overlay and modal grab. It resolves the
+  topmost visible `Meta.Window` at the click, ignores the preferences window, and releases the grab
+  on selection, Escape/right-click cancellation, replacement, grab failure, and runtime disable.
+- A picked window creates a persistent class-wide float override. The current title is feedback,
+  not a matcher, because document and tab titles are unstable.
+
 ### Residual Stage 21 — invariants + E2E docs (2026-07-11)
 
 - Tree/render invariants in CONTEXT.md + architecture.md (B5).

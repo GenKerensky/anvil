@@ -36,6 +36,7 @@ import { WindowTracker } from "./window-tracker.js";
 import { LayoutEngine } from "./layout-engine.js";
 import { GrabResizeSession } from "./grab-resize-session.js";
 import { SettingsBridge } from "./settings-bridge.js";
+import { WindowPicker } from "./window-picker.js";
 import { FocusController } from "./focus-controller.js";
 import { BorderController } from "./border-controller.js";
 import { CommandBus } from "./command-bus.js";
@@ -63,6 +64,10 @@ import { DragPreviewPresenter, TreePresentation } from "./tree-presentation.js";
 import { LegacyWorkspaceTopology } from "./legacy-workspace-topology.js";
 import { GnomeWindowOperations } from "./gnome-window-operations.js";
 import { CorePlatformCommands } from "./core-platform-commands.js";
+import {
+  formatWindowPickerResult,
+  WINDOW_PICKER_RESULT_KEY,
+} from "../shared/window-picker-protocol.js";
 
 export type AnvilRuntimeState = "disabled" | "enabling" | "enabled" | "disabling";
 
@@ -133,6 +138,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
   private _layout: LayoutEngine | null = null;
   private _grab: GrabResizeSession | null = null;
   private _settingsBridge: SettingsBridge | null = null;
+  private _windowPicker: WindowPicker | null = null;
   private _focus: FocusController | null = null;
   private _borders: BorderController | null = null;
   private _treePresentation: TreePresentation | null = null;
@@ -167,6 +173,14 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     const self = this;
     this._rules = new RulesEngine();
     this.reloadWindowOverrides();
+    this._windowPicker = new WindowPicker({
+      onOutcome: (outcome) => {
+        self.ext.settings.set_string(
+          WINDOW_PICKER_RESULT_KEY,
+          formatWindowPickerResult({ version: 1, ...outcome })
+        );
+      },
+    });
     this._tilingShadow = new TilingShadow(
       this.ext.settings,
       () => this._rules?.windowProps.overrides ?? [],
@@ -466,6 +480,8 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
       suspendGrabResizeTilingEffects: () => self._grab!.suspendTilingEffects(),
       observePortablePolicy: () =>
         self._withTilingShadow("policy", (shadow) => shadow.observePolicy()),
+      startWindowPicker: (requestId) => self._windowPicker!.start(requestId),
+      cancelWindowPicker: (requestId) => self._windowPicker!.cancel(requestId),
     });
     this._focus = new FocusController({
       get layoutEngine() {
@@ -792,6 +808,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     };
     // Stop new delayed work before disconnecting producers and owners.
     safely("event scheduler", () => this._eventScheduler?.dispose());
+    safely("window picker", () => this._windowPicker?.destroy());
     safely("core container presentation", () => this._containerPresenter?.destroy());
     safely("core previews", () => this._previewPresenter?.destroy());
     safely("drag preview", () => this._dragPreviewPresenter?.destroy());
@@ -829,6 +846,7 @@ export class AnvilRuntime extends GObject.Object implements AnvilRuntimeTestProb
     this._layout = null;
     this._grab = null;
     this._settingsBridge = null;
+    this._windowPicker = null;
     this._focus = null;
     this._borders = null;
     this._treePresentation = null;

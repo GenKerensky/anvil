@@ -111,6 +111,20 @@ export const Orientation = {
   VERTICAL: 1,
 };
 
+export const CursorType = {
+  CROSSHAIR: 9,
+};
+
+export const EventType = {
+  KEY_PRESS: 1,
+  BUTTON_PRESS: 6,
+};
+
+export const KEY_Escape = 0xff1b;
+export const BUTTON_PRIMARY = 1;
+export const BUTTON_SECONDARY = 3;
+export const EVENT_STOP = true;
+
 export class Seat {
   constructor() {
     this.warp_pointer = vi.fn();
@@ -137,6 +151,12 @@ export default {
   Actor,
   ActorAlign,
   Orientation,
+  CursorType,
+  EventType,
+  KEY_Escape,
+  BUTTON_PRIMARY,
+  BUTTON_SECONDARY,
+  EVENT_STOP,
   Seat,
   Backend,
   get_default_backend,

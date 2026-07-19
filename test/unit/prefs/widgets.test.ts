@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import Gdk from "gi://Gdk";
 import Gtk from "gi://Gtk";
 
-import { ColorRow } from "../../../src/lib/prefs/widgets.js";
+import { AddButton, ColorRow } from "../../../src/lib/prefs/widgets.js";
 
 interface MockColorChooserDialog extends Gtk.ColorChooserDialog {
   presented: boolean;
@@ -62,5 +62,26 @@ describe("ColorRow", () => {
     dialog.respond(Gtk.ResponseType.CANCEL);
 
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("AddWindowButton", () => {
+  it("uses an add icon and exposes selection mode without a text label", () => {
+    const onAdd = vi.fn();
+    const button = new AddButton({ onAdd });
+
+    expect(button.icon_name).toBe("list-add-symbolic");
+    expect(button.label).toBeUndefined();
+    expect(button.tooltip_text).toBe("Add Window");
+
+    button.emit("clicked");
+    expect(onAdd).toHaveBeenCalledOnce();
+
+    button.setSelecting(true);
+    expect(button.icon_name).toBe("selection-mode-symbolic");
+    expect(button.tooltip_text).toBe("Press Esc or right-click to cancel");
+
+    button.setSelecting(false);
+    expect(button.icon_name).toBe("list-add-symbolic");
   });
 });

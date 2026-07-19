@@ -11,6 +11,8 @@
  *     - window-overrides-reload-trigger — prefs bumps this after writing
  *       windows.json; shell reloads float/tile overrides
  *     - css-updated — theme CSS changed; shell reloads stylesheet
+ *     - window-picker-request/result — versioned request/response messages
+ *       for the modal Shell window selector owned by WindowPicker
  *   All other keys in SETTING_HANDLERS are the live prefs→shell event bus.
  *
  * @see .agents/rules/architecture.md rule 11
@@ -18,6 +20,10 @@
 
 import type Gio from "gi://Gio";
 
+import {
+  parseWindowPickerRequest,
+  WINDOW_PICKER_REQUEST_KEY,
+} from "../shared/window-picker-protocol.js";
 import { LAYOUT_TYPES, type Tree } from "./tree.js";
 
 export interface SettingsBridgeHost {
@@ -38,6 +44,8 @@ export interface SettingsBridgeHost {
   clearResizedWindows(): void;
   suspendGrabResizeTilingEffects(): void;
   observePortablePolicy(): void;
+  startWindowPicker(requestId: string): void;
+  cancelWindowPicker(requestId: string): void;
 }
 
 type SettingHandler = (host: SettingsBridgeHost, key: string) => void;
@@ -148,6 +156,12 @@ const SETTINGS_HANDLERS: Record<string, SettingHandler> = {
   "monitor-constraints": (h, k) => {
     h.clearResizedWindows();
     h.renderTree(k, true);
+  },
+  [WINDOW_PICKER_REQUEST_KEY]: (h) => {
+    const request = parseWindowPickerRequest(h.settings.get_string(WINDOW_PICKER_REQUEST_KEY));
+    if (!request) return;
+    if (request.action === "pick") h.startWindowPicker(request.id);
+    else h.cancelWindowPicker(request.id);
   },
 };
 

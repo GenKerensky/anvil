@@ -31,6 +31,14 @@ class PreferencesGroup extends Widget {
   add(row) {
     this._rows.push(row);
   }
+
+  remove(row) {
+    this._rows = this._rows.filter((candidate) => candidate !== row);
+  }
+
+  set_header_suffix(widget) {
+    this.header_suffix = widget;
+  }
 }
 
 class ActionRow extends Widget {

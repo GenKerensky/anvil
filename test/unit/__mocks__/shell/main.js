@@ -1,3 +1,5 @@
+import { vi } from "vitest";
+
 export const panel = {
   statusArea: {
     quickSettings: {
@@ -15,7 +17,13 @@ export const wm = {
 export const layoutManager = {
   monitors: [],
   primaryIndex: 0,
+  uiGroup: {
+    add_child: vi.fn(),
+  },
 };
+
+export const pushModal = vi.fn(() => ({}));
+export const popModal = vi.fn();
 
 export const overview = {
   connect: () => 0,

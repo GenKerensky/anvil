@@ -141,7 +141,17 @@
 
         <key type="u" name="window-overrides-reload-trigger">
             <default>0</default>
-            <summary>Timestamp to trigger window overrides reload</summary>
+            <summary>Counter to trigger window overrides reload</summary>
+        </key>
+
+        <key type="s" name="window-picker-request">
+            <default>''</default>
+            <summary>Versioned request from preferences to select a visible window</summary>
+        </key>
+
+        <key type="s" name="window-picker-result">
+            <default>''</default>
+            <summary>Versioned visible-window selection result from GNOME Shell</summary>
         </key>
 
         <!-- Per-Monitor Window Size Constraints -->

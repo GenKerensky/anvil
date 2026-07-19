@@ -363,6 +363,31 @@ interface ResetButtonOptions {
   onReset: () => void;
 }
 
+interface AddWindowButtonOptions {
+  onAdd: () => void;
+}
+
+export class AddButton extends Gtk.Button {
+  static {
+    GObject.registerClass(this);
+  }
+
+  constructor({ onAdd }: AddWindowButtonOptions) {
+    super({
+      icon_name: "list-add-symbolic",
+      tooltip_text: _("Add Window"),
+      css_classes: ["flat", "circular"],
+      valign: Gtk.Align.CENTER,
+    });
+    this.connect("clicked", onAdd);
+  }
+
+  setSelecting(selecting: boolean): void {
+    this.icon_name = selecting ? "selection-mode-symbolic" : "list-add-symbolic";
+    this.tooltip_text = selecting ? _("Press Esc or right-click to cancel") : _("Add Window");
+  }
+}
+
 export class ResetButton extends Gtk.Button {
   static {
     GObject.registerClass(this);

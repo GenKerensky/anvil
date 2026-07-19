@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 16:33-0400\n"
+"POT-Creation-Date: 2026-07-19 00:37-0400\n"
 "PO-Revision-Date: 2023-02-28 17:16-0500\n"
 "Last-Translator: Wedone <wedoneofficiel@outlook.fr>\n"
 "Language-Team: French - Canada <wroy@proton.me>\n"
@@ -214,16 +214,16 @@ msgstr "Taille de la bordure"
 msgid "Border color"
 msgstr "Couleur de la bordure"
 
-#: src/lib/prefs/floating.ts:25
+#: src/lib/prefs/floating.ts:35
 #, fuzzy
 msgid "Windows"
 msgstr "Fenêtre"
 
-#: src/lib/prefs/floating.ts:34
+#: src/lib/prefs/floating.ts:54
 msgid "Floating Windows"
 msgstr ""
 
-#: src/lib/prefs/floating.ts:35
+#: src/lib/prefs/floating.ts:55
 msgid "Windows that will not be tiled"
 msgstr ""
 
@@ -473,21 +473,26 @@ msgstr ""
 msgid "Clear shortcut"
 msgstr "Raccourcis pour les conteneurs"
 
-#: src/lib/prefs/widgets.ts:374
-msgid "Reset to default"
+#: src/lib/prefs/widgets.ts:378 src/lib/prefs/widgets.ts:387
+#, fuzzy
+msgid "Add Window"
+msgstr "Fenêtre"
+
+#: src/lib/prefs/widgets.ts:387
+msgid "Press Esc or right-click to cancel"
 msgstr ""
 
 #: src/lib/prefs/widgets.ts:399
+msgid "Reset to default"
+msgstr ""
+
+#: src/lib/prefs/widgets.ts:424
 msgid "Remove Item"
 msgstr ""
 
 #, fuzzy
 #~ msgid "Minimum tiled windows"
 #~ msgstr "Mode d'affichage par onglets"
-
-#, fuzzy
-#~ msgid "Add Window"
-#~ msgstr "Fenêtre"
 
 #~ msgid "Reset"
 #~ msgstr "Réinitialiser"

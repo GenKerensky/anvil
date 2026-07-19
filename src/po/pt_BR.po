@@ -3,7 +3,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 16:33-0400\n"
+"POT-Creation-Date: 2026-07-19 00:37-0400\n"
 "PO-Revision-Date: 2021-09-18 16:25-0400\n"
 "Last-Translator: Juarez Rudsatz <juarezr@gmail.com>\n"
 "Language-Team: \n"
@@ -208,16 +208,16 @@ msgstr "Tamanho de Borda"
 msgid "Border color"
 msgstr "Cor da Borda"
 
-#: src/lib/prefs/floating.ts:25
+#: src/lib/prefs/floating.ts:35
 #, fuzzy
 msgid "Windows"
 msgstr "Janelas"
 
-#: src/lib/prefs/floating.ts:34
+#: src/lib/prefs/floating.ts:54
 msgid "Floating Windows"
 msgstr "Janelas Flutuantes"
 
-#: src/lib/prefs/floating.ts:35
+#: src/lib/prefs/floating.ts:55
 msgid "Windows that will not be tiled"
 msgstr "Janelas que não serão rearranjadas"
 
@@ -462,21 +462,26 @@ msgstr ""
 msgid "Clear shortcut"
 msgstr "Atalhos de Container"
 
-#: src/lib/prefs/widgets.ts:374
-msgid "Reset to default"
+#: src/lib/prefs/widgets.ts:378 src/lib/prefs/widgets.ts:387
+#, fuzzy
+msgid "Add Window"
+msgstr "Adicionar Janela"
+
+#: src/lib/prefs/widgets.ts:387
+msgid "Press Esc or right-click to cancel"
 msgstr ""
 
 #: src/lib/prefs/widgets.ts:399
+msgid "Reset to default"
+msgstr ""
+
+#: src/lib/prefs/widgets.ts:424
 msgid "Remove Item"
 msgstr "Remover Item"
 
 #, fuzzy
 #~ msgid "Minimum tiled windows"
 #~ msgstr "Modo em Blocos"
-
-#, fuzzy
-#~ msgid "Add Window"
-#~ msgstr "Adicionar Janela"
 
 #~ msgid "Reset"
 #~ msgstr "Restaurar"

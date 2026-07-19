@@ -5,7 +5,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: Anvil\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-07-18 16:33-0400\n"
+"POT-Creation-Date: 2026-07-19 00:37-0400\n"
 "PO-Revision-Date: 2025-08-22 12:00+0300\n"
 "Last-Translator: Mucahit Sahin <mucahitsahin786@gmail.com>\n"
 "Language-Team: Turkish\n"
@@ -197,16 +197,16 @@ msgstr "Kenarlık boyutu"
 msgid "Border color"
 msgstr "Kenarlık rengi"
 
-#: src/lib/prefs/floating.ts:25
+#: src/lib/prefs/floating.ts:35
 msgid "Windows"
 msgstr ""
 
-#: src/lib/prefs/floating.ts:34
+#: src/lib/prefs/floating.ts:54
 #, fuzzy
 msgid "Floating Windows"
 msgstr "Yüzen pencere"
 
-#: src/lib/prefs/floating.ts:35
+#: src/lib/prefs/floating.ts:55
 msgid "Windows that will not be tiled"
 msgstr ""
 
@@ -433,18 +433,23 @@ msgstr ""
 msgid "Clear shortcut"
 msgstr "Kısayolu temizle"
 
-#: src/lib/prefs/widgets.ts:374
+#: src/lib/prefs/widgets.ts:378 src/lib/prefs/widgets.ts:387
+#, fuzzy
+msgid "Add Window"
+msgstr "Döşenmiş pencere"
+
+#: src/lib/prefs/widgets.ts:387
+msgid "Press Esc or right-click to cancel"
+msgstr ""
+
+#: src/lib/prefs/widgets.ts:399
 msgid "Reset to default"
 msgstr "Varsayılana sıfırla"
 
-#: src/lib/prefs/widgets.ts:399
+#: src/lib/prefs/widgets.ts:424
 msgid "Remove Item"
 msgstr ""
 
 #, fuzzy
 #~ msgid "Minimum tiled windows"
-#~ msgstr "Döşenmiş pencere"
-
-#, fuzzy
-#~ msgid "Add Window"
 #~ msgstr "Döşenmiş pencere"
