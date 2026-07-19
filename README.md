@@ -1,284 +1,86 @@
-# Anvil WM
+<div align="center">
 
-![Anvil](assets/org.gnome.shell.extensions.anvil-regular.svg)
+<img src="assets/org.gnome.shell.extensions.anvil-regular.svg" alt="Anvil" width="128" height="128">
 
-> Anvil is a Tiling Window Manager Gnome Extension
->
-> **Anvil** is a fork of [Forge](https://github.com/forge-ext/forge) by [Jose Maranan](https://github.com/jmmaranan), licensed under GPL v3. The original project and all its contributors are gratefully credited — see the Credits section below.
+# Anvil
 
-## Features
+<p><strong>Tree-based tiling that feels at home in GNOME</strong></p>
 
-- Works on GNOME 45 through 50.1. X11 and Wayland
-- Tree-based tiling with vertical and horizontal split containers similar to i3-wm and sway-wm
-- Vim-like keybindings for navigation/swapping windows/moving windows in the containers
-- Drag and drop tiling
-- Support for floating windows, smart gaps and focus hint
-- Customizable shortcuts in extension preferences
-- Some support for multi-display
-- Tiling support per workspace
-- Update hint color scheme from preferences
-- Stacked tiling layout
-- Swap current window with the last active window
-- Auto Split or Quarter Tiling
-- Show/hide tab decoration via keybinding https://github.com/forge-ext/forge/issues/180
-- Window resize using keyboard shortcuts
+<p>
+  <a href="metadata.json"><img alt="GNOME Shell 45–50.1" src="https://img.shields.io/badge/GNOME_Shell-45–50.1-4a86cf?logo=gnome&logoColor=white"></a>
+  <a href="LICENSE"><img alt="GPL-3.0-or-later" src="https://img.shields.io/badge/license-GPL--3.0--or--later-3584e4"></a>
+  <img alt="Wayland and X11" src="https://img.shields.io/badge/display-Wayland_%7C_X11-241f31">
+</p>
 
-## Known Issues / Limitations
+Anvil turns GNOME Shell into a fast, keyboard-friendly tiling environment without replacing the desktop you already use.
 
-- Does not support dynamic workspaces
-- Does not support vertical monitor setup
+[Install](#install) · [User manual](docs/README.md) · [Default keybindings](docs/keybindings.md) · [Report an issue](https://github.com/GenKerensky/anvil/issues)
 
-## Installation
+</div>
 
-Direct installation of Anvil requires building from source for now. The upstream Forge
-packages listed below are for the original Forge extension and are provided for reference:
+> [!NOTE]
+> Anvil is a GPL-3.0 fork of [Forge](https://github.com/forge-ext/forge), originally created by [Jose Maranan](https://github.com/jmmaranan). See the full [credits](docs/project/credits.md).
 
-- Build Anvil yourself via `make install` or `make dev`.
-- Upstream Forge: [GNOME extensions website](https://extensions.gnome.org/extension/4481/forge/) _(Forge, not Anvil)_
-- Upstream Forge: [AUR Package](https://aur.archlinux.org/packages/gnome-shell-extension-forge) — thanks to [@Radeox](https://github.com/Radeox) _(Forge, not Anvil)_
-- Upstream Forge: [Fedora Package](https://packages.fedoraproject.org/pkgs/gnome-shell-extension-forge/gnome-shell-extension-forge/) — thanks to [@carlwgeorge](https://github.com/carlwgeorge) _(Forge, not Anvil)_
+## Contents
 
-## Anvil Keybinding Defaults
+- [What Anvil does](#what-anvil-does)
+- [Demo](#demo)
+- [Install](#install)
+- [Open the settings](#open-the-settings)
+- [Learn Anvil](#learn-anvil)
 
-See the acceptable key combinations on the [wiki](https://github.com/forge-ext/forge/wiki/Keyboard-Shortcuts)
+## What Anvil does
 
-| Action                                                         | Shortcut                                          |
-| -------------------------------------------------------------- | ------------------------------------------------- |
-| Increase active window size left                               | `<Ctrl> + <Super> + y`                            |
-| Decrease active window size left                               | `<Ctrl> + <Shift> + <Super> + o`                  |
-| Increase active window size bottom                             | `<Ctrl> + <Super> + u`                            |
-| Decrease active window size bottom                             | `<Ctrl> + <Shift> + <Super> + i`                  |
-| Increase active window size top                                | `<Ctrl> + <Super> + i`                            |
-| Decrease active window size top                                | `<Ctrl> + <Shift> + <Super> + u`                  |
-| Increase active window size right                              | `<Ctrl> + <Super> + o`                            |
-| Decrease active window size right                              | `<Ctrl> + <Shift> + <Super> + y`                  |
-| Open preferences                                               | `<Super> + period`                                |
-| Toggle tiling mode                                             | `<Super> + w`                                     |
-| Focus left                                                     | `<Super> + h`                                     |
-| Focus right                                                    | `<Super> + l`                                     |
-| Focus up                                                       | `<Super> + k`                                     |
-| Focus down                                                     | `<Super> + j`                                     |
-| Swap current window with last active                           | `<Super> + Return`                                |
-| Swap active window left                                        | `<Ctrl> + <Super> + h`                            |
-| Swap active window right                                       | `<Ctrl> + <Super> + l`                            |
-| Swap active window up                                          | `<Ctrl> + <Super> + k`                            |
-| Swap active window down                                        | `<Ctrl> + <Super> + j`                            |
-| Move active window left                                        | `<Shift> + <Super> + h`                           |
-| Move active window right                                       | `<Shift> + <Super> + l`                           |
-| Move active window up                                          | `<Shift> + <Super> + k`                           |
-| Move active window down                                        | `<Shift> + <Super> + j`                           |
-| Split container horizontally                                   | `<Super> + z`                                     |
-| Split container vertically                                     | `<Super> + v`                                     |
-| Toggle split container                                         | `<Super> + g`                                     |
-| Gap increase                                                   | `<Ctrl> + <Super> + Plus`                         |
-| Gap decrease                                                   | `<Ctrl> + <Super> + Minus`                        |
-| Toggle focus hint                                              | `<Super> + x`                                     |
-| Toggle active workspace tiling                                 | `<Shift> + <Super> + w`                           |
-| Toggle stacked layout                                          | `<Shift> + <Super> + s`                           |
-| Toggle tabbed layout                                           | `<Shift> + <Super> + t`                           |
-| Show/hide tab decoration                                       | `<Ctrl> + <Alt> + y`                              |
-| Activate tile drag-drop                                        | `Start dragging - Mod key configuration in prefs` |
-| Snap active window left two thirds                             | `<Ctrl> + <Alt> + e`                              |
-| Snap active window right two thirds                            | `<Ctrl> + <Alt> + t`                              |
-| Snap active window left third                                  | `<Ctrl> + <Alt> + d`                              |
-| Snap active window right third                                 | `<Ctrl> + <Alt> + g`                              |
-| Persist toggle floating for active window                      | `<Super> + c`                                     |
-| Persist toggle floating for active window and its window class | `<Super><Shift> + c`                              |
+Anvil automatically arranges windows in a tree of horizontal and vertical splits. You can navigate, move, swap, resize, float, stack, and tab windows with the keyboard, or reshape the layout with drag and drop. Layouts are maintained independently for each workspace and monitor.
 
-For any shortcut conflicts, the user has to manually configure those for now from the
-`GNOME Control Center > Keyboard > Customize Shortcuts`. https://github.com/forge-ext/forge/issues/37
+## Demo
 
-## Anvil Override Paths
+<!-- Replace this file with an animated WebP recording. Keep the path stable so README links do not need to change. -->
 
-- Window Overrides: `$HOME/.config/anvil/config/windows.json`
-- Stylesheet Overrides: `$HOME/.config/anvil/stylesheet/anvil/stylesheet.css`
+<div align="center">
+  <img src="assets/readme/anvil-demo.webp" alt="Placeholder preview of Anvil arranging windows in a tiled GNOME desktop" width="100%">
+  <br>
+  <sub>Demo placeholder — an animated walkthrough is coming soon.</sub>
+</div>
 
-The packaged stylesheet is loaded first and the user stylesheet is loaded as an override. Package
-updates preserve customized user bytes; exact old defaults may be upgraded only after a verified
-recovery backup is created. See
-[`docs/theme/stylesheet-versioning.md`](docs/theme/stylesheet-versioning.md) for the migration and
-recovery contract.
+## Install
 
-## GNOME Defaults
-
-GNOME Shell has built in support for workspace management and seems to work well - so Anvil will not touch those.
-
-User is encouraged to bind the following:
-
-- Switching/moving windows to different workspaces
-- Switching to numbered, previous or next workspace
-
-## Development
-
-- The `main` branch contains gnome-4x code.
-- The `legacy` and `gnome-3-36` are the same and is now the source for gnome-3x.
-
-## Testing
-
-Anvil has two automated test layers: **unit tests** (fast, no GNOME runtime) and
-**E2E tests** (host `gnome-shell --headless` with Jasmine). For agent-driven debugging
-of behavioral and layout bugs, use the **agent debug loop** — see below.
-
-### Unit Tests
-
-Unit tests cover pure logic — utility functions, the tiling tree data structure, color
-conversion, and the logger. They run entirely in Node.js via [vitest](https://vitest.dev)
-with hand-written mocks for all GJS/GNOME APIs.
-
-**Prerequisites:** Node.js 16+, `npm install`
+Anvil is currently installed from source. You need GNOME Shell **45 through 50.1**, Git, GNU Make, Node.js **24 or newer**, npm, gettext (`msgfmt`), and GLib schema tools (`glib-compile-schemas`).
 
 ```bash
-# Run unit tests once
-npm run test:unit
-
-# Run unit tests in watch mode (re-runs on file save)
-npm run test:unit:watch
-
-# Run typecheck + lint + unit tests together
-npm test
+git clone https://github.com/GenKerensky/anvil.git
+cd anvil
+npm install
+make install
+gnome-extensions enable anvil@GenKerensky.github.com
 ```
 
-### E2E Tests (Headless)
+If GNOME Shell has not discovered a first-time installation yet, log out and back in, then run the final `gnome-extensions enable` command again. On X11, you can restart Shell with <kbd>Alt</kbd>+<kbd>F2</kbd>, enter `r`, and press <kbd>Enter</kbd> instead.
 
-E2E tests run a real GNOME Shell session on the host using
-`gnome-shell --wayland --headless --virtual-monitor 1920x1080` with an isolated session
-bus and [python-dbusmock](https://github.com/martinpitt/python-dbusmock) stubs. Specs are
-**Jasmine** modules loaded via `--automation-script` (`test/e2e/runner.js`).
-
-Suites cover: extension lifecycle, tiling geometry, keyboard shortcuts, window operations,
-resize clamping (data-driven matrix), focus/swap/move, floating and snap layouts, advanced
-layouts, workspace skip-tile, borders/gaps, minimize, monitor constraints, and preferences
-open/reuse/close/reopen lifecycle.
-
-Shared helpers live in `test/lib/shared-commands.js` (`launchApp`, `waitForWindowCount`,
-`getFocusedWindowId`, `sendAnvilCommand`, etc.).
-
-**Prerequisites:**
-
-- Host GNOME Shell with `--headless` and `--virtual-monitor` (GNOME 49+)
-- `jasmine-gjs` installed at `/usr/share/jasmine-gjs/` (from source if not packaged)
-- `nautilus` (test app — Text Editor’s preferred size does not tile reliably in headless)
-- `python3`, `dbusmock` recommended, `glib2-devel` for `make dist`
-
-On Bazzite, prefer running E2E inside `fedora-devbox` (mutable `dnf`) rather than layering packages on the host.
-
-Install jasmine-gjs from source if missing:
+To update an existing source installation:
 
 ```bash
-git clone --depth=1 https://github.com/ptomato/jasmine-gjs.git
-cd jasmine-gjs && meson setup _build --prefix=/usr
-ninja -C _build && sudo ninja -C _build install
+git pull --ff-only
+npm install
+make install
 ```
+
+Restart GNOME Shell or log out and back in after updating when the running extension does not reload automatically.
+
+## Open the settings
+
+Use <kbd>Super</kbd>+<kbd>.</kbd>, open Anvil from the Extensions app, or run:
 
 ```bash
-# Full E2E suite
-make test-e2e
-
-# Filter by suite name substring
-python3 test/e2e/run.py --tag resize
-python3 test/e2e/run.py --no-build --tag focus
+gnome-extensions prefs anvil@GenKerensky.github.com
 ```
 
-**What is NOT testable headless:** mouse drag-and-drop, pixel-level visual rendering.
+## Learn Anvil
 
-### Agent Debug Loop (headless)
+The [user manual](docs/README.md) covers every feature in its own guide. Start with:
 
-For tight repro → log analysis → code edit cycles (especially behavioral and layout bugs),
-the **Agent Loop** launches an isolated headless GNOME Shell session with guardrails so your
-real session is never touched. One invocation = one iteration; the agent (or you) owns the
-outer loop.
-
-**Prerequisites:** `gnome-shell` with `--headless` and `--virtual-monitor` (GNOME 49+),
-`python3`, `dbusmock` (recommended — same as E2E), built `dist/` (`make build debug`)
-
-```bash
-# First iteration (builds dist/)
-.agents/skills/gnome-shell-debug/scripts/run-debug-loop.sh \
-  --script test/debug/examples/minimal-repro.js --json --iteration 1
-
-# Later iterations — session dir persists by default
-SESSION_DIR=$(jq -r .session.dir iteration-001.json)
-.agents/skills/gnome-shell-debug/scripts/run-debug-loop.sh \
-  --no-build --session-dir "$SESSION_DIR" \
-  --script test/debug/local/my-repro.js --json --iteration 2
-```
-
-Copy `repro-template.js` to `test/debug/local/` for local repro scripts (gitignored).
-Human visual debugging (flicker, Looking Glass) uses the devkit launcher instead:
-
-```bash
-.agents/skills/gnome-shell-debug/scripts/run-devkit-session.sh
-```
-
-**Tooling tests** (deterministic guardrails and log/session utilities; also run by `npm test`):
-
-```bash
-npm run test:tooling
-
-# Opt-in live GNOME Shell smoke; builds dist/ first
-npm run test:tooling:host
-```
-
-Installed preferences, icon, Quick Settings, and stylesheet validation uses the
-[installed-package smoke checklist](docs/testing/installed-package-smoke.md).
-
-Full documentation: `.agents/skills/gnome-shell-debug/SKILL.md` (v3.0).
-
-#### Test structure
-
-```text
-test/
-├── lib/
-│   ├── shared-commands.js       # Shared GJS helpers (E2E + debug loop)
-│   ├── shell_session.py         # HeadlessShellSession (agent loop)
-│   ├── host_guard.py            # Host-session guardrails for debug loop
-│   └── log_analysis.py          # Anvil log signatures for debug loop
-├── debug/
-│   ├── examples/                # Checked-in repro scripts (e.g. minimal-repro.js)
-│   └── local/                   # Gitignored local repro scripts
-├── e2e/
-│   ├── run.py                   # Host orchestrator (D-Bus, shell, results)
-│   ├── runner.js                # Jasmine automation-script
-│   └── suites/                  # Jasmine suite files
-└── unit/                        # vitest unit tests
-```
-
-## Local Development Setup
-
-- Install NodeJS 16+
-- Install `gettext`
-- Run `npm install`
-- Commands:
-
-```bash
-# Compile and override the gnome-shell update repo
-make dev
-
-# Or run below, and restart the shell manually
-make build && make debug && make install
-
-# X11 - build from source and restarts gnome-shell
-make test-x
-
-# Wayland - build from source and starts a wayland instance (no restart)
-make test-wayland
-
-# Formatting, when you do npm install,
-# husky gets installed should force prettier formatting during commit
-
-npm run format
-```
-
-## Contributing
-
-- Please be nice, friendly and welcoming on discussions/tickets.
-- See existing [Issues](https://github.com/forge-ext/forge/issues) on the upstream Forge repository, or open a new issue there if it doesn't exist.
-
-## Credits
-
-Thank you to:
-
-- Forge extension contributors
-- Michael Stapelberg/contributors for i3
-- System76/contributors for pop-shell
-- ReworkCSS/contributors for css-parse/css-stringify
+- [Default keybindings and disabled GNOME shortcuts](docs/keybindings.md)
+- [Automatic tiling](docs/features/automatic-tiling.md)
+- [Keyboard navigation](docs/features/keyboard-navigation.md)
+- [Drag and drop](docs/features/drag-and-drop.md)
+- [Floating windows](docs/features/floating-windows.md)
