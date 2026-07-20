@@ -721,3 +721,16 @@ A second audit of the refactor found remaining work; all resolved.
   tree before `get_compositor_private()` returns an actor. The later map edge must register that
   actor with `BorderController`, bind actor lifecycle signals, and reconcile again on first-frame
   when the real surface exists; being structurally tracked does not imply presentation is ready.
+
+### Headless session runtime isolation (2026-07-19)
+
+- **The runner owns the private D-Bus daemon lifetime**: launch `dbus-daemon` with `--nofork` so
+  the tracked process is the live daemon and teardown can terminate and wait for it. Do not use
+  `--fork`, which leaves the daemon and its activated services behind after the launcher exits.
+- **Private activation cannot inherit the host desktop**: before starting the private bus, remove
+  the host session-bus and display variables and set `XDG_RUNTIME_DIR` to a mode-0700 directory
+  beneath the test session. Publish that runtime path to the private activation environment before
+  any service can start.
+- **Host-safety guards cover all XDG roots**: validate runtime, data, config, and cache paths against
+  the session directory. A headless test is not safely torn down until its bus and any private
+  portal services have exited.

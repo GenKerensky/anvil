@@ -91,6 +91,7 @@ class HeadlessShellSession:
         }
         env.pop("WAYLAND_DISPLAY", None)
         env.pop("DISPLAY", None)
+        env["XDG_RUNTIME_DIR"] = str(self.session_dir / "runtime")
 
         if self.isolate_xdg:
             data_home = self.session_dir / "data"
@@ -128,10 +129,13 @@ class HeadlessShellSession:
         data_home = self.session_dir / "data"
         config_home = self.session_dir / "config"
         cache_home = self.session_dir / "cache"
+        runtime_home = self.session_dir / "runtime"
         ext_target = data_home / "gnome-shell" / "extensions" / UUID
         ext_target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         config_home.mkdir(parents=True, exist_ok=True, mode=0o700)
         cache_home.mkdir(parents=True, exist_ok=True, mode=0o700)
+        runtime_home.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(runtime_home, 0o700)
 
         if ext_target.exists() or ext_target.is_symlink():
             ext_target.unlink()
@@ -222,9 +226,7 @@ class HeadlessShellSession:
         return display_name, x11_display
 
     def _wait_for_wayland_socket(self, display_name: str, timeout: float = 30.0) -> None:
-        runtime_dir = pathlib.Path(
-            os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-        )
+        runtime_dir = pathlib.Path(self._session_env["XDG_RUNTIME_DIR"])
         sock = runtime_dir / display_name
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -239,6 +241,7 @@ class HeadlessShellSession:
             "GDK_BACKEND": "wayland",
         }
         for name in (
+            "XDG_RUNTIME_DIR",
             "XDG_CONFIG_HOME",
             "XDG_DATA_HOME",
             "XDG_CACHE_HOME",
@@ -342,13 +345,18 @@ class HeadlessShellSession:
 
     def __enter__(self) -> SessionInfo:
         self.session_dir.mkdir(parents=True, exist_ok=True)
+        runtime_dir = self.session_dir / "runtime"
+        runtime_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(runtime_dir, 0o700)
 
         if self.isolate_xdg:
             self._setup_xdg_layout()
 
-        self.dbus_proc, self.dbus_addr = start_dbus_session()
-        self.mocks = start_mocks(self.dbus_addr)
+        daemon_env = self._build_session_env("")
+        daemon_env.pop("DBUS_SESSION_BUS_ADDRESS", None)
+        self.dbus_proc, self.dbus_addr = start_dbus_session(env=daemon_env)
         self._session_env = self._build_session_env(self.dbus_addr)
+        self.mocks = start_mocks(self.dbus_addr, env=self._session_env)
         # Publish isolated XDG paths before the first gsettings call can
         # D-Bus-activate dconf-service against the outer user profile.
         self._update_activation_environment(self._session_env)
@@ -419,6 +427,7 @@ class HeadlessShellSession:
                 self.dbus_proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.dbus_proc.kill()
+                self.dbus_proc.wait()
             self.dbus_proc = None
         _info("Headless shell session teardown complete")
 

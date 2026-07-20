@@ -42,6 +42,21 @@ class HeadlessShellSessionEnvironmentTests(unittest.TestCase):
 
         self.assertEqual(env["GDK_BACKEND"], "wayland")
 
+    def test_isolates_runtime_directory_from_host_portals(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            session_dir = pathlib.Path(tmp)
+            session = HeadlessShellSession(
+                session_dir=session_dir,
+                extension_dir=DIST_DIR,
+                isolate_xdg=True,
+                enable_before_ready=False,
+            )
+
+            env = session._build_session_env("unix:path=/tmp/test-bus")
+
+            self.assertEqual(env["XDG_RUNTIME_DIR"], str(session_dir / "runtime"))
+            self.assertNotEqual(env["XDG_RUNTIME_DIR"], os.environ.get("XDG_RUNTIME_DIR"))
+
     def test_propagates_wayland_backend_to_dbus_activated_apps(self) -> None:
         session = HeadlessShellSession(
             session_dir=pathlib.Path("/tmp/anvil-env-test"),
@@ -72,12 +87,14 @@ class HeadlessShellSessionEnvironmentTests(unittest.TestCase):
             session._update_activation_environment(
                 {
                     "DBUS_SESSION_BUS_ADDRESS": "unix:path=/tmp/test-bus",
+                    "XDG_RUNTIME_DIR": "/tmp/anvil-env-test/runtime",
                     "XDG_CONFIG_HOME": "/tmp/anvil-env-test/config",
                     "GSETTINGS_SCHEMA_DIR": "/tmp/anvil-env-test/schemas",
                 }
             )
 
         serialized_env = run.call_args.args[0][-1]
+        self.assertIn("'XDG_RUNTIME_DIR': '/tmp/anvil-env-test/runtime'", serialized_env)
         self.assertIn("'XDG_CONFIG_HOME': '/tmp/anvil-env-test/config'", serialized_env)
         self.assertIn(
             "'GSETTINGS_SCHEMA_DIR': '/tmp/anvil-env-test/schemas'",
@@ -107,6 +124,13 @@ class HeadlessShellSessionSmokeTests(unittest.TestCase):
                 self.assertTrue(info.dbus_addr)
                 self.assertRegex(info.wayland_display, r"^wayland-\d+$")
                 self.assertGreater(info.shell_pid, 0)
+                self.assertTrue(pathlib.Path(f"/proc/{info.dbus_daemon_pid}").is_dir())
+                self.assertEqual(
+                    (session_dir / "runtime").stat().st_mode & 0o777,
+                    0o700,
+                )
+
+            self.assertFalse(pathlib.Path(f"/proc/{info.dbus_daemon_pid}").exists())
 
     @unittest.skipUnless(_dist_built(), "dist/ not built; run make build debug")
     def test_isolated_xdg_launch(self) -> None:

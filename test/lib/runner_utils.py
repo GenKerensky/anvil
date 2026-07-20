@@ -33,6 +33,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from collections.abc import Mapping
 
 # ── ANSI colours ──────────────────────────────────────────────────────────────
 
@@ -81,20 +82,30 @@ def load(mock, parameters):
 # ── D-Bus session ──────────────────────────────────────────────────────────────
 
 
-def start_dbus_session() -> tuple[subprocess.Popen, str]:
+def start_dbus_session(
+    *, env: Mapping[str, str] | None = None
+) -> tuple[subprocess.Popen, str]:
     """
-    Launch ``dbus-daemon --session --print-address --fork``.
+    Launch a private ``dbus-daemon`` owned by the returned ``Popen`` object.
 
     Returns ``(process, address_string)``.  The address is read synchronously
-    from stdout — this is what avoids the bash ``dbus-run-session`` shell-game.
+    from stdout. The daemon must not fork away: callers terminate this exact
+    process during teardown.
     """
+    daemon_env = dict(os.environ if env is None else env)
+    for name in ("DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY"):
+        daemon_env.pop(name, None)
+
     proc = subprocess.Popen(
-        ["/usr/bin/dbus-daemon", "--session", "--print-address", "--fork"],
+        ["/usr/bin/dbus-daemon", "--session", "--print-address=1", "--nofork"],
         stdout=subprocess.PIPE,
         text=True,
+        env=daemon_env,
     )
     addr = proc.stdout.readline().strip()  # type: ignore[union-attr]
     if not addr:
+        proc.terminate()
+        proc.wait(timeout=2)
         raise RuntimeError("dbus-daemon did not print an address")
     return proc, addr
 
@@ -102,7 +113,9 @@ def start_dbus_session() -> tuple[subprocess.Popen, str]:
 # ── dbusmock stubs ────────────────────────────────────────────────────────────
 
 
-def start_mocks(dbus_addr: str) -> list[subprocess.Popen]:
+def start_mocks(
+    dbus_addr: str, *, env: Mapping[str, str] | None = None
+) -> list[subprocess.Popen]:
     """
     Spawn ``python3 -m dbusmock`` subprocesses for every D-Bus service that
     gnome-shell requires at startup.  They inherit ``DBUS_SESSION_BUS_ADDRESS``
@@ -110,7 +123,8 @@ def start_mocks(dbus_addr: str) -> list[subprocess.Popen]:
 
     All five services must be up before gnome-shell is launched.
     """
-    env = {**os.environ, "DBUS_SESSION_BUS_ADDRESS": dbus_addr}
+    mock_env = dict(os.environ if env is None else env)
+    mock_env["DBUS_SESSION_BUS_ADDRESS"] = dbus_addr
     procs: list[subprocess.Popen] = []
     python = sys.executable
 
@@ -123,7 +137,7 @@ def start_mocks(dbus_addr: str) -> list[subprocess.Popen]:
     ]
     for name, path, iface in stubs:
         procs.append(
-            subprocess.Popen([python, "-m", "dbusmock", name, path, iface], env=env)
+            subprocess.Popen([python, "-m", "dbusmock", name, path, iface], env=mock_env)
         )
 
     # SessionManager needs a Setenv method — use a custom template.
@@ -133,7 +147,7 @@ def start_mocks(dbus_addr: str) -> list[subprocess.Popen]:
     procs.append(
         subprocess.Popen(
             [python, "-m", "dbusmock", "--template", sm_template.name],
-            env=env,
+            env=mock_env,
         )
     )
 

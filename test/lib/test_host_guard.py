@@ -59,14 +59,26 @@ class HostGuardTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             session = pathlib.Path(tmp)
             data = session / "data"
+            runtime = session / "runtime"
             data.mkdir()
-            assert_xdg_under_session(session, xdg_data=str(data))
+            runtime.mkdir()
+            assert_xdg_under_session(
+                session,
+                xdg_data=str(data),
+                xdg_runtime=str(runtime),
+            )
 
     def test_xdg_prefix_rejects_host_config(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             session = pathlib.Path(tmp)
             with self.assertRaises(HostSessionError):
                 assert_xdg_under_session(session, xdg_config="/home/user/.config")
+
+    def test_xdg_prefix_rejects_host_runtime(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            session = pathlib.Path(tmp)
+            with self.assertRaises(HostSessionError):
+                assert_xdg_under_session(session, xdg_runtime="/run/user/1000")
 
     def test_no_host_bus_allows_temp_bus_before_isolation(self) -> None:
         with mock.patch.dict(
@@ -98,6 +110,7 @@ class HostGuardTests(unittest.TestCase):
                         "ANVIL_ISOLATED_SESSION": "1",
                         "ANVIL_DEBUG_LOOP": "1",
                         "DBUS_SESSION_BUS_ADDRESS": "unix:path=/run/user/1000/bus",
+                        "XDG_RUNTIME_DIR": str(session / "runtime"),
                         "XDG_DATA_HOME": str(session / "data"),
                         "XDG_CONFIG_HOME": str(session / "config"),
                         "XDG_CACHE_HOME": str(session / "cache"),

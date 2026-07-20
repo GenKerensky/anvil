@@ -61,7 +61,7 @@ make test-e2e
     → require jasmine-gjs at /usr/share/jasmine-gjs/
     → make dist (unless --no-build)
     → install zip → ~/.local/share/gnome-shell/extensions/
-    → isolated D-Bus + dbusmock stubs
+    → isolated D-Bus + dbusmock stubs + private XDG runtime
     → gnome-shell --wayland --headless --virtual-monitor 1920x1080
          --automation-script test/e2e/runner.js
       → export async function run()
@@ -70,6 +70,10 @@ make test-e2e
         → write $ANVIL_E2E_RESULTS_PATH under ignored test/e2e/output/
     ← poll results, print summary
 ```
+
+The private D-Bus daemon runs in the foreground so the runner owns its lifetime. Its activation
+environment uses a mode-0700 session-local `XDG_RUNTIME_DIR`; never let a headless session activate
+portal services against the host `/run/user/$UID` runtime.
 
 ### Suites (`test/e2e/suites/`)
 

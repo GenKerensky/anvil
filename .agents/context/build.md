@@ -58,8 +58,9 @@ python3 test/e2e/run.py --no-build         # Skip make dist
 
 CI runs the deterministic `npm test` gate only. Host tooling smoke and E2E remain local gates.
 Prefer `--tag` for PR-local E2E; run the full E2E suite before release (D2-2). Each E2E session
-uses a temporary `XDG_CONFIG_HOME`, so stylesheet and preferences tests do not mutate the host
-Anvil configuration. The in-Shell result file uses a unique name under the ignored
+uses temporary `XDG_CONFIG_HOME` and `XDG_RUNTIME_DIR` directories, so tests neither mutate the
+host Anvil configuration nor activate portal services against the host runtime. The in-Shell
+result file uses a unique name under the ignored
 `test/e2e/output/` directory, allowing independent E2E processes to run without sharing stale
 results even when the nested Shell has a separate `/tmp` namespace.
 

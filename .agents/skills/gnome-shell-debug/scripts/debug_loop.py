@@ -303,9 +303,11 @@ def cmd_preflight(args: argparse.Namespace) -> int:
                 data = session_dir / "data"
                 config = session_dir / "config"
                 cache = session_dir / "cache"
+                runtime = session_dir / "runtime"
                 if data.is_dir() and config.is_dir():
                     assert_xdg_under_session(
                         session_dir,
+                        xdg_runtime=str(runtime),
                         xdg_data=str(data),
                         xdg_config=str(config),
                         xdg_cache=str(cache) if cache.is_dir() else str(cache),
@@ -557,12 +559,14 @@ def cmd_run(args: argparse.Namespace) -> int:
             xdg_data = str(session_dir / "data")
             xdg_config = str(session_dir / "config")
             xdg_cache = str(session_dir / "cache")
+            xdg_runtime = str(session_dir / "runtime")
             guardrails = assert_host_safe(
                 session_dir,
                 host_bus=host_bus,
                 isolated_bus=session_info.dbus_addr,
                 shell_pid=session_info.shell_pid,
                 require_isolated_xdg=True,
+                xdg_runtime=xdg_runtime,
                 xdg_data=xdg_data,
                 xdg_config=xdg_config,
                 xdg_cache=xdg_cache,

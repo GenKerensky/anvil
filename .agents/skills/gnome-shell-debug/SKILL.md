@@ -234,9 +234,11 @@ make build debug
 | Phase                                | When                                    | Checks                                                                                                  |
 | ------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
 | **Early** (`preflight`)              | Before build/launch                     | `ANVIL_DEBUG_LOOP=1`, `WAYLAND_DISPLAY`/`DISPLAY` unset; optional `--session-dir` XDG layout validation |
-| **Launch** (`run` after shell start) | After isolated dbus + gnome-shell spawn | Bus fingerprint ≠ host, child `/proc/$pid/environ` isolated sentinels, XDG prefix under session dir     |
+| **Launch** (`run` after shell start) | After isolated dbus + gnome-shell spawn | Bus fingerprint ≠ host, child `/proc/$pid/environ` isolated sentinels, all XDG paths under session dir  |
 
 `preflight` JSON includes `"phase": "early"`. Full bus/XDG verification runs only at launch when an isolated daemon exists.
+The XDG validation includes a private mode-0700 `XDG_RUNTIME_DIR`; this prevents the isolated bus
+from activating portal services against the host `/run/user/$UID` document mount.
 
 ### Post-fix ritual
 

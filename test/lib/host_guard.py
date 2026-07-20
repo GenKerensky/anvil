@@ -72,12 +72,14 @@ def assert_no_host_bus_without_isolation(
 def assert_xdg_under_session(
     session_dir: pathlib.Path,
     *,
+    xdg_runtime: str | None = None,
     xdg_data: str | None = None,
     xdg_config: str | None = None,
     xdg_cache: str | None = None,
 ) -> None:
     session_resolved = session_dir.resolve()
     for label, value in (
+        ("XDG_RUNTIME_DIR", xdg_runtime),
         ("XDG_DATA_HOME", xdg_data),
         ("XDG_CONFIG_HOME", xdg_config),
         ("XDG_CACHE_HOME", xdg_cache),
@@ -96,11 +98,17 @@ def assert_xdg_under_session(
 def assert_isolated_session_sentinel(expected_session_dir: pathlib.Path) -> None:
     if os.environ.get("ANVIL_ISOLATED_SESSION") != "1":
         raise HostSessionError("ANVIL_ISOLATED_SESSION=1 not set in child environment")
-    for var in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
+    for var in (
+        "XDG_RUNTIME_DIR",
+        "XDG_DATA_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+    ):
         if not os.environ.get(var):
             raise HostSessionError(f"{var} not set for isolated session")
     assert_xdg_under_session(
         expected_session_dir,
+        xdg_runtime=os.environ.get("XDG_RUNTIME_DIR"),
         xdg_data=os.environ.get("XDG_DATA_HOME"),
         xdg_config=os.environ.get("XDG_CONFIG_HOME"),
         xdg_cache=os.environ.get("XDG_CACHE_HOME"),
@@ -139,11 +147,17 @@ def assert_shell_child_isolated(session_dir: pathlib.Path, pid: int) -> None:
         raise HostSessionError(
             f"gnome-shell pid {pid} missing ANVIL_ISOLATED_SESSION=1 in /proc environ"
         )
-    for var in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME"):
+    for var in (
+        "XDG_RUNTIME_DIR",
+        "XDG_DATA_HOME",
+        "XDG_CONFIG_HOME",
+        "XDG_CACHE_HOME",
+    ):
         if not child.get(var):
             raise HostSessionError(f"gnome-shell pid {pid} missing {var} in /proc environ")
     assert_xdg_under_session(
         session_dir,
+        xdg_runtime=child.get("XDG_RUNTIME_DIR"),
         xdg_data=child.get("XDG_DATA_HOME"),
         xdg_config=child.get("XDG_CONFIG_HOME"),
         xdg_cache=child.get("XDG_CACHE_HOME"),
@@ -207,9 +221,20 @@ def is_safe_teardown_target(
             return False
         if env.get("ANVIL_DEBUG_LOOP") != "1":
             return False
+        if any(
+            not env.get(var)
+            for var in (
+                "XDG_RUNTIME_DIR",
+                "XDG_DATA_HOME",
+                "XDG_CONFIG_HOME",
+                "XDG_CACHE_HOME",
+            )
+        ):
+            return False
         try:
             assert_xdg_under_session(
                 session_dir,
+                xdg_runtime=env.get("XDG_RUNTIME_DIR"),
                 xdg_data=env.get("XDG_DATA_HOME"),
                 xdg_config=env.get("XDG_CONFIG_HOME"),
                 xdg_cache=env.get("XDG_CACHE_HOME"),
@@ -234,6 +259,7 @@ def assert_host_safe(
     isolated_bus: str | None = None,
     shell_pid: int | None = None,
     require_isolated_xdg: bool = True,
+    xdg_runtime: str | None = None,
     xdg_data: str | None = None,
     xdg_config: str | None = None,
     xdg_cache: str | None = None,
@@ -254,9 +280,10 @@ def assert_host_safe(
     if isolated_bus is not None:
         assert_bus_isolated(host_bus, isolated_bus)
 
-    if require_isolated_xdg and any((xdg_data, xdg_config, xdg_cache)):
+    if require_isolated_xdg and any((xdg_runtime, xdg_data, xdg_config, xdg_cache)):
         assert_xdg_under_session(
             session_dir,
+            xdg_runtime=xdg_runtime,
             xdg_data=xdg_data,
             xdg_config=xdg_config,
             xdg_cache=xdg_cache,

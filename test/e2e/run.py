@@ -167,6 +167,7 @@ def start_gnome_shell(
     if pathlib.Path(ext_schemas).is_dir():
         env["GSETTINGS_SCHEMA_DIR"] = ext_schemas
     env.pop("WAYLAND_DISPLAY", None)  # let gnome-shell pick its own socket name
+    env.pop("DISPLAY", None)
     if extra_env:
         env |= extra_env
 
@@ -229,11 +230,13 @@ def discover_displays(
     return display_name, x11_display
 
 
-def wait_for_wayland_socket(display_name: str, timeout: float = 30.0) -> None:
+def wait_for_wayland_socket(
+    display_name: str,
+    *,
+    runtime_dir: pathlib.Path,
+    timeout: float = 30.0,
+) -> None:
     """Poll until the Wayland socket file appears in XDG_RUNTIME_DIR."""
-    runtime_dir = pathlib.Path(
-        os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    )
     sock = runtime_dir / display_name
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -319,7 +322,7 @@ class DevkitSession:
         self.tag_filter: str = tag_filter
         self.engine: str = engine
         self.virtual_monitors: int = virtual_monitors
-        self._xdg_config: tempfile.TemporaryDirectory[str] | None = None
+        self._xdg_session: tempfile.TemporaryDirectory[str] | None = None
         self._results_path: pathlib.Path | None = None
 
     @property
@@ -329,7 +332,10 @@ class DevkitSession:
         return self._results_path
 
     def __enter__(self) -> "DevkitSession":
-        self._xdg_config = tempfile.TemporaryDirectory(prefix="anvil-e2e-config-")
+        self._xdg_session = tempfile.TemporaryDirectory(prefix="anvil-e2e-session-")
+        session_dir = pathlib.Path(self._xdg_session.name)
+        (session_dir / "config").mkdir(mode=0o700)
+        (session_dir / "runtime").mkdir(mode=0o700)
         # Keep the result handoff on the repository mount. A nested Shell may
         # see a different /tmp namespace than the Python runner, while both
         # processes share test/e2e/output. PID + monotonic time also lets
@@ -345,28 +351,36 @@ class DevkitSession:
             raise
 
     def _start(self) -> "DevkitSession":
+        if self._xdg_session is None:
+            raise RuntimeError("E2E XDG session directory is not initialized")
+        session_dir = pathlib.Path(self._xdg_session.name)
+        config_home = session_dir / "config"
+        runtime_dir = session_dir / "runtime"
+        daemon_env = {
+            **os.environ,
+            "GDK_BACKEND": "wayland",
+            "XDG_CONFIG_HOME": str(config_home),
+            "XDG_RUNTIME_DIR": str(runtime_dir),
+        }
+        for name in ("DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY"):
+            daemon_env.pop(name, None)
 
         # 1. Isolated D-Bus
-        self.dbus_proc, self.dbus_addr = start_dbus_session()
+        self.dbus_proc, self.dbus_addr = start_dbus_session(env=daemon_env)
 
         # 2. dbusmock stubs (must be up before gnome-shell asks for them)
-        self.mocks = start_mocks(self.dbus_addr)
+        env = {**daemon_env, "DBUS_SESSION_BUS_ADDRESS": self.dbus_addr}
+        self.mocks = start_mocks(self.dbus_addr, env=env)
 
         # 3. gsettings tweaks on the isolated session
-        env = {
-            **os.environ,
-            "DBUS_SESSION_BUS_ADDRESS": self.dbus_addr,
-            "GDK_BACKEND": "wayland",
-            "XDG_CONFIG_HOME": self._xdg_config.name,
-        }
         subprocess.run(
             [
                 "gdbus", "call", "--session",
                 "--dest", "org.freedesktop.DBus",
                 "--object-path", "/org/freedesktop/DBus",
                 "--method", "org.freedesktop.DBus.UpdateActivationEnvironment",
-                f"{{'XDG_CONFIG_HOME': '{self._xdg_config.name}', "
-                "'GDK_BACKEND': 'wayland'}",
+                f"{{'XDG_CONFIG_HOME': '{config_home}', "
+                f"'XDG_RUNTIME_DIR': '{runtime_dir}', 'GDK_BACKEND': 'wayland'}}",
             ],
             env=env,
             check=True,
@@ -394,7 +408,8 @@ class DevkitSession:
                 "ANVIL_E2E_RESULTS_PATH": str(self.results_path),
                 "ANVIL_TILING_ENGINE": "core" if self.engine == "core" else "shadow",
                 "ANVIL_E2E_VIRTUAL_MONITORS": str(self.virtual_monitors),
-                "XDG_CONFIG_HOME": self._xdg_config.name,
+                "XDG_CONFIG_HOME": str(config_home),
+                "XDG_RUNTIME_DIR": str(runtime_dir),
             },
         )
 
@@ -402,7 +417,7 @@ class DevkitSession:
         self.display_name, self.x11_display = discover_displays(self.shell_proc)
 
         # 6. Wait for socket file + D-Bus
-        wait_for_wayland_socket(self.display_name)
+        wait_for_wayland_socket(self.display_name, runtime_dir=runtime_dir)
         wait_for_shell_dbus(self.dbus_addr)
 
         # 7. Settle time
@@ -418,7 +433,8 @@ class DevkitSession:
                 "--method", "org.freedesktop.DBus.UpdateActivationEnvironment",
                 f"{{'WAYLAND_DISPLAY': '{self.display_name}', "
                 f"'DISPLAY': '{self.x11_display}', 'GDK_BACKEND': 'wayland', "
-                f"'XDG_CONFIG_HOME': '{self._xdg_config.name}'}}",
+                f"'XDG_CONFIG_HOME': '{config_home}', "
+                f"'XDG_RUNTIME_DIR': '{runtime_dir}'}}",
             ],
             env=env,
             capture_output=True,
@@ -436,17 +452,28 @@ class DevkitSession:
             except subprocess.TimeoutExpired:
                 self.shell_proc.kill()
                 self.shell_proc.wait()
+            self.shell_proc = None
         for p in self.mocks:
             p.terminate()
+            try:
+                p.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
+        self.mocks = []
         if self.dbus_proc is not None:
             self.dbus_proc.terminate()
             try:
                 self.dbus_proc.wait(timeout=2)
             except subprocess.TimeoutExpired:
                 self.dbus_proc.kill()
-        if self._xdg_config is not None:
-            self._xdg_config.cleanup()
-            self._xdg_config = None
+                self.dbus_proc.wait()
+            if self.dbus_proc.stdout is not None:
+                self.dbus_proc.stdout.close()
+            self.dbus_proc = None
+        if self._xdg_session is not None:
+            self._xdg_session.cleanup()
+            self._xdg_session = None
         if self._results_path is not None:
             self._results_path.unlink(missing_ok=True)
         self._results_path = None
