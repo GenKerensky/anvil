@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/org.gnome.shell.extensions.anvil-regular.svg" alt="Anvil" width="128" height="128">
+<img src="src/resources/icons/hicolor/scalable/apps/org.gnome.shell.extensions.anvil-regular.svg" alt="Anvil" width="128" height="128">
 
 # Anvil
 
@@ -23,11 +23,13 @@ Anvil turns GNOME Shell into a fast, keyboard-friendly tiling environment withou
 
 ## Contents
 
-- [What Anvil does](#what-anvil-does)
-- [Demo](#demo)
-- [Install](#install)
-- [Open the settings](#open-the-settings)
-- [Learn Anvil](#learn-anvil)
+- [Anvil](#anvil)
+  - [Contents](#contents)
+  - [What Anvil does](#what-anvil-does)
+  - [Demo](#demo)
+  - [Install](#install)
+  - [Open the settings](#open-the-settings)
+  - [Learn Anvil](#learn-anvil)
 
 ## What Anvil does
 

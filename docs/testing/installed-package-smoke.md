@@ -9,8 +9,10 @@ That target uses a temporary `XDG_CONFIG_HOME`; this checklist remains the final
 validation against the real user session.
 
 Run `make test-e2e-icons` after resource or packaging changes. It registers the installed icon path
-in a standalone GTK preferences process, resolves all six live local icons from that payload, and
-verifies that the active Shell resolves the Quick Settings tile/header icon through St.
+in a standalone GTK preferences process, resolves the three Anvil icons from that payload, resolves
+all stock preference icons from the system theme, and verifies that the active Shell loads the
+Quick Settings tile/header icon from its installed file through St. It also resolves the stock
+window-close icon used by Shell surfaces.
 
 The smoke changes Anvil settings and may initialize the user stylesheet. The preparation below
 captures both so the cleanup can restore them.
@@ -52,13 +54,9 @@ for file in \
   prefs.js \
   stylesheet.css \
   schemas/gschemas.compiled \
-  resources/icons/hicolor/scalable/actions/anvil-logo-symbolic.svg \
-  resources/icons/hicolor/scalable/actions/bug-symbolic.svg \
-  resources/icons/hicolor/scalable/actions/forge-logo-symbolic.svg \
-  resources/icons/hicolor/scalable/actions/view-grid-symbolic.svg \
-  resources/icons/hicolor/scalable/actions/brush-symbolic.svg \
-  resources/icons/hicolor/scalable/actions/input-keyboard-symbolic.svg \
-  resources/icons/hicolor/scalable/actions/window-symbolic.svg
+  resources/icons/hicolor/symbolic/apps/org.gnome.shell.extensions.anvil-symbolic.svg \
+  resources/icons/hicolor/scalable/actions/anvil-grid-symbolic.svg \
+  resources/icons/hicolor/scalable/apps/org.gnome.shell.extensions.anvil-regular.svg
 do
   test -f "${INSTALL_DIR}/${file}" || {
     printf 'missing installed payload: %s\n' "${file}" >&2
@@ -89,27 +87,24 @@ gnome-extensions prefs "${UUID}"
 
 Visit every page and verify that the page opens without an empty body or a broken-image glyph:
 
-1. **Tiling** — `view-grid-symbolic`
-2. **Appearance** — `brush-symbolic`
-3. **Keyboard** — `input-keyboard-symbolic`
-4. **Windows** — `window-symbolic`
+1. **Tiling** — packaged `anvil-grid-symbolic`
+2. **Appearance** — system `preferences-desktop-appearance-symbolic`
+3. **Keyboard** — system `input-keyboard-symbolic`
+4. **Windows** — system `focus-windows-symbolic`
 5. **Monitors** — `video-display-symbolic` from the system icon theme
 
 Also open **About** and confirm the Anvil logo renders. Experimental controls on **Tiling** and
-**Appearance** must display their local `bug-symbolic` badge rather than a broken-image glyph.
+**Appearance** must display the system `dialog-warning-symbolic` badge rather than a broken-image
+glyph.
 
 Close the window, run the command again, and revisit **Monitors**. Controls and the monitor drawing
 must refresh normally. This open/close/reopen pass also checks that the installed preferences
 process does not leave a duplicate window or visibly stale page.
 
-`forge-logo-symbolic.svg` is intentionally retained in the package as upstream attribution
-artwork; it is not a live Anvil UI icon. This packaging contract keeps the attribution asset from
-being mistaken for an orphaned UI resource.
-
 ## Quick Settings indicator
 
 1. On **Appearance**, enable **Anvil in quick settings**.
-2. Open the GNOME system menu. Verify that the **Tiling** tile and its grid icon render.
+2. Open the GNOME system menu. Verify that the **Tiling** tile and its Anvil icon render.
 3. Expand the tile. Verify the **Anvil** header and its switches render.
 4. Select **Settings** twice. The existing preferences window must be activated; a second window
    must not be created.

@@ -7,7 +7,15 @@ import GLib from "gi://GLib";
 import St from "gi://St";
 
 const UUID = "anvil@GenKerensky.github.com";
-const ICON_NAME = "view-grid-symbolic";
+const SHELL_ICON_PATH = [
+  "resources",
+  "icons",
+  "hicolor",
+  "symbolic",
+  "apps",
+  "org.gnome.shell.extensions.anvil-symbolic.svg",
+];
+const SYSTEM_SHELL_ICON = "window-close-symbolic";
 
 Gio._promisify(Gio.Subprocess.prototype, "communicate_utf8_async", "communicate_utf8_finish");
 
@@ -35,19 +43,27 @@ describe("Installed icon resolution", function () {
     const [stdout, stderr] = await subprocess.communicate_utf8_async(null, null);
 
     expect(subprocess.get_successful()).toBe(true, stderr);
-    expect(stdout).toContain("resolved 6 installed preference icons");
+    expect(stdout).toContain("resolved 3 packaged and 11 system preference icons");
   });
 
-  it("resolves the live Quick Settings tile and header icon through St", function () {
+  it("resolves the live Quick Settings icon from the installed file through St", function () {
     const runtime = /** @type {any} */ (global).__anvil_runtime;
     const indicator = runtime.ext.indicator;
     expect(indicator).not.toBeNull();
-    expect(indicator._indicator.icon_name).toBe(ICON_NAME);
-    expect(indicator.quickSettingsItems[0].icon_name).toBe(ICON_NAME);
+    const iconPath = GLib.build_filenamev([installedExtensionRoot(), ...SHELL_ICON_PATH]);
+    const panelIcon = indicator._indicator.gicon;
+    const tileIcon = indicator.quickSettingsItems[0].gicon;
+    expect(panelIcon.get_file().get_path()).toBe(iconPath);
+    expect(tileIcon.get_file().get_path()).toBe(iconPath);
+    expect(indicator._indicator.is_symbolic).toBe(true);
 
-    const themedIcon = new Gio.ThemedIcon({ name: ICON_NAME });
-    const actor = St.TextureCache.get_default().load_gicon(null, themedIcon, 32, 1, 1);
-    if (!actor) throw new Error(`St could not resolve ${ICON_NAME}`);
+    const actor = St.TextureCache.get_default().load_gicon(null, panelIcon, 32, 1, 1);
+    if (!actor) throw new Error(`St could not load ${iconPath}`);
     actor.destroy();
+
+    const systemIcon = new Gio.ThemedIcon({ name: SYSTEM_SHELL_ICON });
+    const systemActor = St.TextureCache.get_default().load_gicon(null, systemIcon, 32, 1, 1);
+    if (!systemActor) throw new Error(`St could not resolve ${SYSTEM_SHELL_ICON}`);
+    systemActor.destroy();
   });
 });

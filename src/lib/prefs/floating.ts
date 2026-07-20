@@ -32,7 +32,7 @@ export class FloatingPage extends PreferencesPage {
   private pickerRequestId: string | null = null;
 
   constructor({ settings, dir }: { settings: Gio.Settings; dir: Gio.File }) {
-    super({ title: _("Windows"), icon_name: "window-symbolic" });
+    super({ title: _("Windows"), icon_name: "focus-windows-symbolic" });
 
     this.settings = settings;
     this.configMgr = new ConfigManager({ dir });

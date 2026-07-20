@@ -30,8 +30,6 @@ build: clean metadata.json schemas compilemsgs metadata
 	find dist -type f \( -name '*.d.ts' -o -name '*.d.ts.map' -o -name '*.tsbuildinfo' \) -delete
 	mkdir -p dist
 	cp metadata.json dist
-	cp assets/org.gnome.shell.extensions.anvil-regular.svg dist/
-	cp assets/org.gnome.shell.extensions.anvil-symbolic.svg dist/
 	cp -r src/resources dist
 	cp -r src/schemas dist
 	cp -r src/config dist

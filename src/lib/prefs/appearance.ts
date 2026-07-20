@@ -48,7 +48,7 @@ export class AppearancePage extends PreferencesPage {
   }
 
   constructor({ settings, dir }: { settings: Gio.Settings; dir: Gio.File }) {
-    super({ title: _("Appearance"), icon_name: "brush-symbolic" });
+    super({ title: _("Appearance"), icon_name: "preferences-desktop-appearance-symbolic" });
     this.settings = settings;
     const configMgr = new ConfigManager({ dir });
     this.themeMgr = new PrefsThemeManager({ configMgr: configMgr, settings: settings });

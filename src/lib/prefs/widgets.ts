@@ -60,7 +60,7 @@ export class SwitchRow extends Adw.ActionRow {
     });
     settings.bind(bind, gswitch, "active", Gio.SettingsBindFlags.DEFAULT);
     if (experimental) {
-      const icon = new Gtk.Image({ icon_name: "bug-symbolic" });
+      const icon = new Gtk.Image({ icon_name: "dialog-warning-symbolic" });
       icon.set_tooltip_markup(
         _("<b>CAUTION</b>: Enabling this setting can lead to bugs or cause the shell to crash")
       );

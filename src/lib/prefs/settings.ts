@@ -43,7 +43,7 @@ function showAboutWindow(
     ...(parent && { transient_for: parent }),
     // Remote contributor sourcing is tracked in docs/plans/product-follow-ups.md.
     application_name: _("Anvil"),
-    application_icon: "anvil-logo-symbolic",
+    application_icon: "org.gnome.shell.extensions.anvil-regular",
     version: `${String(PACKAGE_VERSION)}-${version.toString()}`,
     copyright: `© 2021-${new Date().getFullYear()} jmmaranan`,
     issue_url: "https://github.com/GenKerensky/anvil/issues/new",
@@ -84,7 +84,7 @@ export class SettingsPage extends PreferencesPage {
     window: Adw.PreferencesWindow;
     metadata: { version?: string; description: string };
   }) {
-    super({ title: _("Tiling"), icon_name: "view-grid-symbolic" });
+    super({ title: _("Tiling"), icon_name: "anvil-grid-symbolic" });
     this.add_group({
       title: _("Behavior"),
       description: _("Change how the tiling behaves"),

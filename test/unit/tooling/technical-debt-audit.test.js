@@ -25,14 +25,14 @@ describe("technical debt audit", () => {
   });
 
   it("does not let ignored or untracked scratch references hide an orphaned icon", () => {
-    const iconDirectory = join(repository, "src/resources/icons/hicolor/scalable/actions");
+    const iconDirectory = join(repository, "src/resources/icons/hicolor/symbolic/apps");
     const iconName = "orphan-symbolic.svg";
     mkdirSync(iconDirectory, { recursive: true });
     writeFileSync(join(repository, ".gitignore"), "ignored-scratch.md\n", "utf8");
     writeFileSync(join(iconDirectory, iconName), "<svg/>\n", "utf8");
     execFileSync(
       "git",
-      ["add", ".gitignore", `src/resources/icons/hicolor/scalable/actions/${iconName}`],
+      ["add", ".gitignore", `src/resources/icons/hicolor/symbolic/apps/${iconName}`],
       {
         cwd: repository,
       }

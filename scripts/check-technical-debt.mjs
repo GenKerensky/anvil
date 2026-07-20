@@ -169,7 +169,7 @@ export function repositoryReferenceSources(
 ) {
   const auditFile = resolve(root, "scripts/check-technical-debt.mjs");
   const inventoryPlan = resolve(root, "docs/plans/technical-debt-inventory-and-remediation.md");
-  const iconRoot = resolve(root, "src/resources/icons/hicolor/scalable");
+  const iconRoot = resolve(root, "src/resources/icons");
 
   return trackedPaths
     .filter((path) => {
@@ -240,7 +240,7 @@ export function collectUnreferencedIcons(
   root = repositoryRoot,
   trackedPaths = trackedRepositoryFiles(root)
 ) {
-  const iconRoot = resolve(root, "src/resources/icons/hicolor/scalable");
+  const iconRoot = resolve(root, "src/resources/icons");
   return trackedPaths
     .filter(
       (path) =>

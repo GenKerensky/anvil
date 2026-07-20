@@ -11,6 +11,7 @@ import unittest
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 INSTALL_SCRIPT = PROJECT_ROOT / "scripts" / "install-extension.sh"
 MAKEFILE = PROJECT_ROOT / "Makefile"
+E2E_RUNNER = PROJECT_ROOT / "test" / "e2e" / "run.py"
 UUID = "anvil@GenKerensky.github.com"
 
 
@@ -98,6 +99,14 @@ class InstallExtensionTests(unittest.TestCase):
         self.assertIn(
             'install: build\n\tbash scripts/install-extension.sh dist "$(INSTALL_PATH)"',
             makefile,
+        )
+
+    def test_e2e_install_uses_fresh_payload_installer(self) -> None:
+        runner = E2E_RUNNER.read_text(encoding="utf-8")
+
+        self.assertIn(
+            '["bash", str(INSTALL_SCRIPT), str(staged_payload), str(ext_dir)]',
+            runner,
         )
 
 

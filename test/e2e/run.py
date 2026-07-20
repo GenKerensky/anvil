@@ -89,6 +89,7 @@ UUID = "anvil@GenKerensky.github.com"
 PROJECT_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
 E2E_DIR = pathlib.Path(__file__).resolve().parent
 OUTPUT_DIR = E2E_DIR / "output"
+INSTALL_SCRIPT = PROJECT_ROOT / "scripts" / "install-extension.sh"
 
 JASMINE_BOOT = pathlib.Path("/usr/share/jasmine-gjs/jasmineBoot.js")
 
@@ -119,13 +120,22 @@ def build_extension() -> None:
 # ── Step 3: Extension install ──────────────────────────────────────────────────
 
 def install_extension_files() -> None:
-    """Extract the built .zip into the per-user extensions directory."""
+    """Install the built .zip as a complete per-user extension payload."""
     zip_path = PROJECT_ROOT / f"{UUID}.zip"
     if not zip_path.is_file():
         raise FileNotFoundError(f"Extension zip not found: {zip_path}")
     ext_dir = pathlib.Path.home() / ".local" / "share" / "gnome-shell" / "extensions" / UUID
-    ext_dir.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["unzip", "-q", "-o", str(zip_path), "-d", str(ext_dir)], check=True)
+    with tempfile.TemporaryDirectory(prefix="anvil-e2e-payload.") as tmp:
+        staged_payload = pathlib.Path(tmp) / UUID
+        staged_payload.mkdir()
+        subprocess.run(
+            ["unzip", "-q", str(zip_path), "-d", str(staged_payload)],
+            check=True,
+        )
+        subprocess.run(
+            ["bash", str(INSTALL_SCRIPT), str(staged_payload), str(ext_dir)],
+            check=True,
+        )
 
 
 # ── Step 4: Start gnome-shell devkit ──────────────────────────────────────────

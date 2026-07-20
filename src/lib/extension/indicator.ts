@@ -30,9 +30,21 @@ import {
 import * as Utils from "./utils.js";
 import { Logger } from "../shared/logger.js";
 
-const iconName = "view-grid-symbolic";
+const shellIconPath = [
+  "resources",
+  "icons",
+  "hicolor",
+  "symbolic",
+  "apps",
+  "org.gnome.shell.extensions.anvil-symbolic.svg",
+] as const;
 
 type AnvilExtension = import("../../extension.js").default;
+
+function createShellIcon(extension: AnvilExtension): Gio.FileIcon {
+  const file = shellIconPath.reduce((path, segment) => path.get_child(segment), extension.dir);
+  return Gio.FileIcon.new(file);
+}
 
 /**
  * Thin adapter for Quick Settings addExternalIndicator (C1-1).
@@ -69,9 +81,10 @@ export class FeatureMenuToggle extends QuickMenuToggle {
   _focusMovePointer!: SettingsPopupSwitch;
   constructor(extension: AnvilExtension) {
     const title = _("Tiling");
+    const gicon = createShellIcon(extension);
     const initSettings = Utils.isGnomeGTE(45)
-      ? { title, iconName, toggleMode: true }
-      : { label: title, iconName, toggleMode: true };
+      ? { title, gicon, toggleMode: true }
+      : { label: title, gicon, toggleMode: true };
     super(initSettings);
     this.extension = extension;
     this.extension.settings.bind(
@@ -87,7 +100,7 @@ export class FeatureMenuToggle extends QuickMenuToggle {
       Gio.SettingsBindFlags.DEFAULT
     );
 
-    this.menu.setHeader(iconName, _("Anvil"), _("Tiling Window Management"));
+    this.menu.setHeader(gicon, _("Anvil"), _("Tiling Window Management"));
 
     this.menu.addMenuItem(
       (this._singleSwitch = new SettingsPopupSwitch(
@@ -144,7 +157,7 @@ export class FeatureIndicator extends SystemIndicator {
 
     // Create the icon for the indicator
     this._indicator = (this as unknown as { _addIndicator: () => St.Icon })._addIndicator();
-    this._indicator.icon_name = iconName;
+    this._indicator.gicon = createShellIcon(extension);
 
     const tilingModeEnabled = this.extension.settings.get_boolean("tiling-mode-enabled");
     const quickSettingsEnabled = this.extension.settings.get_boolean("quick-settings-enabled");

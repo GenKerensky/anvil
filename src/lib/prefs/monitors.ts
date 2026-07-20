@@ -245,11 +245,11 @@ export class MonitorsPage extends Adw.PreferencesPage {
       subtitle: _("New feature — may not have predictable behavior"),
       activatable_widget: this._enableSwitch,
     });
-    const bugIcon = new Gtk.Image({ icon_name: "bug-symbolic" });
-    bugIcon.set_tooltip_markup(
+    const warningIcon = new Gtk.Image({ icon_name: "dialog-warning-symbolic" });
+    warningIcon.set_tooltip_markup(
       _("<b>CAUTION</b>: This is a new feature and may not have predictable behavior")
     );
-    enableRow.add_suffix(bugIcon);
+    enableRow.add_suffix(warningIcon);
     enableRow.add_suffix(this._enableSwitch);
 
     this._maxWidthSpin = Gtk.SpinButton.new_with_range(0, 10000, 10);
